@@ -35,8 +35,6 @@ bld/
 .idea/
 .idea_modules/
 *.sln.iml
-*.iws
-*.sw?
 
 # NuGet Package Manager
 *.nupkg
@@ -59,5 +57,4 @@ Thumbs.db
 
 # Database files
 *.mdf
-*.ldf
 *.ldf
