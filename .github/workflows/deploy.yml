@@ -3,30 +3,53 @@ name: Deploy
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    name: Deploy Release
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
+      - name: Check if ready for deployment
+        run: |
+          echo "🚀 Deployment Pipeline"
+          echo "This pipeline is currently disabled for skeleton projects."
+          echo "It will be activated once the project is ready for production."
+          echo ""
+          echo "📋 Checklist:"
+          echo "  [ ] All features implemented"
+          echo "  [ ] All tests passing"
+          echo "  [ ] Documentation complete"
+          echo "  [ ] Code reviewed"
+          echo ""
+          echo "🔧 TODO: Configure deployment targets:"
+          echo "  - Azure App Service"
+          echo "  - Docker registry"
+          echo "  - Kubernetes cluster"
+          echo "  - CI/CD notifications"
 
-      - name: Build Release
-        run: dotnet publish -c Release -o ./publish
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: release-build
-          path: ./publish
-
+      # - name: Setup .NET
+      #   uses: actions/setup-dotnet@v3
+      #   with:
+      #     dotnet-version: '8.0.x'
+      #
+      # - name: Build Release
+      #   run: dotnet publish -c Release -o ./publish
+      #
+      # - name: Upload artifacts
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: release-build
+      #     path: ./publish
+      #
       # TODO: Add deployment steps
-      # - Deploy to Azure App Service
-      # - Deploy to Docker registry
-      # - Send notifications
+      # - name: Deploy to Azure App Service
+      #   uses: azure/webapps-deploy@v2
+      # - name: Push to Docker Registry
+      # - name: Deploy to Kubernetes
+      # - name: Send Slack notification
