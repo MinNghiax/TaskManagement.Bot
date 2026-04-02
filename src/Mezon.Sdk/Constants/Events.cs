@@ -1,0 +1,31 @@
+namespace Mezon.Sdk.Constants;
+
+public enum Events
+{
+    ChannelMessage,
+    MessageReaction,
+    UserChannelRemoved,
+    UserClanRemoved,
+    UserChannelAdded,
+    ChannelCreated,
+    ChannelDeleted,
+    ChannelUpdated,
+    RoleEvent,
+    GiveCoffee,
+    RoleAssign,
+    AddClanUser,
+    TokenSend,
+    ClanEventCreated,
+    MessageButtonClicked,
+    StreamingJoined,
+    StreamingLeaved,
+    DropdownBoxSelected,
+    WebrtcSignalingFwd,
+    VoiceStarted,
+    VoiceEnded,
+    VoiceJoined,
+    VoiceLeaved,
+    Notifications,
+    QuickMenu,
+    AIAgentEnabled,
+}
