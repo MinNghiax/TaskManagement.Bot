@@ -1,541 +1,600 @@
-# Cấu Trúc Thư Mục & Nhiệm Vụ
+# Cấu Trúc Thư Mục - Kiến Trúc Feature-Based
 
-Tài liệu này mô tả chi tiết chức năng của từng thư mục trong dự án TaskManagement.Bot.
+Tài liệu này mô tả cấu trúc dự án mới theo phương pháp **Feature-Based Architecture**.
+
+**Lợi ích:**
+- ✅ Mỗi người làm trên 1 folder riêng → không đụng nhau
+- ✅ Code dễ đọc hơn (mỗi feature tự chứa đủ CMD, Service, Persistence, Models)
+- ✅ Scale tốt hơn (thêm feature mới không ảnh hưởng cái cũ)
+- ✅ Dễ test hơn (feature độc lập)
+- ✅ Dễ review PR (PR liên quan đến 1 feature cụ thể)
 
 ---
 
-## 📁 Cấu Trúc Dự Án
+## 📁 Cấu Trúc Dự Án Mới
 
 ```
 TaskManagement.Bot/
-├── src/                                    # Source code chính
-│   └── TaskManagement.Bot/
-│       ├── Commands/                       # Feature 1-4: Command handlers
-│       ├── Services/                       # Feature 1-4: Business logic
-│       ├── Persistence/                    # Feature 1-4: Database access
-│       ├── Models/                         # Shared: Data entities
-│       ├── Utils/                          # Shared: Utilities & helpers
-│       ├── Events/                         # Shared: Event handlers
-│       ├── Properties/                     # Project metadata (.csproj properties)
-│       ├── bin/ (gitignore)                # Build output
-│       ├── obj/ (gitignore)                # Intermediate build files
-│       ├── Program.cs                      # Entry point
-│       └── TaskManagement.Bot.csproj       # Project file
+│
+├── Features/                               # Các tính năng (4 người, 4 features)
+│   │
+│   ├── Task/                               # Feature 1: Quản lý Task (CRUD)
+│   │   ├── Commands/                       # Người 1: Xử lý lệnh input
+│   │   │   ├── TaskCreateCommand.cs
+│   │   │   ├── TaskUpdateCommand.cs
+│   │   │   ├── TaskDeleteCommand.cs
+│   │   │   └── TaskStatusCommand.cs
+│   │   │
+│   │   ├── Services/                       # Người 1: Business logic
+│   │   │   └── ITaskService.cs
+│   │   │
+│   │   ├── Persistence/                    # Người 1: Database access
+│   │   │   └── ITaskRepository.cs
+│   │   │
+│   │   └── Models/                         # Người 1: Entities & DTOs
+│   │       ├── TaskEntity.cs
+│   │       ├── CreateTaskDto.cs
+│   │       └── UpdateTaskDto.cs
+│   │
+│   ├── TaskQuery/                          # Feature 2: Tìm kiếm Task (READ-ONLY)
+│   │   ├── Commands/                       # Người 2: Xử lý lệnh tìm kiếm
+│   │   │   ├── TaskListCommand.cs
+│   │   │   ├── TaskDetailsCommand.cs
+│   │   │   ├── TaskSearchCommand.cs
+│   │   │   └── TaskFilterCommand.cs
+│   │   │
+│   │   ├── Services/                       # Người 2: Search logic
+│   │   │   └── ITaskSearchService.cs
+│   │   │
+│   │   ├── Persistence/                    # Người 2: Optimized queries
+│   │   │   └── ITaskQueryRepository.cs (extends IRepository)
+│   │   │
+│   │   └── Models/                         # Người 2: Search DTOs
+│   │       ├── TaskSearchFilterDto.cs
+│   │       └── TaskSearchResultDto.cs
+│   │
+│   ├── Reminder/                           # Feature 3: Nhắc nhở (Scheduling)
+│   │   ├── Commands/                       # Người 3: Lệnh nhắc nhở
+│   │   │   ├── ReminderSetCommand.cs
+│   │   │   ├── ReminderListCommand.cs
+│   │   │   ├── ReminderSnoozeCommand.cs
+│   │   │   └── ReminderDeleteCommand.cs
+│   │   │
+│   │   ├── Services/                       # Người 3: Scheduling logic
+│   │   │   └── IReminderService.cs
+│   │   │
+│   │   ├── Persistence/                    # Người 3: Database access
+│   │   │   └── IReminderRepository.cs
+│   │   │
+│   │   └── Models/                         # Người 3: Entities & DTOs
+│   │       ├── ReminderEntity.cs
+│   │       └── CreateReminderDto.cs
+│   │
+│   └── ThreadContext/                      # Feature 4: Liên kết Thread (Message binding)
+│       ├── Commands/                       # Người 4: Lệnh liên kết
+│       │   ├── TaskCreateHereCommand.cs
+│       │   ├── TaskThreadListCommand.cs
+│       │   └── TaskBindCommand.cs
+│       │
+│       ├── Services/                       # Người 4: Business logic
+│       │   └── IThreadContextService.cs
+│       │
+│       ├── Persistence/                    # Người 4: Database access
+│       │   └── ITaskContextRepository.cs
+│       │
+│       └── Models/                         # Người 4: Entities & DTOs
+│           ├── TaskContextEntity.cs
+│           └── CreateTaskContextDto.cs
+│
+├── Shared/                                 # Các tiện ích dùng chung
+│   │
+│   ├── Utils/                              # Helpers & utilities (Team)
+│   │   ├── ValidationHelper.cs             # Parse, validate input
+│   │   ├── DateTimeHelper.cs               # Format & parse dates
+│   │   └── MezonHelper.cs                  # Mezon SDK wrappers
+│   │
+│   ├── Models/                             # Base classes & interfaces (Team)
+│   │   ├── BaseEntity.cs                   # Abstract base class
+│   │   ├── IRepository.cs                  # Generic repository interface
+│   │   ├── ICommand.cs                     # Command interface
+│   │   └── IResult.cs                      # Standard result type
+│   │
+│   └── Events/                             # Event handlers (Team)
+│       ├── EventHandler.cs                 # Base event handler
+│       └── ReminderScheduler.cs            # Scheduled reminder trigger
+│
+├── bin/ (gitignore)                        # Build output
+├── obj/ (gitignore)                        # Intermediate files
+├── Properties/                             # Project metadata
+├── Program.cs                              # Entry point & DI setup
+├── TaskManagement.Bot.csproj               # Project file
+│
 ├── tests/
 │   └── TaskManagement.Bot.Tests/
-│       ├── bin/ (gitignore)                # Test build output
-│       ├── obj/ (gitignore)                # Test intermediate files
-│       └── TaskManagement.Bot.Tests.csproj # Test project file
-├── docs/                                   # Documentation
-│   ├── README.md                           # Project overview
-│   ├── KIEN-TRUC.md                        # Architecture & design patterns
-│   ├── HUONG-DAN.md                        # Setup & development guide
-│   ├── API.md                              # Bot commands & API
-│   └── FOLDER-STRUCTURE.md                 # This file
+│       ├── Features/
+│       │   ├── Task/
+│       │   │   └── TaskServiceTests.cs     # Người 1: Unit tests
+│       │   ├── TaskQuery/
+│       │   │   └── TaskSearchServiceTests.cs # Người 2: Unit tests
+│       │   ├── Reminder/
+│       │   │   └── ReminderServiceTests.cs # Người 3: Unit tests
+│       │   └── ThreadContext/
+│       │       └── ThreadContextServiceTests.cs # Người 4: Unit tests
+│       └── TaskManagement.Bot.Tests.csproj
+│
+├── docs/
+│   ├── README.md
+│   ├── KIEN-TRUC.md
+│   ├── HUONG-DAN.md
+│   ├── API.md
+│   └── FOLDER-STRUCTURE.md (This file)
+│
 ├── .github/
-│   └── workflows/                          # GitHub Actions CI/CD
-│       ├── build.yml                       # Build & test pipeline
-│       └── deploy.yml                      # Deployment pipeline
-├── .gitignore                              # Git ignore rules
-├── LICENSE                                 # MIT License
-├── README.md                               # Project README
-└── TaskManagement.Bot.sln                  # Visual Studio Solution
+│   └── workflows/
+│       ├── build.yml
+│       └── deploy.yml
+│
+├── .gitignore
+├── LICENSE
+└── TaskManagement.Bot.sln
 ```
 
 ---
 
-## 🎯 Chi Tiết Từng Thư Mục
+## 👥 Phân Công Theo Người
 
-### **src/TaskManagement.Bot/**
-**Thư mục chính chứa toàn bộ source code của bot.**
+### **Người 1: Task Management (Feature 1)**
 
-#### **src/TaskManagement.Bot/Program.cs**
-- **Chức năng:** Entry point của application
-- **Nội dung:**
-  - Khởi tạo DI container (Dependency Injection)
-  - Setup configuration (appsettings.json)
-  - Initialize logging
-  - Register services
-  - Launch bot
-- **Ai sửa:** Team (khi setup framework)
-- **Ví dụ:**
-```csharp
-var builder = Host.CreateDefaultBuilder(args);
-builder.Services.AddScoped<ITaskService, TaskService>();
-await builder.Build().RunAsync();
+**Folder:** `Features/Task/`
+
+**Trách nhiệm:**
+- Tạo, sửa, xóa task
+- Thay đổi status task
+- Persistence layer cho task
+
+**Files cần làm:**
 ```
+Features/Task/
+├── Commands/
+│   ├── TaskCreateCommand.cs      ✍️ Lệnh tạo task
+│   ├── TaskUpdateCommand.cs      ✍️ Lệnh cập nhật
+│   ├── TaskDeleteCommand.cs      ✍️ Lệnh xóa
+│   └── TaskStatusCommand.cs      ✍️ Lệnh đổi status
+│
+├── Services/ITaskService.cs      ✍️ Service interface (already have sample)
+├── Persistence/ITaskRepository.cs ✍️ Repo interface (already have sample)
+└── Models/
+    ├── TaskEntity.cs             ✍️ Entity (already have sample)
+    └── CreateTaskDto.cs          ✍️ DTO (already have sample)
+
+tests/TaskManagement.Bot.Tests/Features/Task/
+└── TaskServiceTests.cs           ✍️ Unit tests
+```
+
+**Công việc cần hoàn thành:**
+- [ ] Code implementation cho TaskCreateCommand
+- [ ] Code implementation cho TaskUpdateCommand
+- [ ] Code implementation cho TaskDeleteCommand
+- [ ] Code implementation cho TaskStatusCommand
+- [ ] Write unit tests
 
 ---
 
-#### **src/TaskManagement.Bot/Commands/**
-**Thư mục lệnh - Xử lý input từ user.**
+### **Người 2: Task Search (Feature 2)**
 
-- **Chức năng:**
-  - Parse user commands từ chat
-  - Validate input parameters
-  - Route đến Services phù hợp
-  - Format & gửi responses
+**Folder:** `Features/TaskQuery/`
 
-- **Ai làm:**
-  - Người 1: TaskCreateCommand, TaskUpdateCommand, TaskDeleteCommand, TaskStatusCommand
-  - Người 2: TaskListCommand, TaskDetailsCommand, TaskSearchCommand, TaskFilterCommand
-  - Người 3: ReminderSetCommand, ReminderListCommand, ReminderSnoozeCommand, ReminderDeleteCommand
-  - Người 4: TaskCreateHereCommand, TaskThreadListCommand, TaskBindCommand
+**Trách nhiệm:**
+- Tìm kiếm task
+- Lọc task theo status, assignee, deadline
+- Phân trang
+- Hiển thị chi tiết
 
-- **Ví dụ file:**
+**Files cần làm:**
 ```
-Commands/
-  ├── TaskCreateCommand.cs       (Người 1)
-  ├── TaskUpdateCommand.cs       (Người 1)
-  ├── TaskDeleteCommand.cs       (Người 1)
-  ├── TaskStatusCommand.cs       (Người 1)
-  ├── TaskListCommand.cs         (Người 2)
-  ├── TaskDetailsCommand.cs      (Người 2)
-  ├── TaskSearchCommand.cs       (Người 2)
-  ├── TaskFilterCommand.cs       (Người 2)
-  ├── ReminderSetCommand.cs      (Người 3)
-  ├── ReminderListCommand.cs     (Người 3)
-  ├── ReminderSnoozeCommand.cs   (Người 3)
-  ├── ReminderDeleteCommand.cs   (Người 3)
-  ├── TaskCreateHereCommand.cs   (Người 4)
-  ├── TaskThreadListCommand.cs   (Người 4)
-  └── TaskBindCommand.cs         (Người 4)
+Features/TaskQuery/
+├── Commands/
+│   ├── TaskListCommand.cs        ✍️ Lệnh liệt kê (already have sample)
+│   ├── TaskDetailsCommand.cs     ✍️ Lệnh xem chi tiết
+│   ├── TaskSearchCommand.cs      ✍️ Lệnh tìm kiếm
+│   └── TaskFilterCommand.cs      ✍️ Lệnh lọc
+│
+├── Services/ITaskSearchService.cs ✍️ Service (already have sample)
+├── Persistence/ITaskQueryRepository.cs ✍️ Query repo (already have sample)
+└── Models/
+    └── TaskSearchFilterDto.cs    ✍️ DTO (already have sample)
+
+tests/TaskManagement.Bot.Tests/Features/TaskQuery/
+└── TaskSearchServiceTests.cs     ✍️ Unit tests
 ```
 
-- **Chuỗi xử lý:**
-```
-User message: "/task create Mua hàng"
-    ↓
-TaskCreateCommand.Execute()
-    ↓
-Parse: title="Mua hàng"
-    ↓
-Validate input
-    ↓
-Call TaskService.CreateAsync(dto)
-    ↓
-Return response
-```
+**Công việc cần hoàn thành:**
+- [ ] Code cho TaskDetailsCommand
+- [ ] Code cho TaskSearchCommand
+- [ ] Code cho TaskFilterCommand
+- [ ] Implement search logic trong ITaskSearchService
+- [ ] Write unit tests
 
 ---
 
-#### **src/TaskManagement.Bot/Services/**
-**Thư mục business logic - Xử lý business rules.**
+### **Người 3: Reminders (Feature 3)**
 
-- **Chức năng:**
-  - Implement feature logic
-  - Validate business rules
-  - Coordinate với Repositories
-  - Handle errors & exceptions
+**Folder:** `Features/Reminder/`
 
-- **Ai làm:**
-  - Người 1: TaskService (CRUD, Status)
-  - Người 2: TaskSearchService (List, Search, Filter)
-  - Người 3: ReminderService (Create, Schedule, Snooze)
-  - Người 4: ThreadContextService (Bind, Get, Send reminders)
+**Trách nhiệm:**
+- Tạo nhắc nhở
+- Lên lịch nhắc nhở
+- Kéo dài thời gian nhắc nhở (snooze)
+- Xóa nhắc nhở
+- Trigger nhắc nhở theo lịch
 
-- **Ví dụ:**
+**Files cần làm:**
 ```
-Services/
-  ├── TaskService.cs             (Người 1)
-  │   ├── CreateAsync()
-  │   ├── UpdateAsync()
-  │   ├── DeleteAsync()
-  │   └── ChangeStatusAsync()
-  ├── TaskSearchService.cs        (Người 2)
-  │   ├── ListAsync()
-  │   ├── GetDetailsAsync()
-  │   └── SearchAsync()
-  ├── ReminderService.cs          (Người 3)
-  │   ├── CreateAsync()
-  │   ├── SnoozeAsync()
-  │   └── TriggerAsync()
-  └── ThreadContextService.cs     (Người 4)
-      ├── BindTaskToThreadAsync()
-      └── GetContextualReminders()
+Features/Reminder/
+├── Commands/
+│   ├── ReminderSetCommand.cs     ✍️ Lệnh set reminder (already have sample)
+│   ├── ReminderListCommand.cs    ✍️ Lệnh liệt kê
+│   ├── ReminderSnoozeCommand.cs  ✍️ Lệnh snooze
+│   └── ReminderDeleteCommand.cs  ✍️ Lệnh xóa
+│
+├── Services/IReminderService.cs  ✍️ Service (already have sample)
+├── Persistence/IReminderRepository.cs ✍️ Repo (already have sample)
+└── Models/
+    └── ReminderEntity.cs         ✍️ Entity (already have sample)
+
+Shared/Events/
+└── ReminderScheduler.cs          ✍️ Scheduled task trigger (Người 3 chính)
+
+tests/TaskManagement.Bot.Tests/Features/Reminder/
+└── ReminderServiceTests.cs       ✍️ Unit tests
 ```
 
-- **Luồng gọi:**
-```
-Command
-  ↓
-Service (business logic)
-  ↓
-Repository (DB access)
-  ↓
-Database
-```
+**Công việc cần hoàn thành:**
+- [ ] Code cho ReminderListCommand
+- [ ] Code cho ReminderSnoozeCommand
+- [ ] Code cho ReminderDeleteCommand
+- [ ] Implement ReminderScheduler (background job)
+- [ ] Write unit tests
 
 ---
 
-#### **src/TaskManagement.Bot/Persistence/**
-**Thư mục data access - Truy cập database.**
+### **Người 4: Thread Context (Feature 4)**
 
-- **Chức năng:**
-  - Implement Repository pattern
-  - Query database
-  - CRUD operations
-  - Data mapping (Entity → DTO)
+**Folder:** `Features/ThreadContext/`
 
-- **Ai làm:** Team (shared)
+**Trách nhiệm:**
+- Liên kết task với thread/channel
+- Hiển thị danh sách task trong thread
+- Gửi nhắc nhở đúng thread
+- Lấy context từ message
 
-- **Ví dụ:**
+**Files cần làm:**
 ```
-Persistence/
-  ├── IRepository.cs                         (Base interface)
-  ├── TaskRepository.cs                      (Người 1 + 2 share)
-  ├── ReminderRepository.cs                  (Người 3)
-  └── TaskContextRepository.cs               (Người 4)
+Features/ThreadContext/
+├── Commands/
+│   ├── TaskCreateHereCommand.cs  ✍️ Lệnh tạo task trong thread (already have)
+│   ├── TaskThreadListCommand.cs  ✍️ Lệnh liệt kê task trong thread
+│   └── TaskBindCommand.cs        ✍️ Lệnh liên kết task với thread
+│
+├── Services/IThreadContextService.cs ✍️ Service (already have sample)
+├── Persistence/ITaskContextRepository.cs ✍️ Repo (already have sample)
+└── Models/
+    └── TaskContextEntity.cs      ✍️ Entity (already have sample)
+
+tests/TaskManagement.Bot.Tests/Features/ThreadContext/
+└── ThreadContextServiceTests.cs  ✍️ Unit tests
 ```
 
-- **Giao diện chủ yếu:**
-```csharp
-public interface IRepository<T>
-{
-    Task<T> CreateAsync(T entity);
-    Task<T> UpdateAsync(T entity);
-    Task<bool> DeleteAsync(int id);
-    Task<T> GetByIdAsync(int id);
-    Task<List<T>> ListAsync(FilterDto filter);
-}
-```
+**Công việc cần hoàn thành:**
+- [ ] Code cho TaskThreadListCommand
+- [ ] Code cho TaskBindCommand
+- [ ] Implement context fetching logic
+- [ ] Integration với Mezon SDK threading
+- [ ] Write unit tests
 
 ---
 
-#### **src/TaskManagement.Bot/Models/**
-**Thư mục entities - Định nghĩa dữ liệu.**
+## 🚀 Quy Trình Phát Triển Hàng Ngày
 
-- **Chức náng:**
-  - Define data models (Entities)
-  - Define DTOs (Data Transfer Objects)
-  - Define enums & constants
+### **Bước 1: Tạo Feature Branch**
+```bash
+# Người 1
+git checkout -b feature/task-management develop
 
-- **Ai làm:** Team (shared)
+# Người 2
+git checkout -b feature/task-search develop
 
-- **Ví dụ:**
-```
-Models/
-  ├── Task.cs                     (Người 1 + 2: Task entity)
-  │   ├── Id
-  │   ├── Title
-  │   ├── Status (enum)
-  │   ├── Deadline
-  │   └── AssignedTo
-  ├── Reminder.cs                 (Người 3: Reminder entity)
-  │   ├── Id
-  │   ├── TaskId (FK)
-  │   ├── RemindTime
-  │   └── RepeatType (enum)
-  ├── TaskContext.cs              (Người 4: Thread context)
-  │   ├── TaskId (FK)
-  │   ├── ThreadId
-  │   └── MessageId
-  └── DTOs/
-      ├── CreateTaskDto.cs        (Người 1)
-      ├── TaskSearchFilterDto.cs  (Người 2)
-      ├── ReminderRuleDto.cs      (Người 3)
-      └── TaskContextDto.cs       (Người 4)
+# Người 3
+git checkout -b feature/reminders develop
+
+# Người 4
+git checkout -b feature/thread-context develop
 ```
 
-- **Phân biệt Entity vs DTO:**
-```
-Entity (Models)     DB representation
-  ↓
-Service             Business logic
-  ↓
-DTO                 API response
-```
+### **Bước 2: Làm Việc Trên Files Của Mình**
+```bash
+# Người 1 - làm trên Features/Task/*
+code Features/Task/Commands/TaskCreateCommand.cs
+code Features/Task/Services/ITaskService.cs
+code tests/Features/Task/TaskServiceTests.cs
 
----
+# Người 2 - làm trên Features/TaskQuery/*
+code Features/TaskQuery/Commands/TaskDetailsCommand.cs
+code Features/TaskQuery/Services/ITaskSearchService.cs
+code tests/Features/TaskQuery/TaskSearchServiceTests.cs
 
-#### **src/TaskManagement.Bot/Utils/**
-**Thư mục tiện ích - Hàm helper & utilities.**
-
-- **Chức năng:**
-  - Date/time helpers
-  - String utilities
-  - Validation helpers
-  - Conversion helpers
-
-- **Ai làm:** Team (shared)
-
-- **Ví dụ:**
-```
-Utils/
-  ├── DateTimeHelper.cs           (Parse/format dates)
-  ├── StringHelper.cs             (String operations)
-  ├── ValidationHelper.cs         (Input validation)
-  └── MezonHelper.cs              (Mezon SDK wrappers)
+# Vân vân...
 ```
 
----
-
-#### **src/TaskManagement.Bot/Events/**
-**Thư mục sự kiện - Event handlers.**
-
-- **Chức năng:**
-  - Handle Mezon events (message, reaction, etc.)
-  - Trigger business logic based on events
-  - Background jobs (reminders scheduler)
-
-- **Ai làm:**
-  - Người 3: ReminderScheduler (trigger reminders)
-  - Team: Other event handlers
-
-- **Ví dụ:**
-```
-Events/
-  ├── MessageReceivedHandler.cs   (Parse commands)
-  ├── ReminderScheduler.cs        (Người 3: Run scheduled reminders)
-  └── TaskEventHandler.cs         (React to task events)
+### **Bước 3: Commit**
+```bash
+# Follow conventional commits
+git commit -m "feat(task): implement task creation command"
+git commit -m "feat(task): add task update logic"
+git commit -m "test(task): write unit tests for TaskService"
 ```
 
----
-
-#### **src/TaskManagement.Bot/Properties/**
-**Thư mục metadata - Thông tin project.**
-
-- **Chức năng:**
-  - Assembly info
-  - Version info
-  - Custom attributes
-
-- **File:**
-  - `AssemblyInfo.cs` (tự động)
-
----
-
-#### **src/TaskManagement.Bot/bin/** & **obj/** (gitignore)
-**Thư mục build output - TỰ ĐỘNG TẠO, KHÔNG commit.**
-
-- **Chức năng:**
-  - `bin/`: Compiled DLLs & executables
-  - `obj/`: Temporary object files
-
-- **Quy tắc:**
-  - ✅ Nằm trong `.gitignore`
-  - ✅ Tự động sinh khi `dotnet build`
-  - ❌ Không bao giờ commit
-
----
-
-#### **src/TaskManagement.Bot/TaskManagement.Bot.csproj**
-**File cấu hình project.**
-
-- **Chức năng:**
-  - Define .NET version
-  - List NuGet dependencies
-  - Build settings
-  - Output configuration
-
-- **Không edit trực tiếp** - Dùng commands:
-```powershell
-# Thêm package
-dotnet add package SomePackage
-
-# Remove package
-dotnet remove package SomePackage
+### **Bước 4: Push & Tạo PR**
+```bash
+git push origin feature/task-management
+# Vào GitHub → tạo Pull Request → chọn base branch là `develop`
 ```
 
----
-
-### **tests/TaskManagement.Bot.Tests/**
-**Test project - Unit tests cho từng feature.**
-
-- **Chức năng:**
-  - Write unit tests
-  - Test services & logic
-  - Mock dependencies
-  - Assert expected behavior
-
-- **Ai làm:**
-  - Người 1: TaskServiceTests
-  - Người 2: TaskSearchServiceTests
-  - Người 3: ReminderServiceTests
-  - Người 4: ThreadContextServiceTests
-
-- **Ví dụ:**
-```
-tests/TaskManagement.Bot.Tests/
-  ├── Services/
-  │   ├── TaskServiceTests.cs         (Người 1)
-  │   ├── TaskSearchServiceTests.cs   (Người 2)
-  │   ├── ReminderServiceTests.cs     (Người 3)
-  │   └── ThreadContextServiceTests.cs (Người 4)
-  └── Mocks/
-      ├── MockRepository.cs
-      └── MockMezonClient.cs
+### **Bước 5: Review & Merge**
+```bash
+# Chờ review từ team member khác
+# Sau khi approved, merge vào `develop`
 ```
 
-- **Test structure:**
-```csharp
-[Fact]
-public async Task CreateTask_WithValidData_ReturnsTask()
-{
-    // Arrange
-    var dto = new CreateTaskDto { Title = "Test" };
-    
-    // Act
-    var result = await _service.CreateAsync(dto);
-    
-    // Assert
-    Assert.NotNull(result);
-    Assert.Equal("Test", result.Title);
-}
-```
-
----
-
-### **docs/**
-**Tài liệu dự án.**
-
-| File | Nội Dung |
-|------|----------|
-| **README.md** | Overview & quick start |
-| **KIEN-TRUC.md** | Architecture & system design |
-| **HUONG-DAN.md** | Setup environment & development |
-| **API.md** | Bot commands & endpoints |
-| **FOLDER-STRUCTURE.md** | This file - Cấu trúc thư mục |
-
----
-
-### **.github/workflows/**
-**CI/CD pipelines - Tự động build & test.**
-
-| File | Chức Năng |
-|------|-----------|
-| **build.yml** | Validate structure, build, run tests |
-| **deploy.yml** | Deploy to production (disabled for now) |
-
----
-
-## 📊 Nhiệm Vụ Theo Người
-
-### **Người 1 - Task Management (Feature 1)**
-```
-Commands/TaskCreateCommand.cs
-Commands/TaskUpdateCommand.cs
-Commands/TaskDeleteCommand.cs
-Commands/TaskStatusCommand.cs
-Services/TaskService.cs
-Models/Task.cs
-Models/CreateTaskDto.cs
-Models/UpdateTaskDto.cs
-tests/TaskServiceTests.cs
-```
-
----
-
-### **Người 2 - Task Search (Feature 2)**
-```
-Commands/TaskListCommand.cs
-Commands/TaskDetailsCommand.cs
-Commands/TaskSearchCommand.cs
-Commands/TaskFilterCommand.cs
-Services/TaskSearchService.cs
-Models/TaskSearchFilterDto.cs
-Persistence/TaskRepository.cs (share with Người 1)
-tests/TaskSearchServiceTests.cs
-```
-
----
-
-### **Người 3 - Reminders (Feature 3)**
-```
-Commands/ReminderSetCommand.cs
-Commands/ReminderListCommand.cs
-Commands/ReminderSnoozeCommand.cs
-Commands/ReminderDeleteCommand.cs
-Services/ReminderService.cs
-Events/ReminderScheduler.cs
-Models/Reminder.cs
-Models/ReminderRuleDto.cs
-Persistence/ReminderRepository.cs
-tests/ReminderServiceTests.cs
-```
-
----
-
-### **Người 4 - Thread Context (Feature 4)**
-```
-Commands/TaskCreateHereCommand.cs
-Commands/TaskThreadListCommand.cs
-Commands/TaskBindCommand.cs
-Services/ThreadContextService.cs
-Models/TaskContext.cs
-Models/TaskContextDto.cs
-Persistence/TaskContextRepository.cs
-tests/ThreadContextServiceTests.cs
-```
-
----
-
-## 🔄 Workflow Hàng Ngày
-
-```
-1. Feature Branch
-   git checkout -b feature/task-creation
-
-2. Sửa Code
-   - Commands/TaskCreateCommand.cs
-   - Services/TaskService.cs
-   - Models/CreateTaskDto.cs
-   - tests/TaskServiceTests.cs
-
-3. Commit
-   git commit -m "feat(task): implement creation"
-
-4. Push & PR
-   git push origin feature/task-creation
-   [Create Pull Request on GitHub]
-
-5. Review & Merge
-   [Team review → Approve → Merge to develop]
+### **Bước 6: Hợp nhất Vào Main**
+```bash
+# Khi ready release (tất cả 4 features done)
+git checkout develop
+git pull origin develop
+git checkout main
+git pull origin main
+git merge develop
+git tag v1.1.0
+git push origin main --tags
 ```
 
 ---
 
 ## ✅ Checklist Khi Tạo File Mới
 
+### **Nếu tạo Command (trong Features/*/Commands/)**
 ```
-Nếu tạo trong Commands/:
-  ✓ Inherit từ ICommand interface
-  ✓ Implement Execute() method
-  ✓ Add unit test trong tests/
-  ✓ Register trong DI container (Program.cs)
+✓ Inherit từ ICommand interface
+✓ Implement Execute() method
+✓ Add meaningful error handling
+✓ Register trong Program.cs (DI container)
+✓ Write unit tests
+✓ Add XML comments
+✓ Add to feature's folder structure
+```
 
-Nếu tạo trong Services/:
-  ✓ Create interface (IService)
-  ✓ Inject Repository
-  ✓ Add validation logic
-  ✓ Add error handling
+### **Nếu tạo Service (trong Features/*/Services/)**
+```
+✓ Create interface (IFeatureService)
+✓ Implement interface
+✓ Inject repository
+✓ Add validation logic
+✓ Add error handling
+✓ Write unit tests
+✓ Register trong Program.cs
+✓ Add XML comments
+```
 
-Nếu tạo trong Models/:
-  ✓ Add XML comments
-  ✓ Use nullable classes (C# 9)
-  ✓ Create corresponding DTO
+### **Nếu tạo Repository (trong Features/*/Persistence/)**
+```
+✓ Implement IRepository<T> hoặc extend nó
+✓ Use in-memory list hoặc DbContext (when ready)
+✓ Add CRUD methods
+✓ Add feature-specific queries
+✓ Write unit tests (mock DbContext)
+✓ Register trong Program.cs
+```
 
-Nếu tạo trong Persistence/:
-  ✓ Implement IRepository<T>
-  ✓ Use EF Core DbContext
-  ✓ Add filtering & pagination
+### **Nếu tạo Model (trong Features/*/Models/)**
+```
+✓ Entity: inherit từ BaseEntity
+✓ DTO: add for API/command request
+✓ Add XML comments
+✓ Use nullable types (C# 9)
+✓ Add enums if needed
+```
+
+### **Nếu tạo Shared code (trong Shared/)**
+```
+✓ IMPORTANT: Only add nếu dùng bởi 2+ features
+✓ Don't duplicate code into Shared
+✓ Add XML comments
+✓ Make generic & reusable
+✓ Write unit tests
 ```
 
 ---
 
-## 🎯 Tóm Tắt
+## 🎯 Program.cs - DI Container
 
-| Thư Mục | Chức Năng | Ai Làm |
-|---------|-----------|--------|
-| **Commands/** | Parse commands | Từng người (feature riêng) |
-| **Services/** | Business logic | Từng người (feature riêng) |
-| **Persistence/** | DB access | Team (shared) |
-| **Models/** | Entities & DTOs | Team (shared) |
-| **Utils/** | Helpers | Team (shared) |
-| **Events/** | Event handlers | Team (shared) |
-| **tests/** | Unit tests | Từng người (feature riêng) |
-| **docs/** | Documentation | Team (curated) |
+File `Program.cs` đã được setup với DI container cho cả 4 features:
+
+```csharp
+// Feature 1: Task Management (Người 1)
+services.AddScoped<ITaskRepository, TaskRepository>();
+services.AddScoped<ITaskService, TaskService>();
+services.AddScoped<TaskCreateCommand>();
+
+// Feature 2: Task Search (Người 2)
+services.AddScoped<ITaskSearchService, TaskSearchService>();
+services.AddScoped<TaskListCommand>();
+
+// Feature 3: Reminders (Người 3)
+services.AddScoped<IReminderRepository, ReminderRepository>();
+services.AddScoped<IReminderService, ReminderService>();
+services.AddScoped<ReminderSetCommand>();
+
+// Feature 4: Thread Context (Người 4)
+services.AddScoped<ITaskContextRepository, TaskContextRepository>();
+services.AddScoped<IThreadContextService, ThreadContextService>();
+services.AddScoped<TaskCreateHereCommand>();
+```
+
+**Quy tắc:**
+- Khi tạo Service/Command/Repository PHẢI register trong Program.cs
+- Registration order không quan trọng (DI tự resolve dependencies)
+- Dùng `AddScoped` cho típ service (create new per request)
 
 ---
 
-**Các câu hỏi?** Xem chi tiết tại [KIEN-TRUC.md](KIEN-TRUC.md) hoặc [HUONG-DAN.md](HUONG-DAN.md) 🚀
+## 📊 Dependency Graph
+
+```
+Command
+  ↓
+Service (Inject Repository)
+  ↓
+Repository (Inject DbContext)
+  ↓
+Database
+```
+
+**Ví dụ:**
+```
+TaskCreateCommand
+  ↓ (Inject)
+ITaskService / TaskService
+  ↓ (Inject)
+ITaskRepository / TaskRepository
+  ↓
+Database
+```
+
+---
+
+## 🔄 Tránh Xung Đột
+
+### ✅ **Tốt - Tách biệt hoàn toàn**
+```
+Người 1: Features/Task/*
+Người 2: Features/TaskQuery/*
+Người 3: Features/Reminder/*
+Người 4: Features/ThreadContext/*
+```
+→ Không ai đụng nhau, code review dễ
+
+### ❌ **Tồi - Cùng sửa 1 file**
+```
+Người 1 & 2 cùng sửa Features/Task/Services/ITaskService.cs
+```
+→ Merge conflict, khó review, rủi ro lỗi
+
+### ✅ **Cách xử lý nếu cần dùng chung**
+```
+A cần dùng method từ B
+  ↓
+B tạo public interface & implement
+  ↓
+A inject & dùng qua interface
+```
+
+---
+
+## 📋 Các File Mẫu Đã Có
+
+Những file sau đã được tạo làm template:
+
+**Shared:**
+- ✅ `Shared/Models/BaseEntity.cs` - Base class cho entities
+- ✅ `Shared/Models/IRepository.cs` - Generic repository interface
+- ✅ `Shared/Models/ICommand.cs` - Base command interface
+- ✅ `Shared/Utils/ValidationHelper.cs` - Utilities
+- ✅ `Shared/Utils/DateTimeHelper.cs` - Date utilities
+- ✅ `Shared/Events/EventHandler.cs` - Base event handler
+
+**Features:**
+- ✅ `Features/Task/*` - Sample Task feature (có code template)
+- ✅ `Features/TaskQuery/*` - Sample TaskQuery feature
+- ✅ `Features/Reminder/*` - Sample Reminder feature
+- ✅ `Features/ThreadContext/*` - Sample ThreadContext feature
+
+**Công việc còn lại:** Mỗi người hoàn thành code logic còn thiếu trong feature của mình.
+
+---
+
+## 🎓 Tips & Best Practices
+
+### **Namespace Convention**
+```csharp
+// Format: TaskManagement.Bot.Features.[FeatureName].[LayerName]
+TaskManagement.Bot.Features.Task.Commands
+TaskManagement.Bot.Features.Task.Services
+TaskManagement.Bot.Features.Task.Persistence
+TaskManagement.Bot.Features.Task.Models
+
+// Shared
+TaskManagement.Bot.Shared.Models
+TaskManagement.Bot.Shared.Utils
+TaskManagement.Bot.Shared.Events
+```
+
+### **File Naming**
+```csharp
+// Commands
+TaskCreateCommand.cs
+TaskUpdateCommand.cs
+
+// Services
+ITaskService.cs (interface)
+TaskService.cs (implementation) - nếu có
+
+// Repositories
+ITaskRepository.cs (interface)
+TaskRepository.cs (implementation) - nếu có
+
+// Models
+TaskEntity.cs (Entity)
+CreateTaskDto.cs (DTO)
+TaskStatus.cs (Enum)
+
+// Tests
+TaskServiceTests.cs
+TaskRepositoryTests.cs
+```
+
+### **Quick Commands**
+```bash
+# Build project
+dotnet build
+
+# Run tests
+dotnet test
+
+# Add NuGet package
+dotnet add package PackageName
+
+# Create migration (when ready for DB)
+dotnet ef migrations add MigrationName
+
+# Format code
+dotnet format
+```
+
+---
+
+## 🏁 Summary
+
+| Aspect | Chi Tiết |
+|--------|----------|
+| **Architecture** | Feature-Based (4 features, 4 người) |
+| **Path per person** | `Features/[FeatureName]/*` |
+| **Shared code** | `Shared/*` - dùng khi 2+ features cần |
+| **Branching** | `feature/[feature-name]` - 1 branch per person |
+| **Base classes** | `BaseEntity`, `IRepository<T>`, `ICommand` trong Shared |
+| **DI Setup** | Tất cả service/command/repo phải register trong Program.cs |
+| **Testing** | Mỗi feature có folder tests tương ứng |
+| **Merge strategy** | Feature → develop → main (release only) |
+
+---
+
+**Các câu hỏi?** Xem [KIEN-TRUC.md](KIEN-TRUC.md) hoặc [HUONG-DAN.md](HUONG-DAN.md) 🚀
