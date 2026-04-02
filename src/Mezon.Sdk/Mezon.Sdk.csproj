@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Mezon.Sdk</RootNamespace>
+    <AssemblyName>Mezon.Sdk</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>Mezon SDK for .NET — bot/client library for the Mezon realtime chat platform</Description>
+    <Authors>mezonai</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nccasia/mezon-js</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.27.3" />
+    <PackageReference Include="Grpc.Tools" Version="2.66.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ProtoRoot tells protoc to add Proto\ to its include path,
+         so 'import "api.proto"' inside realtime.proto resolves correctly. -->
+    <Protobuf Include="Proto\api.proto"      GrpcServices="None" ProtoRoot="Proto" />
+    <Protobuf Include="Proto\realtime.proto" GrpcServices="None" ProtoRoot="Proto" />
+  </ItemGroup>
+
+</Project>

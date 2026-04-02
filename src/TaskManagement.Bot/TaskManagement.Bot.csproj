@@ -14,9 +14,13 @@
     <RepositoryUrl>https://github.com/your-username/TaskManagement.Bot</RepositoryUrl>
   </PropertyGroup>
 
+
+	<ItemGroup>
+		<ProjectReference Include="..\src\Mezon.Sdk\Mezon.Sdk.csproj" />
+	</ItemGroup>
+
   <!-- NuGet Dependencies -->
   <ItemGroup>
-    <PackageReference Include="Mezon.Sdk" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
