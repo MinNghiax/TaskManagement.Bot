@@ -127,7 +127,7 @@ TaskManagement.Bot/
 │   ├── KIEN-TRUC.md
 │   ├── HUONG-DAN.md
 │   ├── API.md
-│   └── FOLDER-STRUCTURE.md (This file)
+│   └── FOLDER-STRUCTURE.md
 │
 ├── .github/
 │   └── workflows/

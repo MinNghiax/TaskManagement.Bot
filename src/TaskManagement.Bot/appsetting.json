@@ -1,0 +1,9 @@
+{
+  "Mezon": {
+    "BotId": "",
+    "Token": "",
+    "Host": "gw.mezon.ai",
+    "Port": "443",
+    "UseSsl": true
+  }
+}
