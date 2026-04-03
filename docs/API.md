@@ -23,7 +23,7 @@ Tất cả lệnh bắt đầu bằng `/` trong chat.
 
 ### Đổi Trạng Thái
 ```
-/task status [id] todo|doing|done
+/task status [id] todo|doing|completed|late|delay
 ```
 
 ---

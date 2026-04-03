@@ -1,0 +1,46 @@
+namespace TaskManagement.Bot.Application.DTOs;
+
+using TaskManagement.Bot.Domain.Enums;
+
+/// <summary>
+/// Complain DTO
+/// </summary>
+public class ComplainDto
+{
+    public int Id { get; set; }
+    public int TaskId { get; set; }
+    public string? Title { get; set; }
+    public string? Content { get; set; }
+    public string? ComplainType { get; set; }
+    public string? CreatedBy { get; set; }
+    public string? MezonUserId { get; set; }
+    public ComplainStatus Status { get; set; }
+    public string? RespondedBy { get; set; }
+    public string? Response { get; set; }
+    public DateTime? RespondedAt { get; set; }
+    public int SupportCount { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Create Complain DTO
+/// </summary>
+public class CreateComplainDto
+{
+    public int TaskId { get; set; }
+    public required string Title { get; set; }
+    public required string Content { get; set; }
+    public required string ComplainType { get; set; }
+    public required string CreatedBy { get; set; }
+    public required string MezonUserId { get; set; }
+}
+
+/// <summary>
+/// Update Complain Status DTO
+/// </summary>
+public class UpdateComplainStatusDto
+{
+    public ComplainStatus Status { get; set; }
+    public string? Response { get; set; }
+    public string? RespondedBy { get; set; }
+}
