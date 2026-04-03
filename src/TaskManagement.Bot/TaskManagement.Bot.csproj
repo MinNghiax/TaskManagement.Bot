@@ -16,7 +16,7 @@
 
 
 	<ItemGroup>
-		<ProjectReference Include="..\src\Mezon.Sdk\Mezon.Sdk.csproj" />
+		<ProjectReference Include="..\..\src\Mezon.Sdk\Mezon.Sdk.csproj" />
 	</ItemGroup>
 
   <!-- NuGet Dependencies -->
