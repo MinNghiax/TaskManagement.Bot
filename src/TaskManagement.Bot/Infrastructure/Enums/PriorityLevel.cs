@@ -1,4 +1,4 @@
-namespace TaskManagement.Bot.Domain.Enums;
+namespace TaskManagement.Bot.Infrastructure.Enums;
 
 /// <summary>
 /// Mức độ ưu tiên của task

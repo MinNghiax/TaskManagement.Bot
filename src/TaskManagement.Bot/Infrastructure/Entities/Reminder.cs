@@ -1,4 +1,4 @@
-namespace TaskManagement.Bot.Domain.Entities;
+namespace TaskManagement.Bot.Infrastructure.Entities;
 
 /// <summary>
 /// Reminder entity - Nhắc nhở cho task tại thời điểm nhất định

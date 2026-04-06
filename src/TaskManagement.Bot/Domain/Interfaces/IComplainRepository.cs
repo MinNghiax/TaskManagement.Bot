@@ -1,7 +1,7 @@
 namespace TaskManagement.Bot.Domain.Interfaces;
 
-using TaskManagement.Bot.Domain.Entities;
-using TaskManagement.Bot.Domain.Enums;
+using TaskManagement.Bot.Infrastructure.Entities;
+using TaskManagement.Bot.Infrastructure.Enums;
 
 /// <summary>
 /// Complain-specific repository interface

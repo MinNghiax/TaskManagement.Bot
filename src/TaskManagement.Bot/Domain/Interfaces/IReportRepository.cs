@@ -1,6 +1,6 @@
 namespace TaskManagement.Bot.Domain.Interfaces;
 
-using TaskManagement.Bot.Domain.Entities;
+using TaskManagement.Bot.Infrastructure.Entities;
 
 /// <summary>
 /// Report-specific repository interface

@@ -1,6 +1,6 @@
-namespace TaskManagement.Bot.Domain.Entities;
+namespace TaskManagement.Bot.Infrastructure.Entities;
 
-using TaskManagement.Bot.Domain.Enums;
+using TaskManagement.Bot.Infrastructure.Enums;
 
 /// <summary>
 /// Complain entity - Yêu cầu sửa chữa/thay đổi task từ người được giao
