@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using TaskManagement.Bot.Domain.Enums;
-using TaskStatus = TaskManagement.Bot.Domain.Enums.TaskStatus;
+using TaskManagement.Bot.Infrastructure.Enums;
+using TaskStatus = TaskManagement.Bot.Infrastructure.Enums.TaskStatus;
 
 namespace TaskManagement.Bot.Application.Services;
 

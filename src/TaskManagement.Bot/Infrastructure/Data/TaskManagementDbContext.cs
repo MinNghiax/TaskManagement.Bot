@@ -17,7 +17,7 @@ public class TaskManagementDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Task>(entity =>
+        modelBuilder.Entity<TaskItem>(entity =>
         {
             entity.HasKey(e => e.Id);
 

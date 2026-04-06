@@ -1,8 +1,8 @@
-namespace TaskManagement.Bot.Domain.Entities;
+namespace TaskManagement.Bot.Infrastructure.Entities;
 
-using TaskManagement.Bot.Domain.Enums;
+using TaskManagement.Bot.Infrastructure.Enums;
 
-public class Task : BaseEntity
+public class TaskItem : BaseEntity
 {
     public required string Title { get; set; }
 

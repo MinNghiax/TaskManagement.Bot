@@ -24,5 +24,5 @@ public class Reminder : BaseEntity
     public required string MezonUserId { get; set; }
 
     // Navigation property
-    public Task? Task { get; set; }
+    public TaskItem? Task { get; set; }
 }

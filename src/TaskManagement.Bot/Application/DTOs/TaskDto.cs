@@ -1,6 +1,6 @@
 namespace TaskManagement.Bot.Application.DTOs;
 
-using TaskManagement.Bot.Domain.Enums;
+using TaskManagement.Bot.Infrastructure.Enums;
 
 /// <summary>
 /// Task DTO cho read operations

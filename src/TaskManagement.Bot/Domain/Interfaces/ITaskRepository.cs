@@ -6,12 +6,12 @@ using TaskManagement.Bot.Infrastructure.Enums;
 /// <summary>
 /// Task-specific repository interface
 /// </summary>
-public interface ITaskRepository : IRepository<Task>
+public interface ITaskRepository : IRepository<TaskItem>
 {
-    Task<IEnumerable<Task>> GetByAssigneeAsync(string assignedTo);
-    Task<IEnumerable<Task>> GetByStatusAsync(TaskStatus status);
-    Task<IEnumerable<Task>> GetByCreatedByAsync(string createdBy);
-    Task<IEnumerable<Task>> GetOverdueAsync();
-    Task<IEnumerable<Task>> GetByPriorityAsync(PriorityLevel priority);
-    Task<IEnumerable<Task>> GetByDateRangeAsync(DateTime startDate, DateTime endDate);
+    Task<IEnumerable<TaskItem>> GetByAssigneeAsync(string assignedTo);
+    Task<IEnumerable<TaskItem>> GetByStatusAsync(TaskStatus status);
+    Task<IEnumerable<TaskItem>> GetByCreatedByAsync(string createdBy);
+    Task<IEnumerable<TaskItem>> GetOverdueAsync();
+    Task<IEnumerable<TaskItem>> GetByPriorityAsync(PriorityLevel priority);
+    Task<IEnumerable<TaskItem>> GetByDateRangeAsync(DateTime startDate, DateTime endDate);
 }

@@ -41,5 +41,5 @@ public class Complain : BaseEntity
     public int SupportCount { get; set; } = 0;
 
     // Navigation property
-    public Task? Task { get; set; }
+    public TaskItem? Task { get; set; }
 }
