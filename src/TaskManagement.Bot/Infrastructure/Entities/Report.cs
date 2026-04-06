@@ -1,4 +1,4 @@
-namespace TaskManagement.Bot.Domain.Entities;
+namespace TaskManagement.Bot.Infrastructure.Entities;
 
 /// <summary>
 /// Report entity - Báo cáo, thống kê về các tasks

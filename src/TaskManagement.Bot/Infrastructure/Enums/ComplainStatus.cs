@@ -1,4 +1,4 @@
-namespace TaskManagement.Bot.Domain.Enums;
+namespace TaskManagement.Bot.Infrastructure.Enums;
 
 /// <summary>
 /// Trạng thái của complain (yêu cầu sửa chữa task)
