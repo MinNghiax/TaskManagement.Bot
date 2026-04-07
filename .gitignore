@@ -58,3 +58,7 @@ Thumbs.db
 # Database files
 *.mdf
 *.ldf
+
+#
+appsettings.json
+appsettings.Development.json
