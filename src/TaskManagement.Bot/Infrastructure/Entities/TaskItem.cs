@@ -18,9 +18,8 @@ public class TaskItem : BaseEntity
 
     public PriorityLevel Priority { get; set; } = PriorityLevel.Medium;
 
-    public string? ChannelId { get; set; }
-
-    public string? MessageId { get; set; }
+    public ICollection<TaskClan> Clans { get; set; } = new List<TaskClan>();
+    public ICollection<TaskThread> Threads { get; set; } = new List<TaskThread>();
 
     public ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
     public ICollection<Complain> Complains { get; set; } = new List<Complain>();

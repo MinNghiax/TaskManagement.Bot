@@ -2,9 +2,6 @@ namespace TaskManagement.Bot.Application.DTOs;
 
 using TaskManagement.Bot.Infrastructure.Enums;
 
-/// <summary>
-/// Complain DTO
-/// </summary>
 public class ComplainDto
 {
     public int Id { get; set; }
@@ -22,9 +19,6 @@ public class ComplainDto
     public DateTime CreatedAt { get; set; }
 }
 
-/// <summary>
-/// Create Complain DTO
-/// </summary>
 public class CreateComplainDto
 {
     public int TaskId { get; set; }
@@ -35,9 +29,6 @@ public class CreateComplainDto
     public required string MezonUserId { get; set; }
 }
 
-/// <summary>
-/// Update Complain Status DTO
-/// </summary>
 public class UpdateComplainStatusDto
 {
     public ComplainStatus Status { get; set; }

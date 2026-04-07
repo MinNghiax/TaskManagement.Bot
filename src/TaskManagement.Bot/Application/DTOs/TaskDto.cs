@@ -2,9 +2,6 @@ namespace TaskManagement.Bot.Application.DTOs;
 
 using TaskManagement.Bot.Infrastructure.Enums;
 
-/// <summary>
-/// Task DTO cho read operations
-/// </summary>
 public class TaskDto
 {
     public int Id { get; set; }
@@ -21,9 +18,6 @@ public class TaskDto
     public DateTime? UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// Create Task DTO
-/// </summary>
 public class CreateTaskDto
 {
     public required string Title { get; set; }
@@ -36,9 +30,6 @@ public class CreateTaskDto
     public string? MessageId { get; set; }
 }
 
-/// <summary>
-/// Update Task DTO
-/// </summary>
 public class UpdateTaskDto
 {
     public string? Title { get; set; }
