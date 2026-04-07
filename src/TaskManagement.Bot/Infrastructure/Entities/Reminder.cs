@@ -6,11 +6,11 @@ public class Reminder : BaseEntity
 {
     public int TaskId { get; set; }
 
-    public Guid ReminderRuleId { get; set; }
+    public int ReminderRuleId { get; set; }
 
     public DateTime TriggerAt { get; set; }
 
-    public Guid TargetUserId { get; set; }
+    public int TargetUserId { get; set; }
 
     public ReminderStatus Status { get; set; } = ReminderStatus.Pending;
 
