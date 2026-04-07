@@ -17,7 +17,7 @@ namespace TaskManagement.Bot.Infrastructure.Entities
 
         public DateTime? NewDeadline { get; set; }
 
-        public DateTime CreatedAt { get; set; }
+        //public DateTime CreatedAt { get; set; }
 
         public int? ApprovedBy { get; set; }
         public DateTime? ApprovedAt { get; set; }
