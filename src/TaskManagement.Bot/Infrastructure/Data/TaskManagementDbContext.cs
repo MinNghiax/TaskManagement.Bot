@@ -35,9 +35,9 @@ public class TaskManagementDbContext : DbContext
 
             // Quan hệ 1-n với Complain
             entity.HasMany(e => e.Complains)
-                .WithOne(e => e.Task)
-                .HasForeignKey(e => e.TaskId)
-                .OnDelete(DeleteBehavior.Cascade);
+    .WithOne(e => e.TaskItem)
+    .HasForeignKey(e => e.TaskItemId)
+    .OnDelete(DeleteBehavior.Cascade);
 
             // Index cho tìm kiếm nhanh
             entity.HasIndex(e => e.Status);
@@ -61,16 +61,29 @@ public class TaskManagementDbContext : DbContext
         modelBuilder.Entity<Complain>(entity =>
         {
             entity.HasKey(e => e.Id);
-            
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Content).IsRequired().HasMaxLength(2000);
-            entity.Property(e => e.ComplainType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.MezonUserId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Status).HasConversion<int>();
-            
+
+            entity.Property(e => e.UserId)
+                  .IsRequired()
+                  .HasMaxLength(100);
+
+            entity.Property(e => e.Reason)
+                  .IsRequired()
+                  .HasMaxLength(500);
+
+            entity.Property(e => e.Type)
+                  .IsRequired();
+
+            entity.Property(e => e.Status)
+                  .HasConversion<int>();
+
+            // FK
+            entity.HasOne(e => e.TaskItem)
+                  .WithMany(t => t.Complains)
+                  .HasForeignKey(e => e.TaskItemId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
             // Index
-            entity.HasIndex(e => e.TaskId);
+            entity.HasIndex(e => e.TaskItemId);
             entity.HasIndex(e => e.Status);
         });
     }
