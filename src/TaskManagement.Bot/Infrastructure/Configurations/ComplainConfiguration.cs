@@ -8,6 +8,7 @@ namespace TaskManagement.Bot.Infrastructure.Configurations
     {
         public void Configure(EntityTypeBuilder<Complain> builder)
         {
+            builder.ToTable("Complains");
             builder.HasKey(x => x.Id);
 
             builder.HasOne(x => x.TaskItem)
