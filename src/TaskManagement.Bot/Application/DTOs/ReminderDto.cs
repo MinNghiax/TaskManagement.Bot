@@ -1,8 +1,5 @@
 namespace TaskManagement.Bot.Application.DTOs;
 
-/// <summary>
-/// Reminder DTO
-/// </summary>
 public class ReminderDto
 {
     public int Id { get; set; }
@@ -15,9 +12,6 @@ public class ReminderDto
     public DateTime CreatedAt { get; set; }
 }
 
-/// <summary>
-/// Create Reminder DTO
-/// </summary>
 public class CreateReminderDto
 {
     public int TaskId { get; set; }
@@ -26,9 +20,6 @@ public class CreateReminderDto
     public required string MezonUserId { get; set; }
 }
 
-/// <summary>
-/// Update Reminder DTO
-/// </summary>
 public class UpdateReminderDto
 {
     public DateTime? ReminderTime { get; set; }

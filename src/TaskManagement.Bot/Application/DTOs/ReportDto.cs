@@ -1,8 +1,5 @@
 namespace TaskManagement.Bot.Application.DTOs;
 
-/// <summary>
-/// Report DTO
-/// </summary>
 public class ReportDto
 {
     public int Id { get; set; }
@@ -21,9 +18,6 @@ public class ReportDto
     public DateTime CreatedAt { get; set; }
 }
 
-/// <summary>
-/// Create Report DTO
-/// </summary>
 public class CreateReportDto
 {
     public required string Title { get; set; }
