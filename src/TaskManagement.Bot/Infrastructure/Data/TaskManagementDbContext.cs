@@ -81,43 +81,33 @@ using Microsoft.EntityFrameworkCore;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Configurations;
 
-namespace TaskManagement.Bot.Infrastructure.Data;
-
-public class TaskManagementDbContext : DbContext
+namespace TaskManagement.Bot.Infrastructure.Data
 {
-    public TaskManagementDbContext(DbContextOptions<TaskManagementDbContext> options)
-        : base(options) { }
-
-    public DbSet<TaskItem> Tasks { get; set; }
-    public DbSet<Reminder> Reminders { get; set; }
-    public DbSet<Complain> Complains { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public class TaskManagementDbContext : DbContext
     {
-        base.OnModelCreating(modelBuilder);
-
-        modelBuilder.ApplyConfiguration(new TaskConfiguration());
-
-        modelBuilder.Entity<Reminder>(entity =>
+        public TaskManagementDbContext(DbContextOptions<TaskManagementDbContext> options) : base(options)
         {
-            entity.HasKey(e => e.Id);
+        }
 
-            entity.Property(e => e.MezonUserId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Message).HasMaxLength(1000);
+        public DbSet<TaskItem> TaskItems { get; set; }
 
-            entity.HasIndex(e => e.TaskId);
-            entity.HasIndex(e => e.MezonUserId);
-            entity.HasIndex(e => e.ReminderTime);
-        });
+        public DbSet<TaskClan> TaskClans { get; set; }
 
-        modelBuilder.Entity<Complain>(entity =>
+        public DbSet<TaskThread> TaskThreads { get; set; }
+
+        public DbSet<Reminder> Reminders { get; set; }
+
+        public DbSet<ReminderRule> ReminderRules { get; set; }
+
+        public DbSet<Complain> Complains { get; set; }
+
+        public DbSet<Report> Reports { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            entity.HasKey(e => e.Id);
+            base.OnModelCreating(modelBuilder);
 
-            entity.Property(e => e.Status).HasConversion<int>();
-
-            entity.HasIndex(e => e.TaskId);
-            entity.HasIndex(e => e.Status);
-        });
+            modelBuilder.ApplyConfigurationsFromAssembly(typeof(TaskManagementDbContext).Assembly);
+        }
     }
 }

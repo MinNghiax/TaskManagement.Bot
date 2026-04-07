@@ -4,7 +4,7 @@ using TaskManagement.Bot.Infrastructure.Enums;
 
 public class ReminderRule : BaseEntity
 {
-    public string? name { get; set; }
+    public string? Name { get; set; }
     public required ReminderTriggerType TriggerType { get; set; }
     public required double Value { get; set; }
     public TaskStatus TaskStatus { get; set; }
