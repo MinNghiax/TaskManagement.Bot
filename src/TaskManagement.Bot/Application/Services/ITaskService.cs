@@ -26,12 +26,12 @@ public interface ITaskService
     /// <summary>
     /// Get all tasks with a specific status.
     /// </summary>
-    Task<List<TaskDto>> GetByStatusAsync(TaskStatus status, CancellationToken cancellationToken = default);
+    Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Change the status of a task.
     /// </summary>
-    Task ChangeStatusAsync(Guid taskId, TaskStatus newStatus, CancellationToken cancellationToken = default);
+    Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete a task.
@@ -54,8 +54,8 @@ public class CreateTaskDto
     public string? AssignedTo { get; set; }
     public string? CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
-    public TaskStatus Status { get; set; } = TaskStatus.ToDo;
-    public PriorityLevel Priority { get; set; } = PriorityLevel.Medium;
+    public ETaskStatus Status { get; set; } = ETaskStatus.ToDo;
+    public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
     public string? ChannelId { get; set; }
     public string? MessageId { get; set; }
 }
@@ -71,8 +71,8 @@ public class TaskDto
     public string? AssignedTo { get; set; }
     public string? CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
-    public TaskStatus Status { get; set; }
-    public PriorityLevel Priority { get; set; }
+    public ETaskStatus Status { get; set; }
+    public EPriorityLevel Priority { get; set; }
     public string? ChannelId { get; set; }
     public string? MessageId { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -2,7 +2,7 @@
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
-using TaskStatus = TaskManagement.Bot.Infrastructure.Enums.TaskStatus;
+using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 namespace TaskManagement.Bot.Application.Services;
 
 public class TaskService : ITaskService
@@ -88,7 +88,7 @@ public class TaskService : ITaskService
         return tasks.Select(MapToDto).ToList();
     }
 
-    public async Task<List<TaskDto>> GetByStatusAsync(TaskStatus status, CancellationToken ct = default)
+    public async Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken ct = default)
     {
         var tasks = await _context.TaskItems
             .Where(t => t.Status == status && !t.IsDeleted)
@@ -97,7 +97,7 @@ public class TaskService : ITaskService
         return tasks.Select(MapToDto).ToList();
     }
 
-    public async Task ChangeStatusAsync(Guid taskId, TaskStatus newStatus, CancellationToken ct = default)
+    public async Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken ct = default)
     {
         var id = GuidToInt(taskId);
 

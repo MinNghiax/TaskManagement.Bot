@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Infrastructure.Enums;
-using TaskStatus = TaskManagement.Bot.Infrastructure.Enums.TaskStatus;
+using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 
 namespace TaskManagement.Bot.Application.Services;
 
@@ -30,7 +30,7 @@ public class InMemoryTaskService : ITaskService
                 Description = dto.Description ?? "",
                 AssignedTo = dto.AssignedTo ?? "unknown",
                 CreatedBy = dto.CreatedBy ?? "unknown",
-                Status = TaskStatus.ToDo,  // Changed from Pending to ToDo
+                Status = ETaskStatus.ToDo,  // Changed from Pending to ToDo
                 DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 ChannelId = dto.ChannelId ?? "",
@@ -78,7 +78,7 @@ public class InMemoryTaskService : ITaskService
         }
     }
 
-    public Task<List<TaskDto>> GetByStatusAsync(TaskStatus status, CancellationToken cancellationToken = default)
+    public Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -92,7 +92,7 @@ public class InMemoryTaskService : ITaskService
         }
     }
 
-    public Task ChangeStatusAsync(Guid taskId, TaskStatus newStatus, CancellationToken cancellationToken = default)
+    public Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default)
     {
         try
         {

@@ -11,9 +11,9 @@ namespace TaskManagement.Bot.Infrastructure.Entities
 
         public required string Reason { get; set; }
 
-        public ComplainType Type { get; set; }
+        public EComplainType Type { get; set; }
 
-        public ComplainStatus Status { get; set; } = ComplainStatus.Pending;
+        public EComplainStatus Status { get; set; } = EComplainStatus.Pending;
 
         public DateTime? NewDueDate { get; set; }
 

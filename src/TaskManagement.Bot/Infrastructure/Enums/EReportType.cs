@@ -1,6 +1,6 @@
 ﻿namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum ReportType
+public enum EReportType
 {
     Me,
     Team,

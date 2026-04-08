@@ -1,6 +1,6 @@
 namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum TaskStatus
+public enum ETaskStatus
 {
     ToDo = 0,
     Doing = 1,

@@ -33,11 +33,11 @@ public class TaskConfiguration : IEntityTypeConfiguration<TaskItem>
 
         builder.Property(t => t.Status)
             .HasConversion<int>()
-            .HasDefaultValue(TaskManagement.Bot.Infrastructure.Enums.TaskStatus.ToDo);
+            .HasDefaultValue(TaskManagement.Bot.Infrastructure.Enums.ETaskStatus.ToDo);
 
         builder.Property(t => t.Priority)
             .HasConversion<int>()
-            .HasDefaultValue(PriorityLevel.Medium);
+            .HasDefaultValue(EPriorityLevel.Medium);
 
         builder.Property(t => t.CreatedAt)
             .HasDefaultValueSql("GETUTCDATE()");

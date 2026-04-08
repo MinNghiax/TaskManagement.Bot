@@ -12,11 +12,11 @@ public class Reminder : BaseEntity
 
     public int TargetUserId { get; set; }
 
-    public ReminderStatus Status { get; set; } = ReminderStatus.Pending;
+    public EReminderStatus Status { get; set; } = EReminderStatus.Pending;
 
     public DateTime? NextTriggerAt { get; set; }
 
-    public TaskStatus StateSnapshot { get; set; }
+    public ETaskStatus StateSnapshot { get; set; }
 
     public ReminderRule? ReminderRule { get; set; }
     public TaskItem? Task { get; set; }

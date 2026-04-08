@@ -1,6 +1,6 @@
 ﻿namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum TaskFilterStatus
+public enum ETaskFilterStatus
 {
     All,
     Overdue,
