@@ -1,26 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Data;
 
-var basePath = AppContext.BaseDirectory;
-
-if (basePath.Contains("\\bin\\"))
-{
-    basePath = Path.GetFullPath(Path.Combine(basePath, "..", "..", ".."));
-}
-
-var configuration = new ConfigurationBuilder()
-    .SetBasePath(basePath)
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile("appsettings.Development.json", optional: true)
-    .Build();
-
 var services = new ServiceCollection();
-
-services.AddSingleton<IConfiguration>(configuration);
 
 services.AddLogging(config =>
 {
@@ -29,8 +12,9 @@ services.AddLogging(config =>
     config.SetMinimumLevel(LogLevel.Information);
 });
 
+// ✅ Dùng chung helper
 services.AddDbContext<TaskManagementDbContext>(options =>
-    options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(TaskManagementDbContextFactory.GetConnectionString()));
 
 var serviceProvider = services.BuildServiceProvider();
 
@@ -52,4 +36,4 @@ catch (Exception ex)
     logger.LogError(ex, "❌ Database connection failed");
 }
 
-Console.WriteLine("✔ Ready for migration. Run EF commands now.");
+Console.WriteLine("✔ Ready.");
