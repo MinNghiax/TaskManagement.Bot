@@ -1,10 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Data;
 
+var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
 var services = new ServiceCollection();
 
+services.AddSingleton<IConfiguration>(configuration);
 services.AddLogging(config =>
 {
     config.ClearProviders();
@@ -12,28 +16,58 @@ services.AddLogging(config =>
     config.SetMinimumLevel(LogLevel.Information);
 });
 
-// ✅ Dùng chung helper
 services.AddDbContext<TaskManagementDbContext>(options =>
-    options.UseSqlServer(TaskManagementDbContextFactory.GetConnectionString()));
+    TaskManagementDbContextConfiguration.Configure(options, configuration));
+services.AddScoped<ITaskService, TaskService>();
+services.AddScoped<IReminderRuleService, ReminderRuleService>();
+services.AddScoped<IReminderService, ReminderService>();
+services.AddScoped<IBotService, BotService>();
 
 var serviceProvider = services.BuildServiceProvider();
-
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+using var cancellationSource = new CancellationTokenSource();
+
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    cancellationSource.Cancel();
+};
 
 try
 {
-    logger.LogInformation("🚀 Connecting to database...");
+    logger.LogInformation("Connecting to database...");
 
-    using var scope = serviceProvider.CreateScope();
+    await using var scope = serviceProvider.CreateAsyncScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
+    IBotService? botService = null;
 
-    dbContext.Database.Migrate();
+    await dbContext.Database.MigrateAsync(cancellationSource.Token);
+    logger.LogInformation("Database connected and migrated successfully.");
 
-    logger.LogInformation("✅ Database connected & migrated successfully!");
+    try
+    {
+        botService = scope.ServiceProvider.GetRequiredService<IBotService>();
+        await botService.StartAsync(cancellationSource.Token);
+
+        logger.LogInformation("Bot is running. Press Ctrl+C to stop.");
+
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationSource.Token);
+    }
+    catch (OperationCanceledException)
+    {
+    }
+    finally
+    {
+        if (botService != null)
+        {
+            await botService.StopAsync(CancellationToken.None);
+        }
+    }
 }
 catch (Exception ex)
 {
-    logger.LogError(ex, "❌ Database connection failed");
+    logger.LogError(ex, "Database or bot startup failed");
+    throw;
 }
 
-Console.WriteLine("✔ Ready.");
+Console.WriteLine("Ready.");
