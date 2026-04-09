@@ -19,7 +19,12 @@ namespace TaskManagement.Bot.Infrastructure.Data
 
         public static string GetConnectionString()
         {
-            var basePath = Directory.GetCurrentDirectory();
+            var basePath = AppContext.BaseDirectory;
+
+            if (basePath.Contains("\\bin\\"))
+            {
+                basePath = Path.GetFullPath(Path.Combine(basePath, "..", "..", ".."));
+            }
 
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(basePath)
@@ -28,7 +33,7 @@ namespace TaskManagement.Bot.Infrastructure.Data
                 .Build();
 
             return configuration.GetConnectionString("DefaultConnection")
-                ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+                ?? throw new InvalidOperationException("Connection string not found.");
         }
     }
 }
