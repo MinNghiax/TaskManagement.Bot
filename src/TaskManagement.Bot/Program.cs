@@ -19,8 +19,6 @@ services.AddLogging(config =>
 services.AddDbContext<TaskManagementDbContext>(options =>
     TaskManagementDbContextConfiguration.Configure(options, configuration));
 services.AddScoped<ITaskService, TaskService>();
-services.AddScoped<IReminderRuleService, ReminderRuleService>();
-services.AddScoped<IReminderService, ReminderService>();
 services.AddScoped<IBotService, BotService>();
 
 var serviceProvider = services.BuildServiceProvider();
