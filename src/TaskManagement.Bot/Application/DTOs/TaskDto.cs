@@ -10,8 +10,8 @@ public class TaskDto
     public string? AssignedTo { get; set; }
     public string? CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
-    public TaskStatus Status { get; set; }
-    public PriorityLevel Priority { get; set; }
+    public ETaskStatus Status { get; set; }
+    public EPriorityLevel Priority { get; set; }
     public string? ChannelId { get; set; }
     public string? MessageId { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -25,7 +25,7 @@ public class CreateTaskDto
     public required string AssignedTo { get; set; }
     public required string CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
-    public PriorityLevel Priority { get; set; } = PriorityLevel.Medium;
+    public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
     public string? ChannelId { get; set; }
     public string? MessageId { get; set; }
 }
@@ -36,6 +36,6 @@ public class UpdateTaskDto
     public string? Description { get; set; }
     public string? AssignedTo { get; set; }
     public DateTime? DueDate { get; set; }
-    public TaskStatus? Status { get; set; }
-    public PriorityLevel? Priority { get; set; }
+    public ETaskStatus? Status { get; set; }
+    public EPriorityLevel? Priority { get; set; }
 }

@@ -1,6 +1,6 @@
 ﻿namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum ComplainType
+public enum EComplainType
 {
     Paused,
     Extend,

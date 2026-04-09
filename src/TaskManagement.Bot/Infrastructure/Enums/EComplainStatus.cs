@@ -1,6 +1,6 @@
 namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum ComplainStatus
+public enum EComplainStatus
 {
     Pending,
     Approved,

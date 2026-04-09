@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Mezon.Sdk;
 using Mezon.Sdk.Proto;
 using TaskManagement.Bot.Application.Services;
-using TaskStatus = TaskManagement.Bot.Infrastructure.Enums.TaskStatus;
+using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 
 namespace TaskManagement.Bot.Examples;
 
@@ -256,7 +256,7 @@ public class BotCommandHandlerExample
                 return "❌ You can only mark your own tasks as done.";
 
             // Update status
-            await _taskService.ChangeStatusAsync(taskId, TaskStatus.Completed, ct);
+            await _taskService.ChangeStatusAsync(taskId, ETaskStatus.Completed, ct);
 
             return $"✅ Task marked as completed!\n📝 **{taskDto.Title}**";
         }

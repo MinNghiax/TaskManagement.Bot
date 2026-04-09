@@ -14,9 +14,9 @@ public class TaskItem : BaseEntity
 
     public DateTime? DueDate { get; set; }
 
-    public TaskStatus Status { get; set; } = TaskStatus.ToDo;
+    public ETaskStatus Status { get; set; } = ETaskStatus.ToDo;
 
-    public PriorityLevel Priority { get; set; } = PriorityLevel.Medium;
+    public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
 
     public ICollection<TaskClan> Clans { get; set; } = new List<TaskClan>();
     public ICollection<TaskThread> Threads { get; set; } = new List<TaskThread>();

@@ -11,7 +11,7 @@ public class ComplainDto
     public string? ComplainType { get; set; }
     public string? CreatedBy { get; set; }
     public string? MezonUserId { get; set; }
-    public ComplainStatus Status { get; set; }
+    public EComplainStatus Status { get; set; }
     public string? RespondedBy { get; set; }
     public string? Response { get; set; }
     public DateTime? RespondedAt { get; set; }
@@ -31,7 +31,7 @@ public class CreateComplainDto
 
 public class UpdateComplainStatusDto
 {
-    public ComplainStatus Status { get; set; }
+    public EComplainStatus Status { get; set; }
     public string? Response { get; set; }
     public string? RespondedBy { get; set; }
 }

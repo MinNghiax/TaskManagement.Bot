@@ -1,6 +1,6 @@
 ﻿namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum TimeRange
+public enum ETimeRange
 {
     Today,
     Week,

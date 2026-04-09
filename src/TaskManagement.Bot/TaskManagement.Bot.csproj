@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -13,6 +13,12 @@
     <Description>Task Management Chatbot built on Mezon SDK</Description>
     <RepositoryUrl>https://github.com/your-username/TaskManagement.Bot</RepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Infrastructure\Configuration\**" />
+    <EmbeddedResource Remove="Infrastructure\Configuration\**" />
+    <None Remove="Infrastructure\Configuration\**" />
+  </ItemGroup>
 
 
 	<ItemGroup>

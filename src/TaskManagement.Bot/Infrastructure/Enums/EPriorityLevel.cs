@@ -1,6 +1,6 @@
 namespace TaskManagement.Bot.Infrastructure.Enums;
 
-public enum PriorityLevel
+public enum EPriorityLevel
 {
     Low = 0,
 
