@@ -31,7 +31,6 @@ public class TaskSummaryDto
 
     public string? ClanId { get; set; }
     public string? ChannelId { get; set; }
-    public string? ThreadId { get; set; }
     
     public int OverdueDays { get; set; }
 }

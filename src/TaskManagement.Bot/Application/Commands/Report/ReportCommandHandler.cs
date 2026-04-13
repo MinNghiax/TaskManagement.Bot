@@ -59,10 +59,9 @@ public class ReportCommandHandler : ICommandHandler
     private async Task<string> Personal(ChannelMessage message, CancellationToken ct)
     {
         var dto = await _reportService.GetPersonalReportAsync(
-            message.Username!,
+            message.SenderId!,
             message.ClanId!,
-            message.ChannelId!,
-            null);
+            message.ChannelId!);
 
         return $"""
 📊 PERSONAL REPORT
@@ -82,8 +81,7 @@ public class ReportCommandHandler : ICommandHandler
     {
         var dto = await _reportService.GetTeamReportAsync(
             message.ClanId!,
-            message.ChannelId!,
-            null);
+            message.ChannelId!);
 
         return $"""
 👥 TEAM REPORT
@@ -105,8 +103,7 @@ public class ReportCommandHandler : ICommandHandler
         var dto = await _reportService.GetStatisticsReportAsync(
             timeRange,
             message.ClanId!,
-            message.ChannelId!,
-            null);
+            message.ChannelId!);
 
         return $"""
 📊 {timeRange.ToString().ToUpper()} REPORT

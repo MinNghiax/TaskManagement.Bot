@@ -63,7 +63,7 @@ public class TaskConfiguration : IEntityTypeConfiguration<TaskItem>
             .HasForeignKey(c => c.TaskItemId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(t => t.Threads)
+        builder.HasMany(t => t.Channels)
             .WithOne(t => t.TaskItem)
             .HasForeignKey(t => t.TaskItemId)
             .OnDelete(DeleteBehavior.Cascade);

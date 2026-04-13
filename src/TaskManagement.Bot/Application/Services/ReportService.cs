@@ -17,13 +17,11 @@ public class ReportService : IReportService
 
     private IQueryable<TaskItem> BuildTaskQuery(
         string? clanId,
-        string? channelId,
-        string? threadId)
+        string? channelId)
     {
         var query = _context.TaskItems
             .Include(t => t.Clans)
             .Include(t => t.Channels)
-            .Include(t => t.Threads)
             .Where(t => !t.IsDeleted)
             .AsQueryable();
 
@@ -35,22 +33,17 @@ public class ReportService : IReportService
         {
             query = query.Where(t => t.Channels.Any(c => c.ChannelId == channelId));
         }
-        if (!string.IsNullOrEmpty(threadId))
-        {
-            query = query.Where(t => t.Threads.Any(c => c.ThreadId == threadId));
-        }
         return query;
     }
 
     public async Task<PersonalReportDto> GetPersonalReportAsync(
         string userId,
         string? clanId = null,
-        string? channelId = null,
-        string? threadId = null)
+        string? channelId = null)
     {
         var now = DateTime.UtcNow;
 
-        var tasks = await BuildTaskQuery(clanId, channelId, threadId)
+        var tasks = await BuildTaskQuery(clanId, channelId)
             .Where(t => t.AssignedTo == userId)
             .ToListAsync();
 
@@ -81,7 +74,6 @@ public class ReportService : IReportService
                 Priority = t.Priority,
                 ClanId = t.Clans.FirstOrDefault()?.ClanId,
                 ChannelId = t.Channels.FirstOrDefault()?.ChannelId,
-                ThreadId = t.Threads.FirstOrDefault()?.ThreadId,
                 OverdueDays = t.DueDate.HasValue && t.DueDate.Value < now
                     ? (now - t.DueDate.Value).Days
                     : 0
@@ -91,10 +83,9 @@ public class ReportService : IReportService
 
     public async Task<TeamReportDto> GetTeamReportAsync(
         string? clanId = null,
-        string? channelId = null,
-        string? threadId = null)
+        string? channelId = null)
     {
-        var task = await BuildTaskQuery(clanId, channelId, threadId).ToListAsync();
+        var task = await BuildTaskQuery(clanId, channelId).ToListAsync();
 
         var members = task.Select(t => t.AssignedTo).Distinct();
 
@@ -136,12 +127,11 @@ public class ReportService : IReportService
     public async Task<StatisticsReportDto> GetStatisticsReportAsync(
         ETimeRange timeRange,
         string? clanId = null,
-        string? channelId = null,
-        string? threadId = null)
+        string? channelId = null)
     {
         var (start, end) = GetTimeRange(timeRange);
 
-        var tasks = await BuildTaskQuery(clanId, channelId, threadId)
+        var tasks = await BuildTaskQuery(clanId, channelId)
                 .Where(t => t.CreatedAt >= start && t.CreatedAt <= end)
                 .ToListAsync();
 
@@ -168,12 +158,11 @@ public class ReportService : IReportService
 
     public async Task<List<DetailedTaskReportDto>> GetOverdueTasksAsync(
             string? clanId = null,
-            string? channelId = null,
-            string? threadId = null)
+            string? channelId = null)
     {
         var now = DateTime.UtcNow;
 
-        return await BuildTaskQuery(clanId, channelId, threadId)
+        return await BuildTaskQuery(clanId, channelId)
             .Where(t => t.DueDate.HasValue &&
                         t.DueDate < now &&
                         t.Status != ETaskStatus.Completed)
@@ -192,8 +181,7 @@ public class ReportService : IReportService
                     ? (t.DueDate.Value - t.CreatedAt).Days
                     : 0,
                 ClanId = t.Clans.FirstOrDefault()!.ClanId,
-                ChannelId = t.Channels.FirstOrDefault()!.ChannelId,
-                ThreadId = t.Threads.FirstOrDefault()!.ThreadId
+                ChannelId = t.Channels.FirstOrDefault()!.ChannelId
             })
             .ToListAsync();
     }
@@ -201,10 +189,9 @@ public class ReportService : IReportService
     public async Task<List<DetailedTaskReportDto>> GetProgressReportAsync(
             string? userId = null,
             string? clanId = null,
-            string? channelId = null,
-            string? threadId = null)
+            string? channelId = null)
     {
-        var query = BuildTaskQuery(clanId, channelId, threadId);
+        var query = BuildTaskQuery(clanId, channelId);
 
         if (!string.IsNullOrEmpty(userId))
             query = query.Where(t => t.AssignedTo == userId);
@@ -224,11 +211,11 @@ public class ReportService : IReportService
                     ? (t.DueDate.Value - t.CreatedAt).Days
                     : 0,
                 ClanId = t.Clans.FirstOrDefault()!.ClanId,
-                ChannelId = t.Channels.FirstOrDefault()!.ChannelId,
-                ThreadId = t.Threads.FirstOrDefault()!.ThreadId
+                ChannelId = t.Channels.FirstOrDefault()!.ChannelId
             })
             .ToListAsync();
     }
+
     private (DateTime start, DateTime end) GetTimeRange(ETimeRange range)
     {
         var now = DateTime.UtcNow;

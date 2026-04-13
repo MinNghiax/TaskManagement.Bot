@@ -4,7 +4,6 @@ public class TeamReportDto
 {
     public string? ClanId { get; set; }
     public string? ChannelId { get; set; }
-    public string? ThreadId { get; set; }
     public DateTime ReportDate { get; set; } = DateTime.UtcNow;
 
     public int TotalMembers { get; set; }
