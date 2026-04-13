@@ -1,51 +1,103 @@
+using Mezon.Sdk.Domain;
+using Mezon.Sdk.Enums;
+
 namespace Mezon.Sdk.Structures;
 
-using Mezon.Sdk.Constants;
-using Mezon.Sdk.Proto;
-
-public class TextChannel
+/// <summary>
+/// High-level TextChannel structure for sending messages to a channel.
+/// </summary>
+public sealed class TextChannel
 {
     public string Id { get; }
-    public string Name { get; }
-    public int ChannelType { get; }
-    public bool IsPrivate { get; }
-    public string CategoryId { get; }
-    public string MeetingCode { get; }
-    public Clan Clan { get; }
+    public string ClanId { get; }
+    public string? Name { get; set; }
+    public bool IsPrivate { get; set; }
+    public int? ChannelType { get; set; }
+    public string? CategoryId { get; set; }
+    public string? CategoryName { get; set; }
 
-    public TextChannel(ChannelDescription data, Clan clan)
+    private readonly MezonClient _client;
+
+    public TextChannel(string clanId, string channelId, MezonClient client)
     {
-        Id = data.ChannelId.ToString();
-        Name = data.ChannelLabel;
-        ChannelType = data.Type;
-        IsPrivate = data.ChannelPrivate != 0;
-        CategoryId = data.CategoryId.ToString();
-        MeetingCode = data.MeetingCode;
-        Clan = clan;
+        ClanId = clanId;
+        Id = channelId;
+        _client = client;
     }
 
-    public int Mode => ChannelTypeToMode(ChannelType);
-
-    private static int ChannelTypeToMode(int type) => type switch
+    /// <summary>Send a message to this channel.</summary>
+    public Task<ChannelMessageAck> SendAsync(
+        ChannelMessageContent content,
+        ApiMessageMention[]? mentions = null,
+        ApiMessageAttachment[]? attachments = null,
+        bool mentionEveryone = false,
+        bool anonymousMessage = false,
+        string? topicId = null,
+        int? code = null,
+        CancellationToken cancellationToken = default)
     {
-        (int)Constants.ChannelType.Channel   => (int)ChannelStreamMode.Channel,
-        (int)Constants.ChannelType.Group     => (int)ChannelStreamMode.Group,
-        (int)Constants.ChannelType.DM        => (int)ChannelStreamMode.Dm,
-        (int)Constants.ChannelType.Thread    => (int)ChannelStreamMode.Thread,
-        _ => (int)ChannelStreamMode.Channel,
-    };
+        return _client.SendMessageAsync(
+            ClanId, Id,
+            ChannelStreamMode.Channel,
+            isPublic: !IsPrivate,
+            content, mentions, attachments,
+            anonymousMessage: anonymousMessage,
+            mentionEveryone: mentionEveryone,
+            topicId: topicId,
+            code: code,
+            cancellationToken: cancellationToken);
+    }
 
-    public Task SendAsync(string contentJson, int code = 0, string? topicId = null, CancellationToken ct = default)
-        => Clan.MessageQueue.EnqueueAsync((Func<Task>)(() => Clan.SocketManager.SendChatMessageAsync(
-            Clan.Id, Id, Mode, !IsPrivate, contentJson, code: code, topicId: topicId, ct: ct)!));
+    /// <summary>Send a simple text message to this channel.</summary>
+    public Task<ChannelMessageAck> SendTextAsync(
+        string text,
+        bool mentionEveryone = false,
+        CancellationToken cancellationToken = default)
+    {
+        return SendAsync(
+            new ChannelMessageContent { Text = text },
+            mentionEveryone: mentionEveryone,
+            cancellationToken: cancellationToken);
+    }
 
-    public Task SendTextAsync(string text, int code = 0, string? topicId = null, CancellationToken ct = default)
-        => SendAsync($"{{\"t\":\"{EscapeJson(text)}\"}}", code, topicId, ct);
+    /// <summary>Send an ephemeral (auto-dismissing) message to a specific user.</summary>
+    public async Task<ChannelMessageAck> SendEphemeralAsync(
+        string receiverId,
+        object content,
+        string? referenceMessageId = null,
+        ApiMessageMention[]? mentions = null,
+        ApiMessageAttachment[]? attachments = null,
+        bool mentionEveryone = false,
+        bool anonymousMessage = false,
+        string? topicId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _client.Socket.WriteEphemeralMessageAsync(
+            receiverId, ClanId, Id,
+            ChannelStreamMode.Channel,
+            isPublic: !IsPrivate,
+            content, mentions, attachments,
+            mentionEveryone: mentionEveryone,
+            anonymousMessage: anonymousMessage,
+            topicId: topicId,
+            messageId: referenceMessageId,
+            cancellationToken: cancellationToken);
+    }
 
-    public Task SendEphemeralAsync(string receiverId, string contentJson, CancellationToken ct = default)
-        => Clan.MessageQueue.EnqueueAsync((Func<Task>)(() => Clan.SocketManager.SendEphemeralMessageAsync(
-            receiverId, Clan.Id, Id, Mode, !IsPrivate, contentJson, ct)));
+    /// <summary>Delete an ephemeral message.</summary>
+    public Task<ChannelMessageAck> DeleteEphemeralAsync(
+        string receiverId,
+        string messageId,
+        string? topicId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Ephemeral deletion uses the DeleteEphemeralMsg type message
+        return _client.Socket.WriteChatMessageAsync(
+            ClanId, Id,
+            TypeMessage.DeleteEphemeralMsg,
+            isPublic: !IsPrivate,
+            content: new { message_id = messageId, receiver_id = receiverId },
+            cancellationToken: cancellationToken);
+    }
 
-    private static string EscapeJson(string s) =>
-        s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
 }

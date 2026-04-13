@@ -1,62 +1,123 @@
+using Mezon.Sdk.Api;
+using Mezon.Sdk.Domain;
+using Mezon.Sdk.Enums;
+
 namespace Mezon.Sdk.Structures;
 
-using Mezon.Sdk.Constants;
-using Mezon.Sdk.Managers;
-using Mezon.Sdk.Utils;
-
-public class User
+/// <summary>
+/// Represents a user in Mezon, similar to TypeScript SDK's User class
+/// </summary>
+public sealed class User
 {
     public string Id { get; }
-    public string Username { get; set; }
-    public string ClanNick { get; set; }
-    public string ClanAvatar { get; set; }
-    public string DisplayName { get; set; }
-    public string Avatar { get; set; }
-    public string DmChannelId { get; set; }
+    public string? Username { get; set; }
+    public string? DisplayName { get; set; }
+    public string? ClanNick { get; set; }
+    public string? ClanAvatar { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? DmChannelId { get; set; }
 
-    private readonly SocketManager _socket;
-    private readonly MessageQueue _queue;
-    private readonly ChannelManager _channels;
-    private readonly Func<string> _tokenGetter;
+    private readonly MezonClient _client;
+    private readonly MezonRestApi _api;
+    private readonly Func<string> _getSessionToken;
 
-    public User(string id, SocketManager socket, MessageQueue queue, ChannelManager channels,
-                Func<string> tokenGetter,
-                string username = "", string clanNick = "", string clanAvatar = "",
-                string displayName = "", string avatar = "", string dmChannelId = "")
+    public User(
+        string userId,
+        MezonClient client,
+        MezonRestApi api,
+        Func<string> getSessionToken,
+        string? username = null,
+        string? displayName = null,
+        string? clanNick = null,
+        string? clanAvatar = null,
+        string? avatarUrl = null,
+        string? dmChannelId = null)
     {
-        Id = id;
+        Id = userId;
         Username = username;
+        DisplayName = displayName;
         ClanNick = clanNick;
         ClanAvatar = clanAvatar;
-        DisplayName = displayName;
-        Avatar = avatar;
+        AvatarUrl = avatarUrl;
         DmChannelId = dmChannelId;
-        _socket = socket;
-        _queue = queue;
-        _channels = channels;
-        _tokenGetter = tokenGetter;
+        _client = client;
+        _api = api;
+        _getSessionToken = getSessionToken;
     }
 
-    public async Task SendDmAsync(string contentJson, int code = 0, CancellationToken ct = default)
+    /// <summary>
+    /// Create DM channel with this user (similar to TypeScript SDK's _createDmChannel)
+    /// </summary>
+    public async Task<ApiChannelDescription?> CreateDmChannelAsync(CancellationToken cancellationToken = default)
     {
-        await _queue.EnqueueAsync<object?>(async () =>
+        try
         {
-            if (string.IsNullOrEmpty(DmChannelId))
+            var sessionToken = _getSessionToken();
+            var dmChannel = await _client.CreateDMChannelAsync(Id, cancellationToken);
+            
+            if (dmChannel != null && !string.IsNullOrEmpty(dmChannel.ChannelId))
             {
-                var ch = await _channels.CreateDmChannelAsync(_tokenGetter(), Id, ct);
-                DmChannelId = ch?.ChannelId.ToString() ?? "";
+                DmChannelId = dmChannel.ChannelId;
             }
-            if (string.IsNullOrEmpty(DmChannelId))
-                throw new InvalidOperationException($"Cannot get DM channel for user {Id}");
-            await _socket.SendChatMessageAsync("0", DmChannelId, (int)ChannelStreamMode.Dm, false,
-                contentJson, code: code, ct: ct);
+
+            return dmChannel;
+        }
+        catch
+        {
             return null;
-        });
+        }
     }
 
-    public Task SendDmTextAsync(string text, int code = 0, CancellationToken ct = default)
-        => SendDmAsync($"{{\"t\":\"{EscapeJson(text)}\"}}", code, ct);
+    /// <summary>
+    /// Send direct message to this user (similar to TypeScript SDK's sendDM)
+    /// </summary>
+    public async Task<ChannelMessageAck> SendDMAsync(
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        return await _client.SendDMAsync(
+            channelDmId: await EnsureDmChannelAsync(cancellationToken),
+            message: message,
+            cancellationToken: cancellationToken
+        );
+    }
 
-    private static string EscapeJson(string s) =>
-        s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
+    /// <summary>
+    /// Send direct message to this user with rich content
+    /// </summary>
+    public async Task<ChannelMessageAck> SendDMAsync(
+        ChannelMessageContent content,
+        ApiMessageAttachment[]? attachments = null,
+        ApiMessageRef[]? references = null,
+        CancellationToken cancellationToken = default)
+    {
+        var dmChannelId = await EnsureDmChannelAsync(cancellationToken);
+        
+        return await _client.SendDMAsync(
+            channelDmId: dmChannelId,
+            message: content.Text ?? "",
+            messageOptions: null,
+            attachments: attachments,
+            refs: references,
+            cancellationToken: cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Ensure DM channel exists, create if needed
+    /// </summary>
+    private async Task<string> EnsureDmChannelAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(DmChannelId))
+        {
+            var dmChannel = await CreateDmChannelAsync(cancellationToken);
+            if (dmChannel == null || string.IsNullOrEmpty(dmChannel.ChannelId))
+            {
+                throw new InvalidOperationException($"Cannot create DM channel for user {Id}");
+            }
+            DmChannelId = dmChannel.ChannelId;
+        }
+
+        return DmChannelId;
+    }
 }

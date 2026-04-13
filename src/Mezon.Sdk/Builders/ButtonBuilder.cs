@@ -1,38 +1,50 @@
+using Mezon.Sdk.Domain;
+using Mezon.Sdk.Enums;
+
 namespace Mezon.Sdk.Builders;
 
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
-public enum ButtonStyle { Default = 1, Primary = 2, Success = 3, Danger = 4, Link = 5 }
-
-public class ButtonComponent
+/// <summary>
+/// Fluent builder for interactive button components.
+/// Matches the TypeScript <c>ButtonBuilder</c> class.
+/// </summary>
+public sealed class ButtonBuilder
 {
-    [JsonPropertyName("id")]    public string Id    { get; set; } = "";
-    [JsonPropertyName("type")]  public int Type     { get; set; } = 2; // BUTTON
-    [JsonPropertyName("component")] public ButtonInner Component { get; set; } = new();
-}
+    private readonly List<IButtonMessage> _buttons = new();
 
-public class ButtonInner
-{
-    [JsonPropertyName("label")] public string Label { get; set; } = "";
-    [JsonPropertyName("style")] public int Style    { get; set; } = (int)ButtonStyle.Default;
-}
-
-public class ButtonBuilder
-{
-    private readonly List<ButtonComponent> _components = [];
-
-    public ButtonBuilder AddButton(string id, string label, ButtonStyle style = ButtonStyle.Default)
+    /// <summary>Add a button with the specified id, label, and style.</summary>
+    public ButtonBuilder AddButton(string id, string label, EButtonMessageStyle style)
     {
-        _components.Add(new ButtonComponent
+        _buttons.Add(new IButtonMessage
         {
-            Id = id,
-            Component = new ButtonInner { Label = label, Style = (int)style },
+            Label = label,
+            Disable = false,
+            Style = (int)style,
+            Url = null
         });
         return this;
     }
 
-    public List<ButtonComponent> Build() => _components;
+    /// <summary>Add a primary (blurple) button.</summary>
+    public ButtonBuilder AddPrimaryButton(string label, EButtonMessageStyle style = EButtonMessageStyle.Primary)
+        => AddButton(label, label, style);
 
-    public string ToJson() => JsonSerializer.Serialize(_components);
+    /// <summary>Add a danger (red) button.</summary>
+    public ButtonBuilder AddDangerButton(string label)
+        => AddButton(label, label, EButtonMessageStyle.Danger);
+
+    /// <summary>Add a link button.</summary>
+    public ButtonBuilder AddLinkButton(string label, string url)
+    {
+        _buttons.Add(new IButtonMessage
+        {
+            Label = label,
+            Url = url,
+            Style = (int)EButtonMessageStyle.Link,
+            Disable = false
+        });
+        return this;
+    }
+
+    /// <summary>Build the button message array.</summary>
+    public IButtonMessage[] Build() => _buttons.ToArray();
 }

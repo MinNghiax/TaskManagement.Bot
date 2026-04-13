@@ -3,10 +3,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Application.Services;
+using TaskManagement.Bot.Application.Commands;
+using TaskManagement.Bot.Application.Commands.Report;
 using TaskManagement.Bot.Infrastructure.Data;
 
 var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
 var services = new ServiceCollection();
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 services.AddSingleton<IConfiguration>(configuration);
 services.AddLogging(config =>
@@ -20,6 +23,8 @@ services.AddDbContext<TaskManagementDbContext>(options =>
     TaskManagementDbContextConfiguration.Configure(options, configuration));
 services.AddScoped<ITaskService, TaskService>();
 services.AddScoped<IBotService, BotService>();
+services.AddScoped<IReportService, ReportService>();
+services.AddScoped<ICommandHandler, ReportCommandHandler>();
 
 var serviceProvider = services.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
