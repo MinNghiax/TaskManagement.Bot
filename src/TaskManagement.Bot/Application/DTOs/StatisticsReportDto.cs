@@ -6,7 +6,6 @@ public class StatisticsReportDto
 {
     public string? ClanId { get; set; }
     public string? ChannelId { get; set; }
-    public string? ThreadId { get; set; }
     public ETimeRange TimeRange { get; set; }
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }

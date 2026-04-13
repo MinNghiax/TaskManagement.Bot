@@ -14,7 +14,7 @@ namespace TaskManagement.Bot.Infrastructure.Data
 
         public DbSet<TaskClan> TaskClans { get; set; }
 
-        public DbSet<TaskThread> TaskThreads { get; set; } 
+        public DbSet<TaskChannel> TaskChannels { get; set; } 
 
         public DbSet<Reminder> Reminders { get; set; }
 
