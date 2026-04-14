@@ -1,80 +1,23 @@
 namespace TaskManagement.Bot.Application.Services;
-
+using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Infrastructure.Enums;
 
-/// <summary>
-/// Interface for task management service.
-/// Provides methods to create, read, update, and delete tasks.
-/// </summary>
 public interface ITaskService
 {
-    /// <summary>
-    /// Create a new task.
-    /// </summary>
     Task<TaskDto?> CreateAsync(CreateTaskDto dto, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a task by ID.
-    /// </summary>
-    Task<TaskDto?> GetByIdAsync(Guid taskId, CancellationToken cancellationToken = default);
+    Task<TaskDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get all tasks assigned to a specific user.
-    /// </summary>
-    Task<List<TaskDto>> GetByAssigneeAsync(string assignee, CancellationToken cancellationToken = default);
+    Task<List<TaskDto>> GetByCreatorAsync(string creator, string? channelId, CancellationToken ct);
 
-    /// <summary>
-    /// Get all tasks with a specific status.
-    /// </summary>
+    Task<List<TaskDto>> GetByAssigneeAsync(string assignee, string? channelId, CancellationToken cancellationToken = default);
+
     Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Change the status of a task.
-    /// </summary>
-    Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default);
+    Task ChangeStatusAsync(int taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete a task.
-    /// </summary>
-    Task DeleteAsync(Guid taskId, CancellationToken cancellationToken = default);
+    Task DeleteAsync(int taskId, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get all tasks.
-    /// </summary>
     Task<List<TaskDto>> GetAllAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// DTO for creating a task.
-/// </summary>
-public class CreateTaskDto
-{
-    public string? Title { get; set; }
-    public string? Description { get; set; }
-    public string? AssignedTo { get; set; }
-    public string? CreatedBy { get; set; }
-    public DateTime? DueDate { get; set; }
-    public ETaskStatus Status { get; set; } = ETaskStatus.ToDo;
-    public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
-    public string? ChannelId { get; set; }
-    public string? MessageId { get; set; }
-}
-
-/// <summary>
-/// DTO for reading task data.
-/// </summary>
-public class TaskDto
-{
-    public Guid Id { get; set; }
-    public string? Title { get; set; }
-    public string? Description { get; set; }
-    public string? AssignedTo { get; set; }
-    public string? CreatedBy { get; set; }
-    public DateTime? DueDate { get; set; }
-    public ETaskStatus Status { get; set; }
-    public EPriorityLevel Priority { get; set; }
-    public string? ChannelId { get; set; }
-    public string? MessageId { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-}

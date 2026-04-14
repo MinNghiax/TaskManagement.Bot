@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Infrastructure.Enums;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
-
+using TaskManagement.Bot.Application.DTOs;
 namespace TaskManagement.Bot.Application.Services;
 
 /// <summary>
@@ -11,7 +11,7 @@ namespace TaskManagement.Bot.Application.Services;
 public class InMemoryTaskService : ITaskService
 {
     private readonly ILogger<InMemoryTaskService> _logger;
-    private static readonly Dictionary<Guid, TaskDto> _store = new();
+    private static readonly Dictionary<int, TaskDto> _store = new();
 
     public InMemoryTaskService(ILogger<InMemoryTaskService> logger)
     {
@@ -22,10 +22,9 @@ public class InMemoryTaskService : ITaskService
     {
         try
         {
-            var taskId = Guid.NewGuid();
             var task = new TaskDto
             {
-                Id = taskId,
+                Id = new Random().Next(1, 100000),
                 Title = dto.Title ?? "Untitled",
                 Description = dto.Description ?? "",
                 AssignedTo = dto.AssignedTo ?? "unknown",
@@ -33,12 +32,12 @@ public class InMemoryTaskService : ITaskService
                 Status = ETaskStatus.ToDo,  // Changed from Pending to ToDo
                 DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
-                ChannelId = dto.ChannelId ?? "",
-                MessageId = dto.MessageId ?? ""
+                ClanIds = dto.ClanIds,
+                ChannelIds = dto.ChannelIds
             };
 
-            _store[taskId] = task;
-            _logger.LogInformation($"✅ Task created (in-memory): {task.Title} | ID: {taskId}");
+            _store.Add(task.Id, task);
+            _logger.LogInformation($"✅ Task created (in-memory): {task.Title} | ID: {task.Id}");
             return Task.FromResult<TaskDto?>(task);
         }
         catch (Exception ex)
@@ -48,11 +47,11 @@ public class InMemoryTaskService : ITaskService
         }
     }
 
-    public Task<TaskDto?> GetByIdAsync(Guid taskId, CancellationToken cancellationToken = default)
+    public Task<TaskDto?> GetByIdAsync(int taskId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var task = _store.TryGetValue(taskId, out var result) ? result : null;
+            var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
             return Task.FromResult(task);
         }
         catch (Exception ex)
@@ -62,18 +61,30 @@ public class InMemoryTaskService : ITaskService
         }
     }
 
-    public Task<List<TaskDto>> GetByAssigneeAsync(string assignee, CancellationToken cancellationToken = default)
+    public Task<List<TaskDto>> GetByAssigneeAsync(string assignee, string? channelId, CancellationToken cancellationToken = default)
+    {
+        var tasks = _store.Values
+        .Where(t =>
+            t.AssignedTo == assignee &&
+            (string.IsNullOrEmpty(channelId) || (t.ChannelIds != null && t.ChannelIds.Contains(channelId))))
+        .ToList();
+
+        return Task.FromResult(tasks);
+    }
+
+    public Task<List<TaskDto>> GetByCreatorAsync(string creator, string? channelId, CancellationToken ct = default)
     {
         try
         {
             var tasks = _store.Values
-                .Where(t => t.AssignedTo?.Equals(assignee, StringComparison.OrdinalIgnoreCase) == true)
+                .Where(t => t.CreatedBy?.Equals(creator, StringComparison.OrdinalIgnoreCase) == true)
                 .ToList();
+
             return Task.FromResult(tasks);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tasks");
+            _logger.LogError(ex, "Error getting tasks by creator");
             return Task.FromResult(new List<TaskDto>());
         }
     }
@@ -92,41 +103,27 @@ public class InMemoryTaskService : ITaskService
         }
     }
 
-    public Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default)
+    public Task ChangeStatusAsync(int taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default)
     {
-        try
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task != null)
         {
-            if (_store.TryGetValue(taskId, out var task))
-            {
-                var oldStatus = task.Status;
-                task.Status = newStatus;
-                task.UpdatedAt = DateTime.UtcNow;
-                _logger.LogInformation($"✅ Task status updated: {task.Title} | {oldStatus} → {newStatus}");
-            }
-            return Task.CompletedTask;
+            task.Status = newStatus;
+            task.UpdatedAt = DateTime.UtcNow;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating task status");
-            return Task.CompletedTask;
-        }
+
+        return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(Guid taskId, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(int taskId, CancellationToken cancellationToken = default)
     {
-        try
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task != null)
         {
-            if (_store.Remove(taskId))
-            {
-                _logger.LogInformation($"✅ Task deleted (in-memory): {taskId}");
-            }
-            return Task.CompletedTask;
+            _store.Remove(taskId);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting task");
-            return Task.CompletedTask;
-        }
+
+        return Task.CompletedTask;
     }
 
     public Task<List<TaskDto>> GetAllAsync(CancellationToken cancellationToken = default)

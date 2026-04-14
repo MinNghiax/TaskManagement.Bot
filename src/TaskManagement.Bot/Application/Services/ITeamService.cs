@@ -1,0 +1,17 @@
+﻿using TaskManagement.Bot.Infrastructure.Entities;
+
+namespace TaskManagement.Bot.Application.Services
+{
+    public interface ITeamService
+    {
+        Task<Team?> CreateTeamAsync(int projectId, string name, string owner, List<string> members);
+
+        Task<bool> IsUserInTeam(string username, int teamId);
+
+        Task<bool> IsPM(string username, int teamId);
+
+        Task<List<string>> GetMembers(int teamId);
+
+        Task AddMemberAsync(int teamId, string username, string role = "Member");
+    }
+}
