@@ -12,10 +12,13 @@ namespace TaskManagement.Bot.Infrastructure.Data
 
         public DbSet<TaskItem> TaskItems { get; set; }
 
+        public DbSet<TaskChannel> TaskChannels { get; set; }
         public DbSet<TaskClan> TaskClans { get; set; }
 
-        public DbSet<TaskChannel> TaskChannels { get; set; } 
+        public DbSet<Team> Teams { get; set; }
+        public DbSet<TeamMember> TeamMembers { get; set; }
 
+        public DbSet<Project> Projects { get; set; }
         public DbSet<Reminder> Reminders { get; set; }
 
         public DbSet<ReminderRule> ReminderRules { get; set; }
@@ -27,6 +30,12 @@ namespace TaskManagement.Bot.Infrastructure.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(TaskManagementDbContext).Assembly);
+
+            modelBuilder.Entity<TaskItem>()
+                .HasOne(t => t.Team)
+                .WithMany(t => t.Tasks)
+                .HasForeignKey(t => t.TeamId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

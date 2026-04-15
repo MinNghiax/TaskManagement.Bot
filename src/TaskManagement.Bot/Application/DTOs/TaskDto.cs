@@ -12,8 +12,11 @@ public class TaskDto
     public DateTime? DueDate { get; set; }
     public ETaskStatus Status { get; set; }
     public EPriorityLevel Priority { get; set; }
-    public string? ChannelId { get; set; }
-    public string? MessageId { get; set; }
+
+    public int? TeamId { get; set; }
+    public List<string>? ClanIds { get; set; }
+    public List<string>? ChannelIds { get; set; }
+    public List<string>? ThreadIds { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -26,8 +29,10 @@ public class CreateTaskDto
     public required string CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
     public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
-    public string? ChannelId { get; set; }
-    public string? MessageId { get; set; }
+    public int? TeamId { get; set; }
+    public List<string>? ClanIds { get; set; }
+    public List<string>? ChannelIds { get; set; }
+    public List<string>? ThreadIds { get; set; }
 }
 
 public class UpdateTaskDto

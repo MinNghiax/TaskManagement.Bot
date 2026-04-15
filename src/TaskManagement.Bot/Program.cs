@@ -6,11 +6,29 @@ using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Application.Commands;
 using TaskManagement.Bot.Application.Commands.Report;
 using TaskManagement.Bot.Infrastructure.Data;
+using Mezon.Sdk;
+using Mezon.Sdk.Enums;
 
 var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
 var services = new ServiceCollection();
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+services.AddSingleton<MezonClient>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
 
+    var options = new MezonClientOptions
+    {
+        BotId = config["Mezon:BotId"]!,
+        Token = config["Mezon:Token"]!,
+        Host = config["Mezon:Host"] ?? "gw.mezon.ai",
+        Port = config["Mezon:Port"] ?? "443",
+        UseSSL = bool.Parse(config["Mezon:UseSsl"] ?? "true"),
+        TimeoutMs = int.Parse(config["Mezon:TimeoutMs"] ?? "10000")
+    };
+
+    return new MezonClient(options);
+});
+services.AddHostedService<TeamTimeoutService>();
 services.AddSingleton<IConfiguration>(configuration);
 services.AddLogging(config =>
 {
@@ -22,9 +40,14 @@ services.AddLogging(config =>
 services.AddDbContext<TaskManagementDbContext>(options =>
     TaskManagementDbContextConfiguration.Configure(options, configuration));
 services.AddScoped<ITaskService, TaskService>();
+services.AddScoped<ITeamService, TeamService>();
+services.AddScoped<IProjectService, ProjectService>();
+services.AddScoped<SessionService>();
+
 services.AddScoped<IBotService, BotService>();
-services.AddScoped<IReportService, ReportService>();
-services.AddScoped<ICommandHandler, ReportCommandHandler>();
+services.AddScoped<ICommandHandler, TaskCommandHandler>();
+//services.AddScoped<IReportService, ReportService>();
+//services.AddScoped<ICommandHandler, ReportCommandHandler>();
 
 var serviceProvider = services.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();

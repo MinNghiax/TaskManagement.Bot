@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
+using TaskManagement.Bot.Application.DTOs;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 namespace TaskManagement.Bot.Application.Services;
 
@@ -17,9 +19,12 @@ public class TaskService : ITaskService
     // 🔁 Convert Entity → DTO
     private static TaskDto MapToDto(TaskItem task)
     {
+        // Lấy Clan đầu tiên (thường 1 task chỉ thuộc 1 clan/channel tại 1 thời điểm)
+        var clanInfo = task.Clans.FirstOrDefault();
+
         return new TaskDto
         {
-            Id = new Guid(task.Id.ToString().PadLeft(32, '0')),
+            Id = task.Id,
             Title = task.Title,
             Description = task.Description,
             AssignedTo = task.AssignedTo,
@@ -27,14 +32,12 @@ public class TaskService : ITaskService
             DueDate = task.DueDate,
             Status = task.Status,
             Priority = task.Priority,
+            TeamId = task.TeamId,
+            ClanIds = task.Clans.Select(c => c.ClanId).ToList(),
+            ChannelIds = task.Channels.Select(c => c.ChannelId).ToList(),
             CreatedAt = task.CreatedAt,
             UpdatedAt = task.UpdatedAt
         };
-    }
-
-    private static int GuidToInt(Guid guid)
-    {
-        return int.Parse(guid.ToString().Substring(0, 8), System.Globalization.NumberStyles.HexNumber);
     }
 
     public async Task<TaskDto?> CreateAsync(CreateTaskDto dto, CancellationToken ct = default)
@@ -49,19 +52,48 @@ public class TaskService : ITaskService
             AssignedTo = dto.AssignedTo!,
             CreatedBy = dto.CreatedBy ?? "system",
             DueDate = dto.DueDate,
-            Status = dto.Status,
-            Priority = dto.Priority
+            Status = ETaskStatus.ToDo,
+            Priority = dto.Priority,
+            TeamId = dto.TeamId
         };
 
         _context.TaskItems.Add(task);
         await _context.SaveChangesAsync(ct);
 
-        return MapToDto(task);
+        // 🔥 CLANS
+        if (dto.ClanIds != null)
+        {
+            _context.TaskClans.AddRange(
+                dto.ClanIds.Select(c => new TaskClan
+                {
+                    ClanId = c,
+                    TaskItemId = task.Id
+                })
+            );
+        }
+
+        // 🔥 CHANNELS (bạn đang thiếu cái này)
+        if (dto.ChannelIds != null)
+        {
+            _context.TaskChannels.AddRange(
+                dto.ChannelIds.Select(c => new TaskChannel
+                {
+                    ChannelId = c,
+                    TaskItemId = task.Id
+                })
+            );
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return await GetByIdAsync(task.Id, ct);
     }
 
     public async Task<List<TaskDto>> GetAllAsync(CancellationToken ct = default)
     {
         var tasks = await _context.TaskItems
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
             .Where(t => !t.IsDeleted)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(ct);
@@ -69,21 +101,47 @@ public class TaskService : ITaskService
         return tasks.Select(MapToDto).ToList();
     }
 
-    public async Task<TaskDto?> GetByIdAsync(Guid taskId, CancellationToken ct = default)
+    public async Task<TaskDto?> GetByIdAsync(int taskId, CancellationToken ct = default)
     {
-        var id = GuidToInt(taskId);
-
         var task = await _context.TaskItems
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct);
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
+            .FirstOrDefaultAsync(t => t.Id == taskId && !t.IsDeleted, ct);
 
         return task == null ? null : MapToDto(task);
     }
 
-    public async Task<List<TaskDto>> GetByAssigneeAsync(string assignee, CancellationToken ct = default)
+    public async Task<List<TaskDto>> GetByAssigneeAsync(string assignee, string? channelId, CancellationToken ct = default)
     {
-        var tasks = await _context.TaskItems
-            .Where(t => t.AssignedTo == assignee && !t.IsDeleted)
-            .ToListAsync(ct);
+        var query = _context.TaskItems
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
+            .Where(t => t.AssignedTo == assignee && !t.IsDeleted);
+
+        // chỉ filter khi có channelId
+        if (!string.IsNullOrEmpty(channelId))
+        {
+            query = query.Where(t => t.Clans.Any(c => c.ClanId == channelId));
+        }
+
+        var tasks = await query.ToListAsync(ct);
+
+        return tasks.Select(MapToDto).ToList();
+    }
+
+    public async Task<List<TaskDto>> GetByCreatorAsync(string username, string? channelId, CancellationToken ct)
+    {
+        var query = _context.TaskItems
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
+            .Where(t => t.CreatedBy == username && !t.IsDeleted);
+
+        if (!string.IsNullOrEmpty(channelId))
+        {
+            query = query.Where(t => t.Channels.Any(c => c.ChannelId == channelId));
+        }
+
+        var tasks = await query.ToListAsync(ct);
 
         return tasks.Select(MapToDto).ToList();
     }
@@ -91,15 +149,17 @@ public class TaskService : ITaskService
     public async Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken ct = default)
     {
         var tasks = await _context.TaskItems
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
             .Where(t => t.Status == status && !t.IsDeleted)
             .ToListAsync(ct);
 
         return tasks.Select(MapToDto).ToList();
     }
 
-    public async Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken ct = default)
+    public async Task ChangeStatusAsync(int taskId, ETaskStatus newStatus, CancellationToken ct = default)
     {
-        var id = GuidToInt(taskId);
+        var id = taskId;
 
         var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (task == null || task.IsDeleted) return;
@@ -110,9 +170,9 @@ public class TaskService : ITaskService
         await _context.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteAsync(Guid taskId, CancellationToken ct = default)
+    public async Task DeleteAsync(int taskId, CancellationToken ct = default)
     {
-        var id = GuidToInt(taskId);
+        var id = taskId;
 
         var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (task == null || task.IsDeleted) return;
@@ -121,5 +181,15 @@ public class TaskService : ITaskService
         task.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<List<TaskDto>> GetTasksByChannelAsync(string channelId)
+    {
+        var tasks = await _context.TaskItems
+            .Include(t => t.Clans)
+            .Where(t => t.Clans.Any(c => c.ClanId == channelId)) // Lọc dựa trên bảng phụ
+            .ToListAsync();
+
+        return tasks.Select(MapToDto).ToList();
     }
 }

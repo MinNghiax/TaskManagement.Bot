@@ -18,6 +18,9 @@ public class TaskItem : BaseEntity
 
     public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
 
+    public int? TeamId { get; set; }
+    public Team? Team { get; set; }
+
     public ICollection<TaskClan> Clans { get; set; } = new List<TaskClan>();
     public ICollection<TaskChannel> Channels { get; set; } = new List<TaskChannel>();
     public ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
