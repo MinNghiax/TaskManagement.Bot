@@ -569,10 +569,15 @@ public sealed class MezonSocket : IMezonSocket
                     ClanId = protoMsg.ClanId.ToString(),
                     SenderId = protoMsg.SenderId.ToString(),
                     Username = protoMsg.Username,
+                    //reponse Displayname and Clannick for client
+                    DisplayName = protoMsg.DisplayName,
+                    ClanNick = protoMsg.ClanNick,
                     Content = string.IsNullOrEmpty(protoMsg.Content) ? null :
                         System.Text.Json.JsonSerializer.Deserialize<Domain.ChannelMessageContent>(protoMsg.Content),
                     CreateTimeSeconds = protoMsg.CreateTimeSeconds,
                     Code = protoMsg.Code,
+                    Mode = protoMsg.Mode,
+                    IsPublic = protoMsg.IsPublic,
                 };
                 OnChannelMessage?.Invoke(this, new Interfaces.MezonEventArgs { Data = domainMsg });
             }
