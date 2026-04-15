@@ -92,15 +92,16 @@ public sealed class User
         CancellationToken cancellationToken = default)
     {
         var dmChannelId = await EnsureDmChannelAsync(cancellationToken);
-        
-        return await _client.SendDMAsync(
-            channelDmId: dmChannelId,
-            message: content.Text ?? "",
-            messageOptions: null,
+
+        return await _client.SendMessageAsync(
+            clanId: "",
+            channelId: dmChannelId,
+            mode: ChannelStreamMode.Dm,
+            isPublic: false,
+            content: content,
             attachments: attachments,
-            refs: references,
-            cancellationToken: cancellationToken
-        );
+            references: references,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>

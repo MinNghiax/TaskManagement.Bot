@@ -271,8 +271,8 @@ public class BotService : IBotService
                 ChannelId = channelId,
                 CurrentUserId = ComponentPayloadHelper.GetUserId(payload),
                 MessageId = ComponentPayloadHelper.GetMessageId(payload),
-                Mode = 2,
-                IsPublic = true
+                Mode = _dmChannelIds.Contains(channelId) ? 4 : 2,
+                IsPublic = !_dmChannelIds.Contains(channelId)
             };
 
             foreach (var handler in _componentHandlers)
@@ -410,6 +410,9 @@ public class BotService : IBotService
         return parts[0].Equals("CREATE_TEAM", StringComparison.OrdinalIgnoreCase)
             || parts[0].Equals("CANCEL_TEAM", StringComparison.OrdinalIgnoreCase)
             ? parts[1]
-            : null;
+            : parts[0].Equals("ACCEPT", StringComparison.OrdinalIgnoreCase)
+                || parts[0].Equals("REJECT", StringComparison.OrdinalIgnoreCase)
+                ? parts.Length >= 4 ? parts[3] : null
+                : null;
     }
 }

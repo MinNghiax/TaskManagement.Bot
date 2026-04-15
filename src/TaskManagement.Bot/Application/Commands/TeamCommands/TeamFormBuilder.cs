@@ -292,7 +292,7 @@ public static class TeamFormBuilder
             || Regex.IsMatch(member, @"^\d+$");
     }
 
-    public static ChannelMessageContent BuildConfirmForm(string requestId, string teamName, string projectName, string userId)
+    public static ChannelMessageContent BuildConfirmForm(string requestId, string teamName, string projectName, string userId, string clanId)
     {
         return new ChannelMessageContent
         {
@@ -306,13 +306,13 @@ public static class TeamFormBuilder
                     {
                         new
                         {
-                            id = $"ACCEPT|{requestId}|{userId}",
+                            id = $"ACCEPT|{requestId}|{userId}|{clanId}",
                             type = 1,
                             component = new { label = "Accept", style = 3 }
                         },
                         new
                         {
-                            id = $"REJECT|{requestId}|{userId}",
+                            id = $"REJECT|{requestId}|{userId}|{clanId}",
                             type = 1,
                             component = new { label = "Reject", style = 4 }
                         }

@@ -1,29 +1,26 @@
-﻿using Mezon.Sdk;
+using System.Text.Json;
+using Mezon.Sdk;
 using Mezon.Sdk.Domain;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 using TaskManagement.Bot.Application.Commands;
 using TaskManagement.Bot.Application.Services;
-using TaskManagement.Bot.Infrastructure.Entities;
 
 namespace TaskManagement.Bot.Application.Commands.TeamCommands;
 
 public class TeamComponentHandler : IComponentHandler
 {
     private readonly ILogger<TeamComponentHandler> _logger;
-    private readonly ITeamService _teamService;
+    private readonly ITeamWorkflowService _teamWorkflowService;
     private readonly MezonClient _client;
-    private readonly Dictionary<string, PendingTeamRequest> _pendingRequests;
 
     public TeamComponentHandler(
         ILogger<TeamComponentHandler> logger,
-        ITeamService teamService,
+        ITeamWorkflowService teamWorkflowService,
         MezonClient client)
     {
         _logger = logger;
-        _teamService = teamService;
+        _teamWorkflowService = teamWorkflowService;
         _client = client;
-        _pendingRequests = new Dictionary<string, PendingTeamRequest>();
     }
 
     public bool CanHandle(string customId)
@@ -85,7 +82,6 @@ public class TeamComponentHandler : IComponentHandler
         var teamName = ReadValue(context.Payload, "team_name");
         var membersRaw = ReadValue(context.Payload, "members");
 
-        // Validate với số lượng thành viên 3-6
         var (isValid, message) = TeamFormBuilder.ValidateForm(projectName, teamName, "PM", membersRaw);
         if (!isValid)
         {
@@ -97,83 +93,75 @@ public class TeamComponentHandler : IComponentHandler
             return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Không xác định được người tạo team", context.Mode, context.IsPublic);
         }
 
-        // Extract member IDs
-        var memberIds = TeamFormBuilder.ExtractMemberIds(membersRaw);
+        var memberTokens = TeamFormBuilder.ExtractMemberIds(membersRaw);
+        var resolvedMembers = await ResolveMembersAsync(context.ClanId!, memberTokens, cancellationToken);
 
-        // Thêm PM nếu chưa có
-        if (!memberIds.Contains(context.CurrentUserId))
+        if (resolvedMembers.InvalidTokens.Count > 0)
         {
-            memberIds.Add(context.CurrentUserId);
+            return ComponentResponse.FromText(
+                context.ClanId!,
+                context.ChannelId!,
+                $"❌ Không tìm thấy user hợp lệ cho: {string.Join(", ", resolvedMembers.InvalidTokens)}",
+                context.Mode,
+                context.IsPublic);
         }
 
-        if (memberIds.Count < 1)
+        var createResult = await _teamWorkflowService.CreateRequestAsync(
+            new CreateTeamRequestInput
+            {
+                ProjectName = projectName,
+                TeamName = teamName,
+                PMUserId = context.CurrentUserId,
+                Members = resolvedMembers.Members
+            },
+            cancellationToken);
+
+        if (!createResult.Success || string.IsNullOrWhiteSpace(createResult.RequestId))
         {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!,
-                $"❌ Team phải có ít nhất 3 thành viên (hiện tại: {memberIds.Count})", context.Mode, context.IsPublic);
+            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, createResult.Message, context.Mode, context.IsPublic);
         }
 
-        if (memberIds.Count > 6)
+        var failedInvites = new List<string>();
+
+        foreach (var member in createResult.Members)
         {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!,
-                $"❌ Team tối đa 6 thành viên (hiện tại: {memberIds.Count})", context.Mode, context.IsPublic);
-        }
-
-        // Tạo pending request
-        var requestId = Guid.NewGuid().ToString();
-        var pendingRequest = new PendingTeamRequest
-        {
-            ProjectName = projectName,
-            TeamName = teamName,
-            PMUserId = context.CurrentUserId,
-            MemberUserIds = memberIds,
-            AcceptedUserIds = new List<string> { context.CurrentUserId },
-            CreatedAt = DateTime.UtcNow,
-            MessageId = context.MessageId ?? "",
-            SenderId = context.CurrentUserId
-        };
-
-        _pendingRequests[requestId] = pendingRequest;
-
-        var response = ComponentResponse.FromText(
-            context.ClanId!,
-            context.ChannelId!,
-            $"✅ Đã gửi lời mời đến {memberIds.Count - 1} thành viên.\n⏰ Các thành viên cần xác nhận trong vòng 30 phút.",
-            context.Mode,
-            context.IsPublic);
-
-        // Gửi lời mời cho từng member (trừ PM) - KHÔNG dùng ComponentMessage, gửi trực tiếp
-        foreach (var memberId in memberIds)
-        {
-            if (memberId == context.CurrentUserId) continue;
-
-            var confirmForm = TeamFormBuilder.BuildConfirmForm(requestId, teamName, projectName, memberId);
-
-            // Gửi trực tiếp vào channel của member (không cần response.Messages)
             try
             {
-                // Thử gửi vào channel của member (channel ID chính là user ID đối với DM)
-                await SendDirectMessageAsync(context.ClanId!, memberId, confirmForm);
+                await _client.SendEphemeralMessageAsync(
+                    receiverId: member.UserId,
+                    clanId: context.ClanId!,
+                    channelId: context.ChannelId!,
+                    mode: context.Mode,
+                    isPublic: context.IsPublic,
+                    content: TeamFormBuilder.BuildConfirmForm(
+                        createResult.RequestId,
+                        createResult.TeamName ?? teamName,
+                        createResult.ProjectName ?? projectName,
+                        member.UserId,
+                        context.ClanId!),
+                    cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Failed to send DM to {memberId}");
+                failedInvites.Add(member.Handle);
+                _logger.LogError(
+                    ex,
+                    "[TEAM_REQUEST] Failed to send ephemeral invite to {UserId} for request {RequestId}",
+                    member.UserId,
+                    createResult.RequestId);
             }
         }
 
-        return response;
-    }
+        var responseMessage = failedInvites.Count == 0
+            ? createResult.Message
+            : $"{createResult.Message}\n⚠️ Không gửi được lời mời cho: {string.Join(", ", failedInvites)}";
 
-    // Thêm method helper để gửi DM
-    private async Task SendDirectMessageAsync(string clanId, string userId, ChannelMessageContent content)
-    {
-        // Cách 1: Gửi trực tiếp vào channel ID là user ID
-        await _client.SendMessageAsync(
-            clanId: clanId,
-            channelId: userId,  // DM channel ID thường là user ID
-            mode: 2,
-            isPublic: false,
-            content: content
-        );
+        return ComponentResponse.FromText(
+            context.ClanId!,
+            context.ChannelId!,
+            responseMessage,
+            context.Mode,
+            context.IsPublic);
     }
 
     private async Task<ComponentResponse> HandleAcceptAsync(ComponentContext context, string[] parts, CancellationToken cancellationToken)
@@ -183,64 +171,8 @@ public class TeamComponentHandler : IComponentHandler
             return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Yêu cầu xác nhận không hợp lệ", context.Mode, context.IsPublic);
         }
 
-        var requestId = parts[1];
-        var targetUser = parts[2];
-
-        if (!_pendingRequests.ContainsKey(requestId))
-        {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Yêu cầu không tồn tại hoặc đã hết hạn.", context.Mode, context.IsPublic);
-        }
-
-        var request = _pendingRequests[requestId];
-
-        // Check timeout 30 phút
-        if ((DateTime.UtcNow - request.CreatedAt).TotalMinutes > 30)
-        {
-            _pendingRequests.Remove(requestId);
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "⏰ Yêu cầu đã hết hạn (30 phút).", context.Mode, context.IsPublic);
-        }
-
-        // Check đúng user
-        if (context.CurrentUserId != targetUser)
-        {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Lời mời này không dành cho bạn.", context.Mode, context.IsPublic);
-        }
-
-        // Thêm vào danh sách đã accept
-        if (!request.AcceptedUserIds.Contains(context.CurrentUserId))
-        {
-            request.AcceptedUserIds.Add(context.CurrentUserId);
-        }
-
-        int acceptedCount = request.AcceptedUserIds.Count;
-        int totalCount = request.MemberUserIds.Count;
-
-        if (acceptedCount == totalCount)
-        {
-            // Tất cả đã accept, tạo team
-            var cleanMemberList = request.MemberUserIds
-                .Select(m => m.StartsWith("@") ? m.Substring(1) : m)
-                .ToList();
-
-            var team = await _teamService.CreateTeamWithProjectAsync(
-                request.ProjectName,
-                request.TeamName,
-                request.PMUserId,
-                cleanMemberList
-            );
-
-            _pendingRequests.Remove(requestId);
-
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!,
-                $"🎉 **Team `{request.TeamName}` đã được tạo thành công!**\n" +
-                $"📁 Project: {request.ProjectName}\n" +
-                $"👥 Số thành viên: {totalCount}", context.Mode, context.IsPublic);
-        }
-        else
-        {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!,
-                $"✅ {context.CurrentUserId} đã chấp nhận tham gia.\n📊 Đã xác nhận: {acceptedCount}/{totalCount}", context.Mode, context.IsPublic);
-        }
+        var result = await _teamWorkflowService.AcceptAsync(parts[1], parts[2], context.CurrentUserId, cancellationToken);
+        return await BuildDecisionResponseAsync(context, result, cancellationToken);
     }
 
     private async Task<ComponentResponse> HandleRejectAsync(ComponentContext context, string[] parts, CancellationToken cancellationToken)
@@ -250,25 +182,168 @@ public class TeamComponentHandler : IComponentHandler
             return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Yêu cầu từ chối không hợp lệ", context.Mode, context.IsPublic);
         }
 
-        var requestId = parts[1];
-        var targetUser = parts[2];
+        var result = await _teamWorkflowService.RejectAsync(parts[1], parts[2], context.CurrentUserId, cancellationToken);
+        return await BuildDecisionResponseAsync(context, result, cancellationToken);
+    }
 
-        if (!_pendingRequests.ContainsKey(requestId))
+    private async Task<ComponentResponse> BuildDecisionResponseAsync(
+        ComponentContext context,
+        TeamRequestActionResult result,
+        CancellationToken cancellationToken)
+    {
+        try
         {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Yêu cầu không tồn tại.", context.Mode, context.IsPublic);
+            await _client.SendEphemeralMessageAsync(
+                receiverId: context.CurrentUserId!,
+                clanId: context.ClanId!,
+                channelId: context.ChannelId!,
+                mode: context.Mode,
+                isPublic: context.IsPublic,
+                content: new ChannelMessageContent { Text = result.Message },
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[TEAM_REQUEST] Failed to send ephemeral status to {UserId}", context.CurrentUserId);
         }
 
-        var request = _pendingRequests[requestId];
-
-        if (context.CurrentUserId != targetUser)
+        if (result.TeamCreated || result.Success && result.Message.Contains("bi huy", StringComparison.OrdinalIgnoreCase))
         {
-            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, "❌ Lời mời này không dành cho bạn.", context.Mode, context.IsPublic);
+            return ComponentResponse.FromText(context.ClanId!, context.ChannelId!, result.Message, context.Mode, context.IsPublic);
         }
 
-        _pendingRequests.Remove(requestId);
+        return new ComponentResponse();
+    }
 
-        return ComponentResponse.FromText(context.ClanId!, context.ChannelId!,
-            $"❌ {context.CurrentUserId} đã từ chối tham gia.\nTeam `{request.TeamName}` đã bị hủy.", context.Mode, context.IsPublic);
+    private async Task<ResolvedTeamMembers> ResolveMembersAsync(
+        string clanId,
+        IReadOnlyCollection<string> memberTokens,
+        CancellationToken cancellationToken)
+    {
+        var resolvedMembers = new List<TeamRequestMember>();
+        var invalidTokens = new List<string>();
+        var aliases = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        if (memberTokens.Any(x => x.StartsWith("@", StringComparison.Ordinal)))
+        {
+            PopulateAliasesFromCache(clanId, aliases);
+            await PopulateAliasesFromApiAsync(clanId, aliases, cancellationToken);
+        }
+
+        foreach (var token in memberTokens)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                continue;
+            }
+
+            if (long.TryParse(token, out _))
+            {
+                resolvedMembers.Add(new TeamRequestMember
+                {
+                    UserId = token,
+                    Handle = $"<@{token}>"
+                });
+                continue;
+            }
+
+            if (!token.StartsWith("@", StringComparison.Ordinal))
+            {
+                invalidTokens.Add(token);
+                continue;
+            }
+
+            var lookupKey = token[1..].Trim();
+            if (!aliases.TryGetValue(lookupKey, out var matchedUserIds) || matchedUserIds.Count != 1)
+            {
+                invalidTokens.Add(token);
+                continue;
+            }
+
+            resolvedMembers.Add(new TeamRequestMember
+            {
+                UserId = matchedUserIds.Single(),
+                Handle = token
+            });
+        }
+
+        return new ResolvedTeamMembers(
+            resolvedMembers
+                .DistinctBy(x => x.UserId)
+                .ToList(),
+            invalidTokens
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList());
+    }
+
+    private void PopulateAliasesFromCache(string clanId, Dictionary<string, HashSet<string>> aliases)
+    {
+        var clan = _client.Clans.Get(clanId);
+        if (clan == null)
+        {
+            return;
+        }
+
+        foreach (var user in clan.Users.GetAll())
+        {
+            AddAlias(aliases, user.Username, user.Id);
+            AddAlias(aliases, user.ClanNick, user.Id);
+            AddAlias(aliases, user.DisplayName, user.Id);
+        }
+    }
+
+    private async Task PopulateAliasesFromApiAsync(
+        string clanId,
+        Dictionary<string, HashSet<string>> aliases,
+        CancellationToken cancellationToken)
+    {
+        var sessionToken = _client.CurrentSession?.Token;
+        if (string.IsNullOrWhiteSpace(sessionToken))
+        {
+            return;
+        }
+
+        try
+        {
+            var clanUsers = await _client.Api.ListClanUsersAsync(sessionToken, clanId, ct: cancellationToken);
+            foreach (var clanUser in clanUsers.ClanUsers ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(clanUser.User?.Id))
+                {
+                    continue;
+                }
+
+                AddAlias(aliases, clanUser.User.Username, clanUser.User.Id);
+                AddAlias(aliases, clanUser.ClanNick, clanUser.User.Id);
+                AddAlias(aliases, clanUser.User.DisplayName, clanUser.User.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[TEAM_REQUEST] Failed to load clan users for clan {ClanId}", clanId);
+        }
+    }
+
+    private static void AddAlias(Dictionary<string, HashSet<string>> aliases, string? alias, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(alias) || string.IsNullOrWhiteSpace(userId))
+        {
+            return;
+        }
+
+        var key = alias.Trim().TrimStart('@');
+        if (key.Length == 0)
+        {
+            return;
+        }
+
+        if (!aliases.TryGetValue(key, out var userIds))
+        {
+            userIds = new HashSet<string>(StringComparer.Ordinal);
+            aliases[key] = userIds;
+        }
+
+        userIds.Add(userId);
     }
 
     private static string ReadValue(JsonElement payload, string key)
@@ -296,4 +371,8 @@ public class TeamComponentHandler : IComponentHandler
             return string.Empty;
         }
     }
+
+    private sealed record ResolvedTeamMembers(
+        IReadOnlyList<TeamRequestMember> Members,
+        IReadOnlyList<string> InvalidTokens);
 }
