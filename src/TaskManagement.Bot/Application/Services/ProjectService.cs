@@ -11,7 +11,8 @@ namespace TaskManagement.Bot.Application.Services
 {
     public interface IProjectService
     {
-        Task<Project> CreateProjectAsync(string name, string description, string creator);
+        Task<Project> CreateProjectAsync(string name, string description, string creator, CancellationToken cancellationToken = default);
+        Task<bool> ExistsByNameAsync(string name, CancellationToken cancellationToken = default);
         Task<List<Project>> GetAllProjectsAsync();
         Task<Project?> GetProjectByIdAsync(int id);
     }
@@ -25,46 +26,27 @@ namespace TaskManagement.Bot.Application.Services
             _context = context;
         }
 
-        //  Tạo Project + auto PM
-        public async Task<Project> CreateProjectAsync(string name, string description, string creator)
+        public async Task<Project> CreateProjectAsync(string name, string description, string creator, CancellationToken cancellationToken = default)
         {
-            //  Validate
             if (string.IsNullOrWhiteSpace(name))
                 throw new Exception("Tên project không được để trống");
 
-            //  Tạo Project
             var project = new Project
             {
-                Name = name,
+                Name = name.Trim(),
                 CreatedBy = creator
             };
 
             _context.Projects.Add(project);
-            await _context.SaveChangesAsync();
-
-            //  Tạo Team mặc định
-            var team = new Team
-            {
-                Name = $"{name} Team",
-                CreatedBy = creator,
-                ProjectId = project.Id
-            };
-
-            _context.Teams.Add(team);
-            await _context.SaveChangesAsync();
-
-            //  Add creator làm PM
-            var member = new TeamMember
-            {
-                TeamId = team.Id,
-                Username = creator,
-                Role = "PM"
-            };
-
-            _context.TeamMembers.Add(member);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
 
             return project;
+        }
+
+        public Task<bool> ExistsByNameAsync(string name, CancellationToken cancellationToken = default)
+        {
+            var normalized = name.Trim().ToLower();
+            return _context.Projects.AnyAsync(x => !x.IsDeleted && x.Name.ToLower() == normalized, cancellationToken);
         }
 
         //  Lấy danh sách project

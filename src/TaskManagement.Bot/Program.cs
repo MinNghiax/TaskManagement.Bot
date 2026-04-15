@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Application.Commands;
 using TaskManagement.Bot.Application.Commands.Report;
+using TaskManagement.Bot.Application.Commands.TeamCommands;
 using TaskManagement.Bot.Infrastructure.Data;
 using Mezon.Sdk;
 using Mezon.Sdk.Enums;
@@ -29,6 +30,7 @@ services.AddSingleton<MezonClient>(sp =>
     return new MezonClient(options);
 });
 services.AddHostedService<TeamTimeoutService>();
+services.AddHostedService<PendingTeamRequestTimeoutService>();
 services.AddSingleton<IConfiguration>(configuration);
 services.AddLogging(config =>
 {
@@ -42,10 +44,14 @@ services.AddDbContext<TaskManagementDbContext>(options =>
 services.AddScoped<ITaskService, TaskService>();
 services.AddScoped<ITeamService, TeamService>();
 services.AddScoped<IProjectService, ProjectService>();
+services.AddScoped<ITeamWorkflowService, TeamWorkflowService>();
+services.AddScoped<IPendingTeamRequestService, PendingTeamRequestService>();
 services.AddScoped<SessionService>();
 
 services.AddScoped<IBotService, BotService>();
 services.AddScoped<ICommandHandler, TaskCommandHandler>();
+services.AddScoped<ICommandHandler, TeamCommandHandler>();
+services.AddScoped<IComponentHandler, TeamComponentHandler>();
 //services.AddScoped<IReportService, ReportService>();
 //services.AddScoped<ICommandHandler, ReportCommandHandler>();
 

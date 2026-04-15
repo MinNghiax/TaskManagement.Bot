@@ -19,6 +19,7 @@ namespace TaskManagement.Bot.Infrastructure.Data
         public DbSet<TeamMember> TeamMembers { get; set; }
 
         public DbSet<Project> Projects { get; set; }
+        public DbSet<PendingTeamRequest> PendingTeamRequests { get; set; }
         public DbSet<Reminder> Reminders { get; set; }
 
         public DbSet<ReminderRule> ReminderRules { get; set; }
