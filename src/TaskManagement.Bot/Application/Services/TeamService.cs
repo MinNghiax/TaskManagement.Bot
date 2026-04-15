@@ -129,4 +129,65 @@ public class TeamService : ITeamService
         _context.TeamMembers.Add(member);
         await _context.SaveChangesAsync();
     }
+
+    public async Task<Team> CreateTeamWithProjectAsync(string projectName, string teamName, string pmUserId, List<string> memberUserIds)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            // Tạo Project
+            var project = new Project
+            {
+                Name = projectName,
+                CreatedBy = pmUserId
+            };
+            _context.Projects.Add(project);
+            await _context.SaveChangesAsync();
+
+            // Tạo Team
+            var team = new Team
+            {
+                Name = teamName,
+                CreatedBy = pmUserId,
+                ProjectId = project.Id
+            };
+            _context.Teams.Add(team);
+            await _context.SaveChangesAsync();
+
+            // Thêm PM
+            _context.TeamMembers.Add(new TeamMember
+            {
+                TeamId = team.Id,
+                Username = pmUserId,
+                Role = "PM",
+                Status = "Accepted"
+            });
+
+            // Thêm members
+            foreach (var memberId in memberUserIds.Distinct())
+            {
+                if (memberId != pmUserId)
+                {
+                    _context.TeamMembers.Add(new TeamMember
+                    {
+                        TeamId = team.Id,
+                        Username = memberId,
+                        Role = "Member",
+                        Status = "Accepted"
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return team;
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
 }
