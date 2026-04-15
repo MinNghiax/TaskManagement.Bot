@@ -45,7 +45,7 @@ services.AddScoped<IProjectService, ProjectService>();
 services.AddScoped<SessionService>();
 
 services.AddScoped<IBotService, BotService>();
-services.AddScoped<TaskCommandHandler>();
+services.AddScoped<ICommandHandler, TaskCommandHandler>();
 //services.AddScoped<IReportService, ReportService>();
 //services.AddScoped<ICommandHandler, ReportCommandHandler>();
 
