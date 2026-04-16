@@ -184,10 +184,22 @@ public class TeamService : ITeamService
 
             return team;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    public async Task<List<Team>> GetTeamsByMemberAsync(string username)
+    {
+        var teamIds = await _context.TeamMembers
+            .Where(x => x.Username == username && x.Status == "Accepted")
+            .Select(x => x.TeamId)
+            .ToListAsync();
+
+        return await _context.Teams
+            .Where(t => teamIds.Contains(t.Id) && !t.IsDeleted)
+            .ToListAsync();
     }
 }

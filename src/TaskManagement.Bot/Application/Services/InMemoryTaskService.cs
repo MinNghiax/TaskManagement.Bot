@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
+using System.Threading.Tasks;
+using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Infrastructure.Enums;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
-using TaskManagement.Bot.Application.DTOs;
 namespace TaskManagement.Bot.Application.Services;
 
 /// <summary>
@@ -137,5 +138,40 @@ public class InMemoryTaskService : ITaskService
             _logger.LogError(ex, "Error getting all tasks");
             return Task.FromResult(new List<TaskDto>());
         }
+    }
+
+    public Task UpdateAsync(int taskId, UpdateTaskDto updateDto, CancellationToken ct = default)
+    {
+        // Implement cho InMemory
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task == null) throw new Exception("Task not found");
+
+        if (!string.IsNullOrWhiteSpace(updateDto.Title))
+            task.Title = updateDto.Title;
+
+        if (updateDto.Description != null)
+            task.Description = updateDto.Description;
+
+        if (updateDto.Priority.HasValue)
+            task.Priority = updateDto.Priority.Value;
+
+        if (updateDto.Status.HasValue)
+            task.Status = updateDto.Status.Value;
+
+        if (updateDto.DueDate.HasValue)
+            task.DueDate = updateDto.DueDate.Value;
+
+        if (!string.IsNullOrWhiteSpace(updateDto.AssignedTo))
+            task.AssignedTo = updateDto.AssignedTo;
+
+        task.UpdatedAt = DateTime.UtcNow;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<TaskDto>> GetTasksByTeamAsync(int teamId, CancellationToken ct = default)
+    {
+        var tasks = _store.Values.Where(t => t.TeamId == teamId).ToList();
+        return Task.FromResult(tasks);
     }
 }
