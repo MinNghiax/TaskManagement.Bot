@@ -5,8 +5,7 @@ public enum ETaskStatus
     ToDo = 0,
     Doing = 1,
     Review = 2,
-    Paused = 3,
-    Late = 4,
-    Completed = 5,
-    Canceled = 6
+    Late = 3,
+    Completed = 4,
+    Canceled = 5
 }
