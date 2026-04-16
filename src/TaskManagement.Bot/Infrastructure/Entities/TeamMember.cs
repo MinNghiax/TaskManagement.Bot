@@ -10,7 +10,7 @@ namespace TaskManagement.Bot.Infrastructure.Entities
     {
         public string Username { get; set; } = null!;
 
-        public string Role { get; set; }  // PM | Member
+        public string Role { get; set; } = "Member"; // PM | Member
         public string Status { get; set; } = "Pending";
         // Pending | Accepted | Rejected
 

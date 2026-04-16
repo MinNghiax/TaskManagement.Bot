@@ -1,6 +1,5 @@
 ﻿using Mezon.Sdk.Domain;
 using System.Text.Json;
-using TaskManagement.Bot.Application.Commands.TaskCommands;
 using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Application.Sessions;
 
@@ -17,7 +16,7 @@ public class TaskCommandHandler : ICommandHandler
 
     public bool CanHandle(string command)
     {
-        return command.StartsWith("!team") || command.StartsWith("!task");
+        return command.StartsWith("!task", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<CommandResponse> HandleAsync(
@@ -37,23 +36,9 @@ public class TaskCommandHandler : ICommandHandler
 
         return cmd switch
         {
-            "!team" => await HandleTeam(parts, message),
             "!task" => await HandleTask(parts, message, userId),
             _ => new CommandResponse("❌ Unknown command")
         };
-    }
-
-    // ================= TEAM =================
-    private async Task<CommandResponse> HandleTeam(string[] parts, ChannelMessage message)
-    {
-        if (parts.Length >= 2 && parts[1] == "init")
-        {
-            var form = TaskFormBuilder.BuildTeamForm(message.ClanId!);
-
-            return new CommandResponse(form); // 🔥 gửi form
-        }
-
-        return new CommandResponse("❌ Usage: !team init");
     }
 
     // ================= TASK =================

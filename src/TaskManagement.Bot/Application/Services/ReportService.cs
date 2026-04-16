@@ -25,14 +25,22 @@ public class ReportService : IReportService
             .Where(t => !t.IsDeleted)
             .AsQueryable();
 
-        if (!string.IsNullOrEmpty(clanId))
+        if (!string.IsNullOrEmpty(clanId) && !string.IsNullOrEmpty(channelId))
+        {
+            query = query.Where(t =>
+                t.Clans.Any(c => c.ClanId == clanId) &&
+                t.Channels.Any(c => c.ChannelId == channelId)
+            );
+        }
+        else if (!string.IsNullOrEmpty(clanId))
         {
             query = query.Where(t => t.Clans.Any(c => c.ClanId == clanId));
         }
-        if (!string.IsNullOrEmpty(channelId))
+        else if (!string.IsNullOrEmpty(channelId))
         {
             query = query.Where(t => t.Channels.Any(c => c.ChannelId == channelId));
         }
+
         return query;
     }
 
@@ -43,8 +51,10 @@ public class ReportService : IReportService
     {
         var now = DateTime.UtcNow;
 
-        var tasks = await BuildTaskQuery(clanId, channelId)
-            .Where(t => t.AssignedTo == userId)
+        var tasks = await _context.TaskItems
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
+            .Where(t => !t.IsDeleted && t.AssignedTo == userId)
             .ToListAsync();
 
         var total = tasks.Count;
@@ -216,16 +226,25 @@ public class ReportService : IReportService
             .ToListAsync();
     }
 
+    private static readonly TimeZoneInfo VN_TZ =
+    TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+
     private (DateTime start, DateTime end) GetTimeRange(ETimeRange range)
     {
-        var now = DateTime.UtcNow;
+        var nowUtc = DateTime.UtcNow;
 
-        return range switch
+        var nowVN = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, VN_TZ);
+
+        DateTime startVN = range switch
         {
-            ETimeRange.Today => (now.Date, now),
-            ETimeRange.Week => (now.AddDays(-7), now),
-            ETimeRange.Month => (now.AddMonths(-1), now),
-            _ => (now.Date, now)
+            ETimeRange.Today => nowVN.Date,
+            ETimeRange.Week => nowVN.Date.AddDays(-7),
+            ETimeRange.Month => nowVN.Date.AddMonths(-1),
+            _ => nowVN.Date
         };
+
+        var startUtc = TimeZoneInfo.ConvertTimeToUtc(startVN, VN_TZ);
+
+        return (startUtc, nowUtc);
     }
 }

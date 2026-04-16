@@ -217,7 +217,7 @@ message ChannelMessageAck {
 
 message EphemeralMessageSend {
   ChannelMessageSend message = 1;
-  string receiver_id = 2;
+  repeated int64 receiver_ids = 2;
 }
 
 message QuickMenuDataEvent {

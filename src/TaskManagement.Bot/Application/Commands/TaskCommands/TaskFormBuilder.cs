@@ -1,188 +1,180 @@
-﻿using Azure.Core;
-using Mezon.Sdk.Domain;
-using System.Text.RegularExpressions;
+﻿using Mezon.Sdk.Domain;
 
-namespace TaskManagement.Bot.Application.Commands.TaskCommands
+namespace TaskManagement.Bot.Application.Commands.TaskCommands;
+
+public static class TaskFormBuilder
 {
-    public static class TaskFormBuilder
+    public static ChannelMessageContent BuildTaskForm(List<string> teamMembers)
     {
-        public static ChannelMessageContent BuildTeamForm(string clanId)
+        var interactive = new
         {
-            var interactive = new
+            title = "📝 Tạo Task mới",
+            description = "Vui lòng điền thông tin task:",
+            color = "#FEE75C",
+            fields = new object[]
             {
-                title = "Create Project Team",
-                description = "Nhập thông tin Project & Team",
-                color = "#5865F2",
-                fields = new object[]
+                new
                 {
-                    //  Project Name
-                    new
+                    name = "📌 Tiêu đề",
+                    value = "",
+                    inputs = new
                     {
-                        name = "Project Name",
-                        value = "",
-                        inputs = new
+                        id = "task_title",
+                        type = 3,
+                        component = new
                         {
-                            id = "project_name",
-                            type = 3,
-                            component = new
-                            {
-                                placeholder = "Nhập tên project",
-                                type = "text"
-                            }
+                            id = "task_title_input",
+                            placeholder = "Nhập tiêu đề task (tối đa 100 ký tự)",
+                            defaultValue = "",
+                            type = "text",
+                            textarea = false,
+                            maxLength = 100
                         }
-                    },
-
-                    //  Team Name
-                    new
+                    }
+                },
+                new
+                {
+                    name = "📝 Mô tả",
+                    value = "",
+                    inputs = new
                     {
-                        name = "Team Name",
-                        value = "",
-                        inputs = new
+                        id = "task_description",
+                        type = 3,
+                        component = new
                         {
-                            id = "team_name",
-                            type = 3,
-                            component = new
-                            {
-                                placeholder = "Nhập tên team",
-                                type = "text"
-                            }
+                            id = "task_description_input",
+                            placeholder = "Nhập mô tả (không bắt buộc)",
+                            defaultValue = "",
+                            type = "text",
+                            textarea = true
                         }
-                    },
-
-                    //  Members
-                    new
+                    }
+                },
+                new
+                {
+                    name = "⚡ Độ ưu tiên",
+                    value = "Chọn mức độ ưu tiên",
+                    inputs = new
                     {
-                        name = "Members (3-6 người)",
-                        value = "",
-                        inputs = new
+                        id = "task_priority",
+                        type = 5,
+                        component = new object[]
                         {
-                            id = "members",
-                            type = 3,
-                            component = new
+                            new { label = "🔴 Cao", value = "High" },
+                            new { label = "🟡 Trung bình", value = "Medium" },
+                            new { label = "🟢 Thấp", value = "Low" }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "⏰ Deadline",
+                    value = "",
+                    inputs = new
+                    {
+                        id = "task_deadline",
+                        type = 3,
+                        component = new
+                        {
+                            id = "task_deadline_input",
+                            placeholder = "YYYY-MM-DD HH:MM (ví dụ: 2024-12-31 23:59)",
+                            defaultValue = "",
+                            type = "text",
+                            textarea = false
+                        }
+                    }
+                },
+                new
+                {
+                    name = "👤 Giao cho",
+                    value = "Chọn người thực hiện",
+                    inputs = new
+                    {
+                        id = "task_assignee",
+                        type = 2,
+                        component = new
+                        {
+                            placeholder = "Chọn thành viên",
+                            options = teamMembers.Select(m => new
                             {
-                                placeholder = "@a @b @c ... (3-6 người)",
-                                type = "text"
-                            }
+                                label = m.StartsWith("@") ? m : $"@{m}",
+                                value = m
+                            }).ToArray()
                         }
                     }
                 }
-            };
-
-            return new ChannelMessageContent
-            {
-                Text = "interactive",
-                Embed = new[] { interactive },
-                Components = new[]
-                {
-                    new
-                    {
-                        components = new object[]
-                        {
-                            new
-                            {
-                                id = $"CREATE_TEAM|{clanId}",
-                                type = 1,
-                                component = new
-                                {
-                                    label = "Tạo Team",
-                                    style = 3
-                                }
-                            },
-                            new
-                            {
-                                id = $"CANCEL_TEAM|{clanId}",
-                                type = 1,
-                                component = new
-                                {
-                                    label = "Huỷ",
-                                    style = 4
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-        }
-
-        //  VALIDATION METHOD
-        public static (bool isValid, string message) ValidateForm(
-            string projectName,
-            string teamName,
-            string role,
-            string members)
-        {
-            // Project name
-            if (string.IsNullOrWhiteSpace(projectName))
-                return (false, "❌ Project name không được để trống");
-
-            if (projectName.Length > 50)
-                return (false, "❌ Project name tối đa 50 ký tự");
-
-            // Team name
-            if (string.IsNullOrWhiteSpace(teamName))
-                return (false, "❌ Team name không được để trống");
-
-            // Role
-            if (string.IsNullOrWhiteSpace(role))
-                role = "PM"; // default
-
-            // Members
-            if (string.IsNullOrWhiteSpace(members))
-                return (false, "❌ Members không được để trống");
-
-            // Tách member theo khoảng trắng
-            var memberList = members
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Distinct()
-                .ToList();
-
-            //  MIN 3 - MAX 8
-            if (memberList.Count < 1)
-                return (false, "❌ Team phải có ít nhất 3 thành viên");
-
-            if (memberList.Count > 6)
-                return (false, "❌ Team tối đa 6 thành viên");
-
-            // Validate format @username
-            var regex = new Regex(@"^@\w+$");
-            foreach (var m in memberList)
-            {
-                if (!regex.IsMatch(m))
-                    return (false, $"❌ Member không hợp lệ: {m}");
             }
+        };
 
-            return (true, "✅ Valid");
-
-        }
-
-        public static ChannelMessageContent BuildConfirmForm(string requestId, string teamName, string projectName, string userId)
+        return new ChannelMessageContent
         {
-            return new ChannelMessageContent
+            Text = "interactive",
+            Embed = new[] { interactive },
+            Components = new[]
             {
-                Text = $"📩 Bạn được mời tham gia vào team `{teamName}` với project '{projectName}'",
-                Components = new[]
+                new
                 {
-                    new
+                    type = 1,
+                    components = new object[]
                     {
-                        type = 1,
-                        components = new object[]
+                        new
                         {
-                            new
+                            id = "SUBMIT_TASK",
+                            type = 1,
+                            component = new
                             {
-                                id = $"ACCEPT|{requestId}|{userId}",
-                                type = 1,
-                                component = new { label = "Accept", style = 3 }
-                            },
-                            new
+                                label = "✅ Tạo Task",
+                                style = 3
+                            }
+                        },
+                        new
+                        {
+                            id = "CANCEL_TASK",
+                            type = 1,
+                            component = new
                             {
-                                id = $"REJECT|{requestId}|{userId}",
-                                type = 1,
-                                component = new { label = "Reject", style = 4 }
+                                label = "❌ Hủy",
+                                style = 4
                             }
                         }
                     }
                 }
-            };
+            }
+        };
+    }
+
+    public static (bool isValid, string message) ValidateTaskForm(string title, string deadline, string assignee)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return (false, "❌ Tiêu đề không được để trống");
         }
+
+        if (title.Length > 100)
+        {
+            return (false, "❌ Tiêu đề tối đa 100 ký tự");
+        }
+
+        if (string.IsNullOrWhiteSpace(deadline))
+        {
+            return (false, "❌ Deadline không được để trống");
+        }
+
+        if (!DateTime.TryParse(deadline, out var deadlineDate))
+        {
+            return (false, "❌ Định dạng deadline không hợp lệ. Dùng: YYYY-MM-DD HH:MM");
+        }
+
+        if (deadlineDate <= DateTime.Now)
+        {
+            return (false, "❌ Deadline phải lớn hơn thời gian hiện tại");
+        }
+
+        if (string.IsNullOrWhiteSpace(assignee))
+        {
+            return (false, "❌ Vui lòng chọn người được giao");
+        }
+
+        return (true, "✅ Hợp lệ");
     }
 }

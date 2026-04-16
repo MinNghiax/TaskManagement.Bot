@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using Mezon.Sdk.Domain;
+using Mezon.Sdk.Enums;
 using Mezon.Sdk.Interfaces;
 using Mezon.Sdk.Realtime;
 using System.Collections.Concurrent;
@@ -180,7 +181,7 @@ public sealed class MezonSocket : IMezonSocket
             AnonymousMessage = anonymousMessage,
             MentionEveryone = mentionEveryone,
             Avatar = avatar ?? "",
-            Code = code ?? 0,
+            Code = code ?? TypeMessage.Ephemeral,
             TopicId = !string.IsNullOrEmpty(topicId) && long.TryParse(topicId, out var tid) ? tid : 0
         };
 
@@ -280,17 +281,23 @@ public sealed class MezonSocket : IMezonSocket
                 });
             }
 
+        if (!long.TryParse(receiverId, out var receiverIdValue))
+        {
+            throw new InvalidOperationException($"Invalid receiver id '{receiverId}' for ephemeral message.");
+        }
+
         var ephemeral = new Proto.EphemeralMessageSend
         {
-            Message = msg,
-            ReceiverId = receiverId
+            Message = msg
         };
+        ephemeral.ReceiverIds.Add(receiverIdValue);
 
         Console.WriteLine($"[DEBUG] Sending ephemeral message:");
         Console.WriteLine($"  ReceiverId: '{receiverId}' (type: {receiverId?.GetType().Name})");
+        Console.WriteLine($"  ReceiverIds count: {ephemeral.ReceiverIds.Count}");
         Console.WriteLine($"  ClanId: {clanId}");
         Console.WriteLine($"  ChannelId: {channelId}");
-        Console.WriteLine($"  Code: {code ?? 0}");
+        Console.WriteLine($"  Code: {msg.Code}");
         Console.WriteLine($"  Mode: {mode}");
         Console.WriteLine($"  IsPublic: {isPublic}");
         Console.WriteLine($"  TopicId: {msg.TopicId}");
@@ -569,10 +576,15 @@ public sealed class MezonSocket : IMezonSocket
                     ClanId = protoMsg.ClanId.ToString(),
                     SenderId = protoMsg.SenderId.ToString(),
                     Username = protoMsg.Username,
+                    //reponse Displayname and Clannick for client
+                    DisplayName = protoMsg.DisplayName,
+                    ClanNick = protoMsg.ClanNick,
                     Content = string.IsNullOrEmpty(protoMsg.Content) ? null :
                         System.Text.Json.JsonSerializer.Deserialize<Domain.ChannelMessageContent>(protoMsg.Content),
                     CreateTimeSeconds = protoMsg.CreateTimeSeconds,
                     Code = protoMsg.Code,
+                    Mode = protoMsg.Mode,
+                    IsPublic = protoMsg.IsPublic,
                 };
                 OnChannelMessage?.Invoke(this, new Interfaces.MezonEventArgs { Data = domainMsg });
             }
