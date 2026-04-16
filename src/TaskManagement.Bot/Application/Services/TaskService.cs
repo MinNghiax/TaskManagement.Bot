@@ -192,4 +192,44 @@ public class TaskService : ITaskService
 
         return tasks.Select(MapToDto).ToList();
     }
+
+    public async Task UpdateAsync(int taskId, UpdateTaskDto updateDto, CancellationToken ct = default)
+    {
+        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == taskId && !t.IsDeleted, ct);
+        if (task == null) throw new Exception("Task not found");
+
+        if (!string.IsNullOrWhiteSpace(updateDto.Title))
+            task.Title = updateDto.Title;
+
+        if (updateDto.Description != null)
+            task.Description = updateDto.Description;
+
+        if (updateDto.Priority.HasValue)
+            task.Priority = updateDto.Priority.Value;
+
+        if (updateDto.Status.HasValue)
+            task.Status = updateDto.Status.Value;
+
+        if (updateDto.DueDate.HasValue)
+            task.DueDate = updateDto.DueDate.Value;
+
+        if (!string.IsNullOrWhiteSpace(updateDto.AssignedTo))
+            task.AssignedTo = updateDto.AssignedTo;
+
+        task.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<List<TaskDto>> GetTasksByTeamAsync(int teamId, CancellationToken ct = default)
+    {
+        var tasks = await _context.TaskItems
+            .Include(t => t.Clans)
+            .Include(t => t.Channels)
+            .Where(t => t.TeamId == teamId && !t.IsDeleted)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync(ct);
+
+        return tasks.Select(MapToDto).ToList();
+    }
 }

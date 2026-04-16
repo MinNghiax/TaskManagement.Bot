@@ -1,14 +1,15 @@
+using Mezon.Sdk;
+using Mezon.Sdk.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Application.Commands;
 using TaskManagement.Bot.Application.Commands.Report;
+using TaskManagement.Bot.Application.Commands.TaskCommands;
 using TaskManagement.Bot.Application.Commands.TeamCommands;
+using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Data;
-using Mezon.Sdk;
-using Mezon.Sdk.Enums;
 
 var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
 var services = new ServiceCollection();
@@ -52,6 +53,7 @@ services.AddScoped<IBotService, BotService>();
 services.AddScoped<ICommandHandler, TaskCommandHandler>();
 services.AddScoped<ICommandHandler, TeamCommandHandler>();
 services.AddScoped<IComponentHandler, TeamComponentHandler>();
+services.AddScoped<IComponentHandler, TaskComponentHandler>();
 //services.AddScoped<IReportService, ReportService>();
 //services.AddScoped<ICommandHandler, ReportCommandHandler>();
 

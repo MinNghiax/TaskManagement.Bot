@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using Mezon.Sdk;
@@ -20,7 +20,9 @@ public interface IBotService
         string text,
         int mode,
         bool isPublic,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? replyToMessageId = null,
+        ChannelMessage? originalMessage = null);
 }
 
 public class BotService : IBotService
@@ -39,6 +41,7 @@ public class BotService : IBotService
     private readonly IEnumerable<IComponentHandler> _componentHandlers;
     private readonly ConcurrentDictionary<string, string> _channelClanMap = new();
     private HashSet<string> _dmChannelIds = new();
+    private string? _botUserId;
 
     public BotService(
         ILogger<BotService> logger,
@@ -59,7 +62,8 @@ public class BotService : IBotService
         _client.On("channel_message", OnChannelMessage);
         _client.On("message_button_clicked", OnComponent);
 
-        await _client.LoginAsync(cancellationToken);
+        var session = await _client.LoginAsync(cancellationToken);
+        _botUserId = session.UserId;
 
         try
         {
@@ -92,23 +96,32 @@ public class BotService : IBotService
         string text,
         int mode,
         bool isPublic,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? replyToMessageId = null,
+        ChannelMessage? originalMessage = null)
     {
         var finalIsPublic = mode == 4 ? false : isPublic;
+
+        var content = new ChannelMessageContent { Text = text };
+
+        // Tạo references để reply
+        var references = BuildMessageReferences(replyToMessageId, originalMessage);
 
         _logger.LogInformation(
             "[SEND] ClanId={ClanId} ChannelId={ChannelId} Mode={Mode} IsPublic={IsPublic}",
             clanId,
             channelId,
             mode,
-            finalIsPublic);
+            finalIsPublic,
+            replyToMessageId);
 
         await _client.SendMessageAsync(
             clanId: clanId,
             channelId: channelId,
             mode: mode,
             isPublic: finalIsPublic,
-            content: new ChannelMessageContent { Text = text },
+            content: content,
+            references: references,
             cancellationToken: cancellationToken);
     }
 
@@ -118,7 +131,9 @@ public class BotService : IBotService
         string text,
         int mode,
         bool isPublic,
-        IInteractiveMessageProps embed)
+        IInteractiveMessageProps embed,
+        string? replyToMessageId = null,
+        ChannelMessage? originalMessage = null)
     {
         var finalIsPublic = mode == 4 ? false : isPublic;
         var content = new ChannelMessageContent
@@ -126,6 +141,8 @@ public class BotService : IBotService
             Text = text,
             Embed = new object[] { embed }
         };
+
+        var references = BuildMessageReferences(replyToMessageId, originalMessage);
 
         try
         {
@@ -135,6 +152,7 @@ public class BotService : IBotService
                 mode: mode,
                 isPublic: finalIsPublic,
                 content: content,
+                references: references,
                 cancellationToken: CancellationToken.None);
         }
         catch (Exception ex) when (ex.Message.Contains("Invalid channel identifier", StringComparison.OrdinalIgnoreCase) && mode == 2)
@@ -156,9 +174,13 @@ public class BotService : IBotService
         string channelId,
         ChannelMessageContent content,
         int mode,
-        bool isPublic)
+        bool isPublic,
+        string? replyToMessageId = null,
+        ChannelMessage? originalMessage = null)
     {
         var finalIsPublic = mode == 4 ? false : isPublic;
+
+        var references = BuildMessageReferences(replyToMessageId, originalMessage);
 
         await _client.SendMessageAsync(
             clanId: clanId,
@@ -166,17 +188,47 @@ public class BotService : IBotService
             mode: mode,
             isPublic: finalIsPublic,
             content: content,
+            references: references,
             cancellationToken: CancellationToken.None);
+    }
+
+    // Helper tạo references để reply
+    private static ApiMessageRef[]? BuildMessageReferences(string? replyToMessageId, ChannelMessage? originalMessage)
+    {
+        if (string.IsNullOrEmpty(replyToMessageId) || originalMessage == null)
+        {
+            return null;
+        }
+
+        return new[]
+        {
+            new ApiMessageRef
+            {
+                MessageId = replyToMessageId,
+                MessageRefId = replyToMessageId,
+                MessageSenderId = originalMessage.SenderId ?? "",
+                MessageSenderUsername = originalMessage.Username ?? "",
+                MessageSenderDisplayName = originalMessage.DisplayName ?? "",
+                MessageSenderClanNick = originalMessage.ClanNick ?? "",
+                MesagesSenderAvatar = originalMessage.ClanAvatar ?? "",
+                Content = originalMessage.Content?.Text ?? "",
+                HasAttachment = originalMessage.Attachments?.Any() ?? false,
+                RefType = 0
+            }
+        };
     }
 
     private async void OnChannelMessage(object? sender, MezonEventArgs e)
     {
         try
         {
-            if (e.Data is not ChannelMessage message)
+            if (e.Data is not ChannelMessage message || message.SenderId == _botUserId)
             {
                 return;
             }
+
+            var clanId = message.ClanId ?? "";
+            var channelId = message.ChannelId;
 
             if (!string.IsNullOrWhiteSpace(message.ChannelId) && !string.IsNullOrWhiteSpace(message.ClanId))
             {
@@ -184,7 +236,7 @@ public class BotService : IBotService
             }
 
             var content = ParseContent(message.Content?.Text);
-            if (string.IsNullOrWhiteSpace(content) || message.SenderId == _client.ClientId)
+            if (string.IsNullOrWhiteSpace(content))
             {
                 return;
             }
@@ -213,15 +265,15 @@ public class BotService : IBotService
 
                 if (response.Content != null)
                 {
-                    await SendFormMessageAsync(message.ClanId, message.ChannelId, response.Content, finalMode, finalIsPublic);
+                    await SendFormMessageAsync(message.ClanId, message.ChannelId, response.Content, finalMode, finalIsPublic, message.Id, message);
                 }
                 else if (response.Embed != null)
                 {
-                    await SendMessageWithEmbedAsync(message.ClanId, message.ChannelId, response.Text ?? string.Empty, finalMode, finalIsPublic, response.Embed);
+                    await SendMessageWithEmbedAsync(message.ClanId, message.ChannelId, response.Text ?? string.Empty, finalMode, finalIsPublic, response.Embed, message.Id, message);
                 }
                 else
                 {
-                    await SendMessageAsync(message.ClanId, message.ChannelId, response.Text ?? string.Empty, finalMode, finalIsPublic);
+                    await SendMessageAsync(message.ClanId, message.ChannelId, response.Text ?? string.Empty, finalMode, finalIsPublic, CancellationToken.None, message.Id, message);
                 }
 
                 break;
@@ -300,6 +352,19 @@ public class BotService : IBotService
             try
             {
                 await DeleteMessageViaProtoAsync(deleteMessage, CancellationToken.None);
+
+                if (!string.IsNullOrWhiteSpace(deleteMessage.ReplyToMessageId))
+                {
+                    await SendMessageAsync(
+                        deleteMessage.ClanId,
+                        deleteMessage.ChannelId,
+                        "✅ Đã đóng form",
+                        deleteMessage.Mode,
+                        deleteMessage.IsPublic,
+                        CancellationToken.None,
+                        deleteMessage.ReplyToMessageId,
+                        deleteMessage.OriginalMessage);
+                }
             }
             catch (Exception ex)
             {
@@ -315,11 +380,11 @@ public class BotService : IBotService
         {
             if (message.Content != null)
             {
-                await SendFormMessageAsync(message.ClanId, message.ChannelId, message.Content, message.Mode, message.IsPublic);
+                await SendFormMessageAsync(message.ClanId, message.ChannelId, message.Content, message.Mode, message.IsPublic, message.ReplyToMessageId, message.OriginalMessage);
             }
             else if (!string.IsNullOrWhiteSpace(message.Text))
             {
-                await SendMessageAsync(message.ClanId, message.ChannelId, message.Text, message.Mode, message.IsPublic);
+                await SendMessageAsync(message.ClanId, message.ChannelId, message.Text, message.Mode, message.IsPublic,CancellationToken.None, message.ReplyToMessageId, message.OriginalMessage);
             }
         }
     }

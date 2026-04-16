@@ -29,7 +29,7 @@ public sealed class ComponentResponse
     public List<ComponentMessage> Messages { get; } = [];
     public List<ComponentDeleteMessage> DeleteMessages { get; } = [];
 
-    public static ComponentResponse FromText(string clanId, string channelId, string text, int mode = 2, bool isPublic = true)
+    public static ComponentResponse FromText(string clanId, string channelId, string text, int mode, bool isPublic, string replyToMessageId, ChannelMessage? originalMessage = null)
     {
         var response = new ComponentResponse();
         response.Messages.Add(new ComponentMessage
@@ -38,12 +38,30 @@ public sealed class ComponentResponse
             ChannelId = channelId,
             Text = text,
             Mode = mode,
-            IsPublic = isPublic
+            IsPublic = isPublic,
+            ReplyToMessageId = replyToMessageId,
+            OriginalMessage = originalMessage
         });
         return response;
     }
 
-    public ComponentResponse DeleteMessage(string clanId, string channelId, string messageId, int mode = 2, bool isPublic = true)
+    public static ComponentResponse FromContent(string clanId, string channelId, ChannelMessageContent content, int mode, bool isPublic, string replyToMessageId, ChannelMessage? originalMessage = null)
+    {
+        var response = new ComponentResponse();
+        response.Messages.Add(new ComponentMessage
+        {
+            ClanId = clanId,
+            ChannelId = channelId,
+            Content = content,
+            Mode = mode,
+            IsPublic = isPublic,
+            ReplyToMessageId = replyToMessageId,
+            OriginalMessage = originalMessage
+        });
+        return response;
+    }
+
+    public ComponentResponse DeleteMessage(string clanId, string channelId, string messageId, int mode, bool isPublic, string replyToMessageId, ChannelMessage? originalMessage = null)
     {
         DeleteMessages.Add(new ComponentDeleteMessage
         {
@@ -51,7 +69,9 @@ public sealed class ComponentResponse
             ChannelId = channelId,
             MessageId = messageId,
             Mode = mode,
-            IsPublic = isPublic
+            IsPublic = isPublic,
+            ReplyToMessageId = replyToMessageId,
+            OriginalMessage = originalMessage
         });
 
         return this;
@@ -66,6 +86,8 @@ public sealed record ComponentMessage
     public ChannelMessageContent? Content { get; init; }
     public int Mode { get; init; } = 2;
     public bool IsPublic { get; init; } = true;
+    public string? ReplyToMessageId { get; init; }      
+    public ChannelMessage? OriginalMessage { get; init; }
 }
 
 public sealed record ComponentDeleteMessage
@@ -75,4 +97,6 @@ public sealed record ComponentDeleteMessage
     public required string MessageId { get; init; }
     public int Mode { get; init; } = 2;
     public bool IsPublic { get; init; } = true;
+    public string? ReplyToMessageId { get; init; }      
+    public ChannelMessage? OriginalMessage { get; init; }
 }

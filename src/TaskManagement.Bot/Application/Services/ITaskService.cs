@@ -19,5 +19,8 @@ public interface ITaskService
     Task DeleteAsync(int taskId, CancellationToken cancellationToken = default);
 
     Task<List<TaskDto>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task UpdateAsync(int taskId, UpdateTaskDto updateDto, CancellationToken ct = default);
+    Task<List<TaskDto>> GetTasksByTeamAsync(int teamId, CancellationToken ct = default);
 }
 
