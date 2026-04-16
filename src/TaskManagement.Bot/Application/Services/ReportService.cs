@@ -183,13 +183,13 @@ public class ReportService : IReportService
         var reviewTasks = scopedTasks.Count(t => t.Status == ETaskStatus.Review);
         var lateTasks = scopedTasks.Count(t => t.Status == ETaskStatus.Late);
         var completedTasksOverall = scopedTasks.Count(t => t.Status == ETaskStatus.Completed);
-        var canceledTasks = scopedTasks.Count(t => t.Status == ETaskStatus.Canceled);
+        var canceledTasks = scopedTasks.Count(t => t.Status == ETaskStatus.Cancelled);
         var openTasks = scopedTasks.Count(t => openStatuses.Contains(t.Status));
         var overdueTasks = scopedTasks.Count(t =>
             t.DueDate.HasValue &&
             t.DueDate.Value < now &&
             t.Status != ETaskStatus.Completed &&
-            t.Status != ETaskStatus.Canceled);
+            t.Status != ETaskStatus.Cancelled);
 
         var projectStats = scopedTasks
             .GroupBy(t => new
@@ -219,13 +219,13 @@ public class ReportService : IReportService
                 var projectReviewTasks = projectTasks.Count(t => t.Status == ETaskStatus.Review);
                 var projectLateTasks = projectTasks.Count(t => t.Status == ETaskStatus.Late);
                 var projectCompletedOverall = projectTasks.Count(t => t.Status == ETaskStatus.Completed);
-                var projectCanceledTasks = projectTasks.Count(t => t.Status == ETaskStatus.Canceled);
+                var projectCanceledTasks = projectTasks.Count(t => t.Status == ETaskStatus.Cancelled);
                 var projectOpenTasks = projectTasks.Count(t => openStatuses.Contains(t.Status));
                 var projectOverdueTasks = projectTasks.Count(t =>
                     t.DueDate.HasValue &&
                     t.DueDate.Value < now &&
                     t.Status != ETaskStatus.Completed &&
-                    t.Status != ETaskStatus.Canceled);
+                    t.Status != ETaskStatus.Cancelled);
 
                 return new ProjectStatisticsDto
                 {
@@ -412,7 +412,7 @@ public class ReportService : IReportService
 
         // Determine health status
         var isCompleted = task.Status == ETaskStatus.Completed;
-        var isCanceled = task.Status == ETaskStatus.Canceled;
+        var isCanceled = task.Status == ETaskStatus.Cancelled;
         var isOverdue = daysOverdue > 0 && !isCompleted && !isCanceled;
         var isAtRisk = !isCompleted && !isCanceled && daysUntilDue <= 3 && daysUntilDue > 0;
 
@@ -494,7 +494,7 @@ public class ReportService : IReportService
                 ETaskStatus.Review => "👀",
                 ETaskStatus.Late => "⚠️",
                 ETaskStatus.Completed => "✅",
-                ETaskStatus.Canceled => "❌",
+                ETaskStatus.Cancelled => "❌",
                 _ => "❓"
             },
             PriorityIcon = task.Priority switch
@@ -545,7 +545,7 @@ public class ReportService : IReportService
             var report = await GetComprehensiveTaskReportAsync(task.Id);
             allTaskReports.Add(report);
 
-            if (!task.IsDeleted && task.Status != ETaskStatus.Completed && task.Status != ETaskStatus.Canceled)
+            if (!task.IsDeleted && task.Status != ETaskStatus.Completed && task.Status != ETaskStatus.Cancelled)
             {
                 if (report.IsOverdue)
                     overdueTasks.Add(report);
@@ -556,7 +556,7 @@ public class ReportService : IReportService
 
         var completedCount = tasks.Count(t => t.Status == ETaskStatus.Completed);
         var totalOverdueDays = tasks
-            .Where(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled)
+            .Where(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled)
             .Sum(t => (now - t.DueDate!.Value).Days);
 
         // Calculate health score (0-100)
@@ -573,7 +573,7 @@ public class ReportService : IReportService
             ReviewCount = tasks.Count(t => t.Status == ETaskStatus.Review),
             LateCount = tasks.Count(t => t.Status == ETaskStatus.Late),
             CompletedCount = completedCount,
-            CanceledCount = tasks.Count(t => t.Status == ETaskStatus.Canceled),
+            CanceledCount = tasks.Count(t => t.Status == ETaskStatus.Cancelled),
             CompletionRate = tasks.Count == 0 ? 0 : (completedCount * 100.0 / tasks.Count),
             TotalOverdueDays = totalOverdueDays,
             OverdueTasksCount = overdueTasks.Count,
@@ -607,8 +607,8 @@ public class ReportService : IReportService
 
         var now = DateTime.UtcNow;
         var completedTasks = tasks.Count(t => t.Status == ETaskStatus.Completed);
-        var overdueCount = tasks.Count(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled);
-        var atRiskCount = tasks.Count(t => !t.DueDate.HasValue || (t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled));
+        var overdueCount = tasks.Count(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled);
+        var atRiskCount = tasks.Count(t => !t.DueDate.HasValue || (t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled));
 
         var memberBreakdowns = tasks.GroupBy(t => t.AssignedTo).Select(g =>
         {
@@ -620,11 +620,11 @@ public class ReportService : IReportService
                 TotalTasks = memberTasks.Count,
                 CompletedTasks = memberCompleted,
                 CompletionRate = memberTasks.Count == 0 ? 0 : (memberCompleted * 100.0 / memberTasks.Count),
-                OverdueCount = memberTasks.Count(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled),
-                AtRiskCount = memberTasks.Count(t => !t.DueDate.HasValue || (t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled)),
+                OverdueCount = memberTasks.Count(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled),
+                AtRiskCount = memberTasks.Count(t => !t.DueDate.HasValue || (t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled)),
                 HighestPriorityTask = memberTasks.Max(t => (EPriorityLevel?)t.Priority),
                 CriticalTaskTitle = memberTasks.Where(t => t.Priority == EPriorityLevel.Critical && t.Status != ETaskStatus.Completed).FirstOrDefault()?.Title,
-                WorkloadScore = memberTasks.Count(t => t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled)
+                WorkloadScore = memberTasks.Count(t => t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled)
             };
         }).ToList();
 
@@ -697,7 +697,7 @@ public class ReportService : IReportService
             CompletionVelocity = completionVelocity,
             DeliveryRate = deliveryRate,
             CriticalTasksCompleted = criticalCompleted,
-            CriticalTasksPending = criticalTasks.Count(t => t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled),
+            CriticalTasksPending = criticalTasks.Count(t => t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled),
             CriticalCompletionRate = criticalTasks.Count == 0 ? 0 : (criticalCompleted * 100.0 / criticalTasks.Count),
             TotalComplaints = allComplaints.Count,
             TimeExtensionRequests = allComplaints.Count(c => c.Type == EComplainType.Extend),
@@ -739,10 +739,10 @@ public class ReportService : IReportService
         var now = DateTime.UtcNow;
 
         if (onlyOverdue == true)
-            query = query.Where(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled);
+            query = query.Where(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled);
 
         if (onlyAtRisk == true)
-            query = query.Where(t => t.DueDate.HasValue && t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Canceled);
+            query = query.Where(t => t.DueDate.HasValue && t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled);
 
         var tasks = await query.ToListAsync();
         var results = new List<ComprehensiveTaskReportDto>();
