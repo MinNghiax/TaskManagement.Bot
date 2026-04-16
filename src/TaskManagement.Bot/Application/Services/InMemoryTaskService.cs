@@ -1,144 +1,64 @@
+// TaskManagement.Bot.Application.Services.InMemoryTaskService.cs
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Infrastructure.Enums;
-using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 
 namespace TaskManagement.Bot.Application.Services;
 
-/// <summary>
-/// In-memory task service for testing without database.
-/// All tasks are stored in RAM and lost when application restarts.
-/// </summary>
+/// <summary>In-memory task service for testing. All data lost on restart.</summary>
 public class InMemoryTaskService : ITaskService
 {
     private readonly ILogger<InMemoryTaskService> _logger;
-    private static readonly Dictionary<Guid, TaskDto> _store = new();
+    private static int _nextId = 1;
+    private static readonly Dictionary<int, TaskDto> _store = new();
 
-    public InMemoryTaskService(ILogger<InMemoryTaskService> logger)
+    public InMemoryTaskService(ILogger<InMemoryTaskService> logger) => _logger = logger;
+
+    public Task<TaskDto?> CreateAsync(CreateTaskDto dto, CancellationToken ct = default)
     {
-        _logger = logger;
+        var id = _nextId++;
+        var t = new TaskDto
+        {
+            Id = id,
+            Title = dto.Title ?? "Untitled",
+            Description = dto.Description ?? "",
+            AssignedTo = dto.AssignedTo ?? "unknown",
+            CreatedBy = dto.CreatedBy ?? "unknown",
+            Status = ETaskStatus.ToDo,
+            DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow
+        };
+        _store[id] = t;
+        _logger.LogInformation("Task created (in-memory): {Title} ID:{Id}", t.Title, id);
+        return Task.FromResult<TaskDto?>(t);
     }
 
-    public Task<TaskDto?> CreateAsync(CreateTaskDto dto, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var taskId = Guid.NewGuid();
-            var task = new TaskDto
-            {
-                Id = taskId,
-                Title = dto.Title ?? "Untitled",
-                Description = dto.Description ?? "",
-                AssignedTo = dto.AssignedTo ?? "unknown",
-                CreatedBy = dto.CreatedBy ?? "unknown",
-                Status = ETaskStatus.ToDo,  // Changed from Pending to ToDo
-                DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
-                CreatedAt = DateTime.UtcNow,
-                ChannelId = dto.ChannelId ?? "",
-                MessageId = dto.MessageId ?? ""
-            };
+    public Task<TaskDto?> GetByIdAsync(int taskId, CancellationToken ct = default)
+        => Task.FromResult(_store.TryGetValue(taskId, out var t) ? t : null);
 
-            _store[taskId] = task;
-            _logger.LogInformation($"✅ Task created (in-memory): {task.Title} | ID: {taskId}");
-            return Task.FromResult<TaskDto?>(task);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating task");
-            return Task.FromResult<TaskDto?>(null);
-        }
+    public Task<List<TaskDto>> GetByAssigneeAsync(string assignee, CancellationToken ct = default)
+        => Task.FromResult(_store.Values.Where(t => t.AssignedTo == assignee).ToList());
+
+    public Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken ct = default)
+        => Task.FromResult(_store.Values.Where(t => t.Status == status).ToList());
+
+    public Task<List<TaskDto>> GetAllAsync(CancellationToken ct = default)
+        => Task.FromResult(_store.Values.ToList());
+
+    public Task ChangeStatusAsync(int taskId, ETaskStatus newStatus, CancellationToken ct = default)
+    {
+        if (_store.TryGetValue(taskId, out var t)) { t.Status = newStatus; t.UpdatedAt = DateTime.UtcNow; }
+        return Task.CompletedTask;
     }
 
-    public Task<TaskDto?> GetByIdAsync(Guid taskId, CancellationToken cancellationToken = default)
+    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken ct = default)
     {
-        try
-        {
-            var task = _store.TryGetValue(taskId, out var result) ? result : null;
-            return Task.FromResult(task);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting task");
-            return Task.FromResult<TaskDto?>(null);
-        }
+        if (_store.TryGetValue(taskId, out var t)) { t.DueDate = newDueDate; t.UpdatedAt = DateTime.UtcNow; }
+        return Task.CompletedTask;
     }
 
-    public Task<List<TaskDto>> GetByAssigneeAsync(string assignee, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(int taskId, CancellationToken ct = default)
     {
-        try
-        {
-            var tasks = _store.Values
-                .Where(t => t.AssignedTo?.Equals(assignee, StringComparison.OrdinalIgnoreCase) == true)
-                .ToList();
-            return Task.FromResult(tasks);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting tasks");
-            return Task.FromResult(new List<TaskDto>());
-        }
-    }
-
-    public Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var tasks = _store.Values.Where(t => t.Status == status).ToList();
-            return Task.FromResult(tasks);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting tasks by status");
-            return Task.FromResult(new List<TaskDto>());
-        }
-    }
-
-    public Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            if (_store.TryGetValue(taskId, out var task))
-            {
-                var oldStatus = task.Status;
-                task.Status = newStatus;
-                task.UpdatedAt = DateTime.UtcNow;
-                _logger.LogInformation($"✅ Task status updated: {task.Title} | {oldStatus} → {newStatus}");
-            }
-            return Task.CompletedTask;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating task status");
-            return Task.CompletedTask;
-        }
-    }
-
-    public Task DeleteAsync(Guid taskId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            if (_store.Remove(taskId))
-            {
-                _logger.LogInformation($"✅ Task deleted (in-memory): {taskId}");
-            }
-            return Task.CompletedTask;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting task");
-            return Task.CompletedTask;
-        }
-    }
-
-    public Task<List<TaskDto>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            return Task.FromResult(_store.Values.ToList());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting all tasks");
-            return Task.FromResult(new List<TaskDto>());
-        }
+        _store.Remove(taskId);
+        return Task.CompletedTask;
     }
 }

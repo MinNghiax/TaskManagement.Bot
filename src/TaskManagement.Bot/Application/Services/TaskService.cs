@@ -1,48 +1,35 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// TaskManagement.Bot.Application.Services.TaskService.cs
+using Microsoft.EntityFrameworkCore;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
-using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
+
 namespace TaskManagement.Bot.Application.Services;
 
 public class TaskService : ITaskService
 {
-    private readonly TaskManagementDbContext _context;
+    private readonly TaskManagementDbContext _ctx;
+    public TaskService(TaskManagementDbContext ctx) => _ctx = ctx;
 
-    public TaskService(TaskManagementDbContext context)
+    private static TaskDto Map(TaskItem t) => new()
     {
-        _context = context;
-    }
-
-    // 🔁 Convert Entity → DTO
-    private static TaskDto MapToDto(TaskItem task)
-    {
-        return new TaskDto
-        {
-            Id = new Guid(task.Id.ToString().PadLeft(32, '0')),
-            Title = task.Title,
-            Description = task.Description,
-            AssignedTo = task.AssignedTo,
-            CreatedBy = task.CreatedBy,
-            DueDate = task.DueDate,
-            Status = task.Status,
-            Priority = task.Priority,
-            CreatedAt = task.CreatedAt,
-            UpdatedAt = task.UpdatedAt
-        };
-    }
-
-    private static int GuidToInt(Guid guid)
-    {
-        return int.Parse(guid.ToString().Substring(0, 8), System.Globalization.NumberStyles.HexNumber);
-    }
+        Id = t.Id,
+        Title = t.Title,
+        Description = t.Description,
+        AssignedTo = t.AssignedTo,
+        CreatedBy = t.CreatedBy,
+        DueDate = t.DueDate,
+        Status = t.Status,
+        Priority = t.Priority,
+        CreatedAt = t.CreatedAt,
+        UpdatedAt = t.UpdatedAt
+    };
 
     public async Task<TaskDto?> CreateAsync(CreateTaskDto dto, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.AssignedTo))
             return null;
-
-        var task = new TaskItem
+        var t = new TaskItem
         {
             Title = dto.Title!,
             Description = dto.Description,
@@ -52,74 +39,48 @@ public class TaskService : ITaskService
             Status = dto.Status,
             Priority = dto.Priority
         };
-
-        _context.TaskItems.Add(task);
-        await _context.SaveChangesAsync(ct);
-
-        return MapToDto(task);
+        _ctx.TaskItems.Add(t);
+        await _ctx.SaveChangesAsync(ct);
+        return Map(t);
     }
 
-    public async Task<List<TaskDto>> GetAllAsync(CancellationToken ct = default)
-    {
-        var tasks = await _context.TaskItems
-            .Where(t => !t.IsDeleted)
-            .OrderByDescending(t => t.CreatedAt)
-            .ToListAsync(ct);
-
-        return tasks.Select(MapToDto).ToList();
-    }
-
-    public async Task<TaskDto?> GetByIdAsync(Guid taskId, CancellationToken ct = default)
-    {
-        var id = GuidToInt(taskId);
-
-        var task = await _context.TaskItems
-            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct);
-
-        return task == null ? null : MapToDto(task);
-    }
+    public Task<TaskDto?> GetByIdAsync(int taskId, CancellationToken ct = default)
+        => _ctx.TaskItems.Where(t => t.Id == taskId && !t.IsDeleted)
+            .Select(t => (TaskDto?)Map(t)).FirstOrDefaultAsync(ct);
 
     public async Task<List<TaskDto>> GetByAssigneeAsync(string assignee, CancellationToken ct = default)
-    {
-        var tasks = await _context.TaskItems
-            .Where(t => t.AssignedTo == assignee && !t.IsDeleted)
-            .ToListAsync(ct);
-
-        return tasks.Select(MapToDto).ToList();
-    }
+        => (await _ctx.TaskItems.Where(t => t.AssignedTo == assignee && !t.IsDeleted).ToListAsync(ct))
+            .Select(Map).ToList();
 
     public async Task<List<TaskDto>> GetByStatusAsync(ETaskStatus status, CancellationToken ct = default)
-    {
-        var tasks = await _context.TaskItems
-            .Where(t => t.Status == status && !t.IsDeleted)
-            .ToListAsync(ct);
+        => (await _ctx.TaskItems.Where(t => t.Status == status && !t.IsDeleted).ToListAsync(ct))
+            .Select(Map).ToList();
 
-        return tasks.Select(MapToDto).ToList();
+    public async Task<List<TaskDto>> GetAllAsync(CancellationToken ct = default)
+        => (await _ctx.TaskItems.Where(t => !t.IsDeleted).OrderByDescending(t => t.CreatedAt).ToListAsync(ct))
+            .Select(Map).ToList();
+
+    public async Task ChangeStatusAsync(int taskId, ETaskStatus newStatus, CancellationToken ct = default)
+    {
+        var t = await _ctx.TaskItems.FirstOrDefaultAsync(x => x.Id == taskId, ct);
+        if (t == null || t.IsDeleted) return;
+        t.Status = newStatus; t.UpdatedAt = DateTime.UtcNow;
+        await _ctx.SaveChangesAsync(ct);
     }
 
-    public async Task ChangeStatusAsync(Guid taskId, ETaskStatus newStatus, CancellationToken ct = default)
+    public async Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken ct = default)
     {
-        var id = GuidToInt(taskId);
-
-        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == id, ct);
-        if (task == null || task.IsDeleted) return;
-
-        task.Status = newStatus;
-        task.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync(ct);
+        var t = await _ctx.TaskItems.FirstOrDefaultAsync(x => x.Id == taskId, ct);
+        if (t == null || t.IsDeleted) return;
+        t.DueDate = newDueDate; t.UpdatedAt = DateTime.UtcNow;
+        await _ctx.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteAsync(Guid taskId, CancellationToken ct = default)
+    public async Task DeleteAsync(int taskId, CancellationToken ct = default)
     {
-        var id = GuidToInt(taskId);
-
-        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == id, ct);
-        if (task == null || task.IsDeleted) return;
-
-        task.IsDeleted = true;
-        task.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync(ct);
+        var t = await _ctx.TaskItems.FirstOrDefaultAsync(x => x.Id == taskId, ct);
+        if (t == null || t.IsDeleted) return;
+        t.IsDeleted = true; t.UpdatedAt = DateTime.UtcNow;
+        await _ctx.SaveChangesAsync(ct);
     }
 }

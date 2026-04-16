@@ -57,7 +57,7 @@ public class ReportService : IReportService
             ToDoTasks = tasks.Count(t => t.Status == ETaskStatus.ToDo),
             DoingTasks = tasks.Count(t => t.Status == ETaskStatus.Doing),
             ReviewTasks = tasks.Count(t => t.Status == ETaskStatus.Review),
-            PausedTasks = tasks.Count(t => t.Status == ETaskStatus.Paused),
+            //PausedTasks = tasks.Count(t => t.Status == ETaskStatus.Paused),
             LateTasks = tasks.Count(t => t.Status == ETaskStatus.Late),
             CompletedTasks = completed,
             CompletionRate = total == 0 ? 0 : (double)completed / total * 100,
@@ -103,7 +103,7 @@ public class ReportService : IReportService
                 ToDoTasks = userTasks.Count(t => t.Status == ETaskStatus.ToDo),
                 DoingTasks = userTasks.Count(t => t.Status == ETaskStatus.Doing),
                 ReviewTasks = userTasks.Count(t => t.Status == ETaskStatus.Review),
-                PausedTasks = userTasks.Count(t => t.Status == ETaskStatus.Paused),
+                //PausedTasks = userTasks.Count(t => t.Status == ETaskStatus.Paused),
                 LateTasks = userTasks.Count(t => t.Status == ETaskStatus.Late),
                 CompletedTasks = completed,
                 CompletionRate = total == 0 ? 0 : (double)completed / total * 100

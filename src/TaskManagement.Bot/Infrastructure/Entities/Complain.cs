@@ -17,6 +17,8 @@ namespace TaskManagement.Bot.Infrastructure.Entities
 
         public DateTime? NewDueDate { get; set; }
 
+        public DateTime? OldDueDate { get; set; }
+
         public string? ApprovedBy { get; set; }
         public DateTime? ApprovedAt { get; set; }
 

@@ -1,11 +1,14 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Application.Commands;
 using TaskManagement.Bot.Application.Commands.Report;
+using TaskManagement.Bot.Application.Commands.Complain;      // THÊM
 using TaskManagement.Bot.Infrastructure.Data;
+using TaskManagement.Bot.Domain.Interfaces;                 // THÊM
+using TaskManagement.Bot.Infrastructure.Repositories;       // THÊM
 
 var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
 var services = new ServiceCollection();
@@ -25,6 +28,10 @@ services.AddScoped<ITaskService, TaskService>();
 services.AddScoped<IBotService, BotService>();
 services.AddScoped<IReportService, ReportService>();
 services.AddScoped<ICommandHandler, ReportCommandHandler>();
+
+services.AddScoped<IComplainRepository, ComplainRepository>();
+services.AddScoped<IComplainService, ComplainService>();
+services.AddScoped<ComplainCommandHandler>();
 
 var serviceProvider = services.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
