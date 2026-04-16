@@ -7,5 +7,5 @@ public enum ETaskStatus
     Review = 2,
     Late = 3,
     Completed = 4,
-    Cancelled = 5
+    Canceled = 5
 }
