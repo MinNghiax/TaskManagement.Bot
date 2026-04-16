@@ -19,32 +19,36 @@ public class TeamService : ITeamService
         _context = context;
     }
 
-    public async Task<Team?> CreateTeamAsync(int projectId, string teamName, string pmUserId, List<string> memberUserIds)
+    public async Task<Team?> CreateTeamAsync(
+        int projectId,
+        string teamName,
+        string pmUserId,
+        List<string> memberUserIds,
+        string memberStatus = "Pending",
+        CancellationToken cancellationToken = default)
     {
-        var projectExists = await _context.Projects.AnyAsync(x => x.Id == projectId);
+        var projectExists = await _context.Projects.AnyAsync(x => x.Id == projectId, cancellationToken);
         if (!projectExists)
             throw new Exception("Project không tồn tại");
 
         var team = new Team
         {
-            Name = teamName,
+            Name = teamName.Trim(),
             CreatedBy = pmUserId,
             ProjectId = projectId
         };
 
         _context.Teams.Add(team);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        //  PM = Accepted
         _context.TeamMembers.Add(new TeamMember
         {
             TeamId = team.Id,
-            Username = pmUserId, 
+            Username = pmUserId,
             Role = "PM",
             Status = "Accepted"
         });
 
-        //  Members = Pending
         foreach (var userId in memberUserIds.Distinct())
         {
             _context.TeamMembers.Add(new TeamMember
@@ -52,12 +56,18 @@ public class TeamService : ITeamService
                 TeamId = team.Id,
                 Username = userId,
                 Role = "Member",
-                Status = "Pending"
+                Status = memberStatus
             });
         }
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
         return team;
+    }
+
+    public Task<bool> ExistsByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var normalized = name.Trim().ToLower();
+        return _context.Teams.AnyAsync(x => !x.IsDeleted && x.Name.ToLower() == normalized, cancellationToken);
     }
 
     public async Task<bool> IsUserInTeam(string username, int teamId)
@@ -118,5 +128,66 @@ public class TeamService : ITeamService
 
         _context.TeamMembers.Add(member);
         await _context.SaveChangesAsync();
+    }
+
+    public async Task<Team> CreateTeamWithProjectAsync(string projectName, string teamName, string pmUserId, List<string> memberUserIds)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            // Tạo Project
+            var project = new Project
+            {
+                Name = projectName,
+                CreatedBy = pmUserId
+            };
+            _context.Projects.Add(project);
+            await _context.SaveChangesAsync();
+
+            // Tạo Team
+            var team = new Team
+            {
+                Name = teamName,
+                CreatedBy = pmUserId,
+                ProjectId = project.Id
+            };
+            _context.Teams.Add(team);
+            await _context.SaveChangesAsync();
+
+            // Thêm PM
+            _context.TeamMembers.Add(new TeamMember
+            {
+                TeamId = team.Id,
+                Username = pmUserId,
+                Role = "PM",
+                Status = "Accepted"
+            });
+
+            // Thêm members
+            foreach (var memberId in memberUserIds.Distinct())
+            {
+                if (memberId != pmUserId)
+                {
+                    _context.TeamMembers.Add(new TeamMember
+                    {
+                        TeamId = team.Id,
+                        Username = memberId,
+                        Role = "Member",
+                        Status = "Accepted"
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return team;
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 }

@@ -3,6 +3,7 @@ namespace Mezon.Sdk.Api;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Google.Protobuf;
@@ -195,7 +196,7 @@ public class MezonRestApi
         
         try
         {
-            var resp = await CallAsync(token, "ListClanUsers", req.ToByteArray(), ct);
+            var resp = await CallAsync(token, "ListClanUsers", req.ToByteArray(), ct, throwOnNonSuccess: true);
             
             if (resp == null || resp.Length == 0)
             {
@@ -221,6 +222,10 @@ public class MezonRestApi
                 }).ToArray(),
                 Cursor = result.Cursor
             };
+        }
+        catch (HttpRequestException)
+        {
+            throw;
         }
         catch (Exception)
         {
@@ -466,7 +471,12 @@ public class MezonRestApi
     }
 
     // -------------------------------------------------------------------------
-    private async Task<byte[]> CallAsync(string bearerToken, string method, byte[] body, CancellationToken ct)
+    private async Task<byte[]> CallAsync(
+        string bearerToken,
+        string method,
+        byte[] body,
+        CancellationToken ct,
+        bool throwOnNonSuccess = false)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, $"{_basePath}/mezon.api.Mezon/{method}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
@@ -480,6 +490,14 @@ public class MezonRestApi
         // return empty/default messages (e.g., empty channel list) instead of throwing.
         if (!response.IsSuccessStatusCode)
         {
+            if (throwOnNonSuccess)
+            {
+                throw new HttpRequestException(
+                    $"Mezon API call '{method}' failed with status {(int)response.StatusCode} {response.ReasonPhrase}",
+                    null,
+                    response.StatusCode);
+            }
+
             return Array.Empty<byte>();
         }
         return await response.Content.ReadAsByteArrayAsync(ct);
