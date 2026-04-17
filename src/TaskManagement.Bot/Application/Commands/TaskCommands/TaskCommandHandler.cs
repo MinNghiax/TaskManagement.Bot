@@ -1,326 +1,189 @@
 ﻿using Mezon.Sdk.Domain;
 using System.Text.Json;
 using TaskManagement.Bot.Application.Commands.TaskCommands;
+using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Application.Services;
-using TaskManagement.Bot.Application.Sessions;
 
 namespace TaskManagement.Bot.Application.Commands;
 
 public class TaskCommandHandler : ICommandHandler
 {
-    private readonly SessionService _sessionService;
+    private readonly IProjectService _projectService;
     private readonly ITeamService _teamService;
+    private readonly ITaskService _taskService;
 
-    public TaskCommandHandler(SessionService sessionService, ITeamService teamService)
+    public TaskCommandHandler(
+        IProjectService projectService,
+        ITeamService teamService,
+        ITaskService taskService)
     {
-        _sessionService = sessionService;
+        _projectService = projectService;
         _teamService = teamService;
+        _taskService = taskService;
     }
 
-    public bool CanHandle(string command)
-    {
-        return command.StartsWith("!task", StringComparison.OrdinalIgnoreCase);
-    }
+    public bool CanHandle(string command) =>
+        command.StartsWith("!task", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<CommandResponse> HandleAsync(
-        ChannelMessage message,
-        CancellationToken cancellationToken)
+    public async Task<CommandResponse> HandleAsync(ChannelMessage message, CancellationToken ct)
     {
         var content = ParseContent(message.Content?.Text);
-
         if (string.IsNullOrWhiteSpace(content))
             return new CommandResponse("❌ Empty command");
 
-        if (!long.TryParse(message.SenderId, out var userId))
-            return new CommandResponse("❌ Invalid user");
-
         var parts = content.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 2)
-        {
             return new CommandResponse(GetHelpText());
-        }
 
-        var action = parts[1].ToLower();
-
-        return action switch
+        return parts[1].ToLowerInvariant() switch
         {
-            "create" or "form" => await HandleTaskCreate(message, userId),
-            "list" => await HandleTaskList(message, userId),
-            "update" => await HandleTaskUpdate(message, parts, userId),
-            "status" => await HandleTaskStatusUpdate(message, parts, userId),
-            "delete" => await HandleTaskDelete(message, parts, userId),
+            "create" or "form" => await HandleCreateAsync(message.SenderId, ct),
+            "list" => await HandleListAsync(message.SenderId, ct),
+            "update" => await HandleUpdateAsync(parts, message.SenderId, ct),
+            "delete" => await HandleDeletePrompt(parts, message.SenderId, ct),
             _ => new CommandResponse(GetHelpText())
         };
     }
 
-    // ==================== TẠO TASK ====================
-    private async Task<CommandResponse> HandleTaskCreate(ChannelMessage message, long userId)
+    private async Task<CommandResponse> HandleCreateAsync(string? userId, CancellationToken ct)
     {
-        var session = _sessionService.Get(userId);
-        var userIdStr = userId.ToString();
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định được người dùng");
 
-        if (session == null)
-        {
-            session = new UserSession
-            {
-                Step = "",
-                TeamMembers = new List<string>()
-            };
-            _sessionService.Set(userId, session);
-        }
+        var projects = await _projectService.GetAllProjectsAsync();
+        var teams = await _teamService.GetAllAsync(); 
+        var members = await _teamService.GetAllMembersAsync();
+        if (projects.Count == 0)
+            return new CommandResponse("❌ Chưa có project nào. Hãy tạo project bằng `!team init`");
 
-        if (session.TeamId == null)
-        {
-            var teams = await _teamService.GetTeamsByMemberAsync(userIdStr);
-            if (teams.Any())
-            {
-                var team = teams.First();
-                session.TeamId = team.Id;
-                session.TeamName = team.Name;
-                session.TeamMembers = await _teamService.GetMembers(team.Id);
-                _sessionService.Set(userId, session);
-            }
-            else
-            {
-                return new CommandResponse("❌ Bạn chưa tham gia team nào. Hãy tạo team bằng lệnh `!team init`");
-            }
-        }
-
-        if (session.TeamMembers == null || session.TeamMembers.Count == 0)
-        {
-            session.TeamMembers = await _teamService.GetMembers(session.TeamId.Value);
-            _sessionService.Set(userId, session);
-        }
-
-        var taskForm = TaskFormBuilder.BuildTaskForm(session.TeamMembers);
-        return new CommandResponse(taskForm);
+        return new CommandResponse(TaskFormBuilder.BuildFullCreateForm(projects, teams, members));
     }
 
-    // ==================== DANH SÁCH TASK ====================
-    private async Task<CommandResponse> HandleTaskList(ChannelMessage message, long userId)
+    private async Task<CommandResponse> HandleListAsync(string? userId, CancellationToken ct)
     {
-        var session = _sessionService.Get(userId);
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định người dùng");
 
-        if (session?.TeamId == null)
+        // Lấy tất cả task
+        var allTasks = await _taskService.GetAllAsync(ct);
+
+        if (allTasks.Count == 0)
+            return new CommandResponse("📭 Không có task nào");
+
+        // Check role (mentor hay member)
+        var isMentor = await _teamService.IsUserPMInAnyTeam(userId);
+
+        List<TaskDto> tasks;
+
+        if (isMentor)
         {
-            return new CommandResponse("❌ Bạn chưa tham gia team nào!");
+            // Mentor thấy tất cả
+            tasks = allTasks;
+        }
+        else
+        {
+            // Member chỉ thấy task của mình
+            tasks = allTasks
+                .Where(t => t.AssignedTo == userId)
+                .ToList();
         }
 
-        // Tạo nút để hiển thị danh sách (sẽ được xử lý bởi TaskComponentHandler)
-        var listForm = new ChannelMessageContent
-        {
-            Text = "interactive",
-            Embed = new object[] { new { title = "📋 Danh sách Task", description = "Nhấn nút bên dưới để xem danh sách task", color = "#5865F2" } },
-            Components = new[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = "LIST_TASKS",
-                            type = 1,
-                            component = new { label = "📋 Xem danh sách task", style = 3 }
-                        }
-                    }
-                }
-            }
-        };
+        var content = TaskFormBuilder.BuildTaskList(tasks, isMentor);
 
-        return new CommandResponse(listForm);
+        return new CommandResponse(content);
     }
 
-    // ==================== CẬP NHẬT TASK (MENTOR) ====================
-    private async Task<CommandResponse> HandleTaskUpdate(ChannelMessage message, string[] parts, long userId)
+    private async Task<CommandResponse> HandleUpdateAsync(
+    string[] parts,
+    string? userId,
+    CancellationToken ct)
     {
-        if (parts.Length < 3)
+        if (parts.Length < 3 || !int.TryParse(parts[2], out var taskId))
+            return new CommandResponse("❌ Dùng: `!task update <taskId>`");
+
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định người dùng");
+
+        var task = await _taskService.GetByIdAsync(taskId, ct);
+        if (task == null)
+            return new CommandResponse("❌ Không tìm thấy task");
+
+        // Check quyền
+        var isMentor = task.TeamId.HasValue &&
+                       await _teamService.IsPM(userId, task.TeamId.Value);
+
+        var isAssignee = task.AssignedTo == userId;
+
+        if (!isMentor && !isAssignee)
+            return new CommandResponse("❌ Bạn không có quyền sửa task này");
+
+        // Mentor → full form
+        if (isMentor)
         {
-            return new CommandResponse("❌ Dùng: !task update <taskId>");
+            var members = task.TeamId.HasValue
+                ? await _teamService.GetMembers(task.TeamId.Value)
+                : new List<string>();
+
+            return new CommandResponse(
+                TaskFormBuilder.BuildUpdateFormForMentor(task, members)
+            );
         }
 
-        if (!int.TryParse(parts[2], out var taskId))
-        {
-            return new CommandResponse("❌ Task ID không hợp lệ");
-        }
-
-        var session = _sessionService.Get(userId);
-        if (session?.TeamId == null)
-        {
-            return new CommandResponse("❌ Bạn chưa tham gia team nào!");
-        }
-
-        var isPM = await _teamService.IsPM(userId.ToString(), session.TeamId.Value);
-        if (!isPM)
-        {
-            return new CommandResponse("❌ Chỉ Mentor mới có quyền cập nhật task!");
-        }
-
-        // Tạo nút cập nhật (sẽ được xử lý bởi TaskComponentHandler)
-        var updateForm = new ChannelMessageContent
-        {
-            Text = "interactive",
-            Embed = new object[] { new { title = $"✏️ Cập nhật Task #{taskId}", description = "Nhấn nút bên dưới để cập nhật task", color = "#5865F2" } },
-            Components = new[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = $"UPDATE_TASK|{taskId}",
-                            type = 1,
-                            component = new { label = "✏️ Cập nhật task", style = 3 }
-                        }
-                    }
-                }
-            }
-        };
-
-        return new CommandResponse(updateForm);
+        // Member → chỉ update status
+        return new CommandResponse(
+            TaskFormBuilder.BuildUpdateFormForMember(task)
+        );
     }
 
-    // ==================== CẬP NHẬT TRẠNG THÁI (MEMBER) ====================
-    private async Task<CommandResponse> HandleTaskStatusUpdate(ChannelMessage message, string[] parts, long userId)
+    private async Task<CommandResponse> HandleDeletePrompt(string[] parts, string? userId, CancellationToken cancellationToken)
     {
-        if (parts.Length < 3)
-        {
-            return new CommandResponse("❌ Dùng: !task status <taskId>");
-        }
+        if (parts.Length < 3 || !int.TryParse(parts[2], out var taskId))
+            return new CommandResponse("❌ Dùng: `!task delete <taskId>`");
 
-        if (!int.TryParse(parts[2], out var taskId))
-        {
-            return new CommandResponse("❌ Task ID không hợp lệ");
-        }
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định được người dùng");
 
-        // Tạo nút cập nhật trạng thái (sẽ được xử lý bởi TaskComponentHandler)
-        var statusForm = new ChannelMessageContent
-        {
-            Text = "interactive",
-            Embed = new object[] { new { title = $"📊 Cập nhật trạng thái Task #{taskId}", description = "Nhấn nút bên dưới để cập nhật trạng thái", color = "#FEE75C" } },
-            Components = new[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = $"UPDATE_TASK_STATUS|{taskId}",
-                            type = 1,
-                            component = new { label = "📊 Cập nhật trạng thái", style = 3 }
-                        }
-                    }
-                }
-            }
-        };
+        var task = await _taskService.GetByIdAsync(taskId, cancellationToken);
+        if (task == null)
+            return new CommandResponse("❌ Không tìm thấy task");
 
-        return new CommandResponse(statusForm);
+        //  CHECK ROLE NGAY TỪ COMMAND
+        var isMentor = task.TeamId.HasValue &&
+                       await _teamService.IsPM(userId, task.TeamId.Value);
+
+        if (!isMentor)
+            return new CommandResponse("❌ Chỉ Mentor mới được dùng lệnh này");
+
+        return new CommandResponse(
+            TaskFormBuilder.BuildDeleteConfirm(task)
+        );
     }
 
-    // ==================== XÓA TASK (MENTOR) ====================
-    private async Task<CommandResponse> HandleTaskDelete(ChannelMessage message, string[] parts, long userId)
+    private static string GetHelpText() => """
+        📝 **Quản lý Task**
+        
+        `!task create` - Tạo task mới
+        `!task list` - Xem danh sách task
+        `!task update <id>` - Cập nhật task
+        `!task delete <id>` - Xóa task (Mentor)
+        """;
+
+    private static string? ParseContent(string? raw)
     {
-        if (parts.Length < 3)
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        if (!raw.StartsWith("{"))
+            return raw;
+
+        try
         {
-            return new CommandResponse("❌ Dùng: !task delete <taskId>");
+            using var json = JsonDocument.Parse(raw);
+            return json.RootElement.GetProperty("t").GetString();
         }
-
-        if (!int.TryParse(parts[2], out var taskId))
+        catch
         {
-            return new CommandResponse("❌ Task ID không hợp lệ");
+            return raw;
         }
-
-        var session = _sessionService.Get(userId);
-        if (session?.TeamId == null)
-        {
-            return new CommandResponse("❌ Bạn chưa tham gia team nào!");
-        }
-
-        var isPM = await _teamService.IsPM(userId.ToString(), session.TeamId.Value);
-        if (!isPM)
-        {
-            return new CommandResponse("❌ Chỉ Mentor mới có quyền xóa task!");
-        }
-
-        // Tạo nút xóa (sẽ được xử lý bởi TaskComponentHandler)
-        var deleteForm = new ChannelMessageContent
-        {
-            Text = "interactive",
-            Embed = new object[] { new { title = $"🗑️ Xóa Task #{taskId}", description = "Nhấn nút bên dưới để xóa task", color = "#ED4245" } },
-            Components = new[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = $"DELETE_TASK|{taskId}",
-                            type = 1,
-                            component = new { label = "🗑️ Xóa task", style = 4 }
-                        }
-                    }
-                }
-            }
-        };
-
-        return new CommandResponse(deleteForm);
-    }
-
-    private string GetHelpText()
-    {
-        return @"
-╔══════════════════════════════════════════════════════════════╗
-║                    📝 QUẢN LÝ TASK                          ║
-╚══════════════════════════════════════════════════════════════╝
-
-📌 **Các lệnh có sẵn:**
-
-1. **Tạo task mới**
-   `!task create` hoặc `!task form`
-
-2. **Xem danh sách task**
-   `!task list`
-
-3. **Cập nhật task (Chỉ Mentor)**
-   `!task update <taskId>`
-
-4. **Cập nhật trạng thái (Member)**
-   `!task status <taskId>`
-
-5. **Xóa task (Chỉ Mentor)**
-   `!task delete <taskId>`
-
-📌 **Ví dụ:**
-   `!task create`
-   `!task list`
-   `!task update 123`
-   `!task status 456`
-   `!task delete 789`
-";
-    }
-
-    // ================= PARSE =================
-    private string? ParseContent(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-
-        if (raw.StartsWith("{"))
-        {
-            try
-            {
-                var json = JsonDocument.Parse(raw);
-                return json.RootElement.GetProperty("t").GetString();
-            }
-            catch { }
-        }
-
-        return raw;
     }
 }

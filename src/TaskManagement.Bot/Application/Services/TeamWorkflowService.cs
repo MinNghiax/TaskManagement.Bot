@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Infrastructure.Entities;
 
 namespace TaskManagement.Bot.Application.Services;
@@ -38,7 +38,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new CreateTeamRequestResult
             {
                 Success = false,
-                Message = "Khong co thanh vien hop le de tao team"
+                Message = "Không có thành viên hợp lệ để tạo team"
             };
         }
 
@@ -47,7 +47,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new CreateTeamRequestResult
             {
                 Success = false,
-                Message = $"Project `{projectName}` da ton tai"
+                Message = $"Project `{projectName}` Đã tồn tại"
             };
         }
 
@@ -56,7 +56,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new CreateTeamRequestResult
             {
                 Success = false,
-                Message = $"Team `{teamName}` da ton tai"
+                Message = $"Team `{teamName}` đã tồn tại"
             };
         }
 
@@ -84,7 +84,7 @@ public class TeamWorkflowService : ITeamWorkflowService
         return new CreateTeamRequestResult
         {
             Success = true,
-            Message = $"Da gui yeu cau tao team `{teamName}`. Cho thanh vien xac nhan.",
+            Message = $"Đã gửi yêu cầu tạo team `{teamName}`. Chờ thành viên xác nhận.",
             RequestId = requestId,
             ProjectName = projectName,
             TeamName = teamName,
@@ -114,7 +114,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = false,
-                Message = "Ban khong co quyen xu ly yeu cau nay"
+                Message = "Bạn không có quyền xử lý yêu cầu này"
             };
         }
 
@@ -124,7 +124,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = false,
-                Message = "Yeu cau da het han hoac khong ton tai"
+                Message = "Yêu cầu đã hết hạn hoặc không tồn tại"
             };
         }
 
@@ -134,7 +134,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = false,
-                Message = "Yeu cau da het han"
+                Message = "Yêu cầu đã hết hạn"
             };
         }
 
@@ -143,7 +143,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = false,
-                Message = "Ban khong nam trong danh sach can xac nhan"
+                Message = "Bạn không nằm trong danh sách cần xác nhận"
             };
         }
 
@@ -153,7 +153,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = true,
-                Message = $"<@{currentUserId}> da tu choi. Yeu cau tao team bi huy."
+                Message = $"<@{currentUserId}> đã từ chối. Yêu cầu tạo team bị hủy."
             };
         }
 
@@ -162,7 +162,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = true,
-                Message = $"<@{currentUserId}> da xac nhan truoc do."
+                Message = $"<@{currentUserId}> đã xác nhận trước đó."
             };
         }
 
@@ -174,7 +174,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = true,
-                Message = $"<@{currentUserId}> da xac nhan ({request.AcceptedUserIds.Count}/{request.MemberUserIds.Count})."
+                Message = $"<@{currentUserId}> đã xác nhận ({request.AcceptedUserIds.Count}/{request.MemberUserIds.Count})."
             };
         }
 
@@ -184,7 +184,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = false,
-                Message = $"Project `{request.ProjectName}` da ton tai. Huy yeu cau."
+                Message = $"Project `{request.ProjectName}` đã tồn tại. Hủy yêu cầu."
             };
         }
 
@@ -194,7 +194,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = false,
-                Message = $"Team `{request.TeamName}` da ton tai. Huy yeu cau."
+                Message = $"Team `{request.TeamName}` đã tồn tại. Hủy yêu cầu."
             };
         }
 
@@ -213,7 +213,7 @@ public class TeamWorkflowService : ITeamWorkflowService
         {
             Success = true,
             TeamCreated = true,
-            Message = $"Team `{request.TeamName}` da tao thanh cong."
+            Message = $"Team `{request.TeamName}` đã tạo thành công."
         };
     }
 }

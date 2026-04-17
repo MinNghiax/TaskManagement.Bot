@@ -25,5 +25,14 @@ namespace TaskManagement.Bot.Application.Services
         Task<Team> CreateTeamWithProjectAsync(string projectName, string teamName, string pmUserId, List<string> memberUserIds);
 
         Task<List<Team>> GetTeamsByMemberAsync(string username);
+
+        Task<List<Team>> GetTeamsByProjectAsync(int projectId);
+
+        Task<List<Team>> GetAllAsync();
+        Task<List<string>> GetAllMembersAsync();
+
+        Task<bool> IsUserPMInAnyTeam(string userId);
+
+        Task<string?> GetPMIdAsync(int teamId);
     }
 }

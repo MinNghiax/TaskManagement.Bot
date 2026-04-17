@@ -358,7 +358,7 @@ public class BotService : IBotService
                     await SendMessageAsync(
                         deleteMessage.ClanId,
                         deleteMessage.ChannelId,
-                        "✅ Đã đóng form",
+                        "",
                         deleteMessage.Mode,
                         deleteMessage.IsPublic,
                         CancellationToken.None,

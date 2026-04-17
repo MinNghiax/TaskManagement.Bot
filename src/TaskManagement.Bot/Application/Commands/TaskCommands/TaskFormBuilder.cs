@@ -1,553 +1,496 @@
 ﻿using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.DTOs;
+using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.Commands.TaskCommands;
 
 public static class TaskFormBuilder
 {
-    public static ChannelMessageContent BuildTaskForm(List<string> teamMembers)
+    private const string EmptyOptionsPlaceholder = "[]";
+
+    public static ChannelMessageContent BuildCreateForm(List<Project> projects)
     {
-        var interactive = new
-        {
-            title = "📝 Tạo Task mới",
-            description = "Vui lòng điền thông tin task:",
-            color = "#FEE75C",
-            fields = new object[]
-            {
-                new
-                {
-                    name = "📌 Tiêu đề",
-                    value = "",
-                    inputs = new
-                    {
-                        id = "task_title",
-                        type = 3,
-                        component = new
-                        {
-                            id = "task_title_input",
-                            placeholder = "Nhập tiêu đề task (tối đa 100 ký tự)",
-                            defaultValue = "",
-                            type = "text",
-                            textarea = false,
-                            maxLength = 100
-                        }
-                    }
-                },
-                new
-                {
-                    name = "📝 Mô tả",
-                    value = "",
-                    inputs = new
-                    {
-                        id = "task_description",
-                        type = 3,
-                        component = new
-                        {
-                            id = "task_description_input",
-                            placeholder = "Nhập mô tả (không bắt buộc)",
-                            defaultValue = "",
-                            type = "text",
-                            textarea = true
-                        }
-                    }
-                },
-                new
-                {
-                    name = "⚡ Độ ưu tiên",
-                    value = "Chọn mức độ ưu tiên",
-                    inputs = new
-                    {
-                        id = "task_priority",
-                        type = 5,
-                        component = new object[]
-                        {
-                            new { label = "🔴 Cao", value = "High" },
-                            new { label = "🟡 Trung bình", value = "Medium" },
-                            new { label = "🟢 Thấp", value = "Low" }
-                        }
-                    }
-                },
-                new
-                {
-                    name = "⏰ Deadline",
-                    value = "",
-                    inputs = new
-                    {
-                        id = "task_deadline",
-                        type = 3,
-                        component = new
-                        {
-                            id = "task_deadline_input",
-                            placeholder = "YYYY-MM-DD HH:MM (ví dụ: 2024-12-31 23:59)",
-                            defaultValue = "",
-                            type = "text",
-                            textarea = false
-                        }
-                    }
-                },
-                new
-                {
-                    name = "👤 Giao cho",
-                    value = "Chọn người thực hiện",
-                    inputs = new
-                    {
-                        id = "task_assignee",
-                        type = 2,
-                        component = new
-                        {
-                            placeholder = "Chọn thành viên",
-                            options = teamMembers.Select(m => new
-                            {
-                                label = m.StartsWith("@") ? m : $"@{m}",
-                                value = m
-                            }).ToArray()
-                        }
-                    }
-                }
-            }
-        };
+        var projectOptions = projects.Select(p => new { label = p.Name, value = p.Id.ToString() }).ToArray();
 
         return new ChannelMessageContent
         {
-            Text = "interactive",
-            Embed = new[] { interactive },
-            Components = new[]
+            Embed = new[]
             {
                 new
                 {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = "SUBMIT_TASK",
-                            type = 1,
-                            component = new
-                            {
-                                label = "✅ Tạo Task",
-                                style = 3
-                            }
-                        },
-                        new
-                        {
-                            id = "CANCEL_TASK",
-                            type = 1,
-                            component = new
-                            {
-                                label = "❌ Hủy",
-                                style = 4
-                            }
-                        }
-                    }
-                }
-            }
-        };
-    }
-
-    // Form cập nhật task cho Mentor
-    public static ChannelMessageContent BuildUpdateTaskFormForMentor(TaskDto task, List<string> teamMembers)
-    {
-        var interactive = new
-        {
-            title = $"✏️ Cập nhật Task #{task.Id}",
-            description = "Vui lòng sửa thông tin task:",
-            color = "#5865F2",
-            fields = new object[]
-            {
-                new
-                {
-                    name = "📌 Tiêu đề",
-                    value = task.Title,
-                    inputs = new
-                    {
-                        id = "task_title",
-                        type = 3,
-                        component = new
-                        {
-                            id = "task_title_input",
-                            placeholder = "Nhập tiêu đề task (tối đa 100 ký tự)",
-                            defaultValue = task.Title,
-                            type = "text",
-                            textarea = false,
-                            maxLength = 100
-                        }
-                    }
-                },
-                new
-                {
-                    name = "📝 Mô tả",
-                    value = task.Description ?? "",
-                    inputs = new
-                    {
-                        id = "task_description",
-                        type = 3,
-                        component = new
-                        {
-                            id = "task_description_input",
-                            placeholder = "Nhập mô tả (không bắt buộc)",
-                            defaultValue = task.Description ?? "",
-                            type = "text",
-                            textarea = true
-                        }
-                    }
-                },
-                new
-                {
-                    name = "⚡ Độ ưu tiên",
-                    value = GetPriorityText(task.Priority),
-                    inputs = new
-                    {
-                        id = "task_priority",
-                        type = 5,
-                        component = new object[]
-                        {
-                            new { label = "🔴 Cao", value = "High", @default = task.Priority == EPriorityLevel.High },
-                            new { label = "🟡 Trung bình", value = "Medium", @default = task.Priority == EPriorityLevel.Medium },
-                            new { label = "🟢 Thấp", value = "Low", @default = task.Priority == EPriorityLevel.Low }
-                        }
-                    }
-                },
-                new
-                {
-                    name = "📊 Trạng thái",
-                    value = GetStatusText(task.Status),
-                    inputs = new
-                    {
-                        id = "task_status",
-                        type = 5,
-                        component = new object[]
-                        {
-                            new { label = "📋 ToDo", value = "ToDo", @default = task.Status == ETaskStatus.ToDo },
-                            new { label = "🔄 Doing", value = "Doing", @default = task.Status == ETaskStatus.Doing },
-                            new { label = "✅ Review", value = "Review", @default = task.Status == ETaskStatus.Review },
-                            new { label = "✔️ Completed", value = "Completed", @default = task.Status == ETaskStatus.Completed },
-                            new { label = "❌ Cancelled", value = "Cancelled", @default = task.Status == ETaskStatus.Cancelled }
-                        }
-                    }
-                },
-                new
-                {
-                    name = "⏰ Deadline",
-                    value = task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? "",
-                    inputs = new
-                    {
-                        id = "task_deadline",
-                        type = 3,
-                        component = new
-                        {
-                            id = "task_deadline_input",
-                            placeholder = "YYYY-MM-DD HH:MM",
-                            defaultValue = task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? "",
-                            type = "text",
-                            textarea = false
-                        }
-                    }
-                },
-                new
-                {
-                    name = "👤 Giao cho",
-                    value = task.AssignedTo ?? "",
-                    inputs = new
-                    {
-                        id = "task_assignee",
-                        type = 2,
-                        component = new
-                        {
-                            placeholder = "Chọn thành viên",
-                            options = teamMembers.Select(m => new
-                            {
-                                label = m.StartsWith("@") ? m : $"@{m}",
-                                value = m,
-                                @default = m == task.AssignedTo
-                            }).ToArray()
-                        }
-                    }
+                    title = "📝 Tạo Task mới",
+                    description = "Vui lòng điền thông tin task:",
+                    color = "#FEE75C",
+                    fields = BuildFormFields(
+                        projectOptions: projectOptions,
+                        teamOptions: Array.Empty<object>(),
+                        assigneeOptions: Array.Empty<object>()
+                    ),
+                    footer = new { text = "Trạng thái mặc định: ToDo" }
                 }
             },
-            footer = new
-            {
-                text = $"Task ID: {task.Id} | Người tạo: {task.CreatedBy}"
-            }
-        };
-
-        return new ChannelMessageContent
-        {
-            Text = "interactive",
-            Embed = new[] { interactive },
-            Components = new[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = $"UPDATE_TASK|{task.Id}",
-                            type = 1,
-                            component = new { label = "💾 Lưu cập nhật", style = 3 }
-                        },
-                        new
-                        {
-                            id = $"CANCEL_UPDATE|{task.Id}",
-                            type = 1,
-                            component = new { label = "❌ Hủy", style = 4 }
-                        }
-                    }
-                }
-            }
+            Components = BuildFormButtons("SELECT_PROJECT", "➡️ Tiếp tục")
         };
     }
 
-    // Form cập nhật trạng thái cho Member
-    public static ChannelMessageContent BuildUpdateTaskStatusFormForMember(TaskDto task)
+    public static ChannelMessageContent BuildFullCreateForm(
+    List<Project> projects,
+    List<Team> teams,
+    List<string> members)
     {
-        var interactive = new
+        var projectOptions = projects.Select(p => new
         {
-            title = $"✏️ Cập nhật trạng thái Task #{task.Id}",
-            description = $"📌 {task.Title}",
-            color = "#FEE75C",
-            fields = new object[]
+            label = p.Name,
+            value = p.Id.ToString()
+        }).ToArray();
+
+        var teamOptions = teams.Select(t => new
+        {
+            label = t.Name,
+            value = t.Id.ToString()
+        }).ToArray();
+
+        var memberOptions = members.Select(m => new
+        {
+            label = m,
+            value = m
+        }).ToArray();
+
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+            new
+            {
+                title = "📝 Tạo Task mới",
+                color = "#FEE75C",
+                fields = new object[]
+                {
+                    BuildSelectField("📁 Project", "task_project", "Chọn project", projectOptions),
+                    BuildSelectField("👥 Team", "task_team", "Chọn team", teamOptions),
+                    BuildSelectField("👤 Giao cho", "task_assignee", "Chọn thành viên", memberOptions),
+
+                    BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề", maxLength: 100),
+                    BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả"),
+                    BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM"),
+
+                    BuildRadioField("⚡ Độ ưu tiên", "task_priority", new object[]
+                    {
+                        new { label = "🔴 Cao", value = "High" },
+                        new { label = "🟡 Trung bình", value = "Medium", @default = true },
+                        new { label = "🟢 Thấp", value = "Low" }
+                    })
+                },
+                footer = new { text = "Trạng thái mặc định: ToDo" }
+            }
+        },
+            Components = BuildFormButtons("SUBMIT_TASK")
+        };
+    }
+
+    public static ChannelMessageContent BuildCreateFormWithTeams(int projectId, List<Team> teams)
+    {
+        var teamOptions = teams.Select(t => new { label = t.Name, value = t.Id.ToString() }).ToArray();
+
+        return new ChannelMessageContent
+        {
+            Embed = new[]
             {
                 new
                 {
-                    name = "📊 Trạng thái mới",
-                    value = $"Hiện tại: {GetStatusText(task.Status)}",
-                    inputs = new
-                    {
-                        id = "task_status",
-                        type = 5,
-                        component = new object[]
-                        {
-                            new { label = "📋 ToDo", value = "ToDo", @default = task.Status == ETaskStatus.ToDo },
-                            new { label = "🔄 Doing", value = "Doing", @default = task.Status == ETaskStatus.Doing },
-                            new { label = "✅ Review", value = "Review", @default = task.Status == ETaskStatus.Review },
-                            new { label = "✔️ Completed", value = "Completed", @default = task.Status == ETaskStatus.Completed }
-                        }
-                    }
+                    title = "📝 Tạo Task mới",
+                    description = "Đã chọn project. Vui lòng chọn team:",
+                    color = "#FEE75C",
+                    fields = BuildTeamOnlyFields(teamOptions),
+                    footer = new { text = "Trạng thái mặc định: ToDo" }
                 }
             },
-            footer = new
-            {
-                text = $"Task ID: {task.Id} | Giao cho: {task.AssignedTo}"
-            }
-        };
-
-        return new ChannelMessageContent
-        {
-            Text = "interactive",
-            Embed = new[] { interactive },
-            Components = new[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new
-                        {
-                            id = $"UPDATE_TASK_STATUS|{task.Id}",
-                            type = 1,
-                            component = new { label = "💾 Cập nhật", style = 3 }
-                        },
-                        new
-                        {
-                            id = $"CANCEL_UPDATE|{task.Id}",
-                            type = 1,
-                            component = new { label = "❌ Hủy", style = 4 }
-                        }
-                    }
-                }
-            }
+            Components = BuildFormButtons($"SELECT_TEAM|{projectId}", "Tiếp tục")
         };
     }
 
-    // Form danh sách task
-    public static ChannelMessageContent BuildTaskListForm(List<TaskDto> tasks, string role, string filter = "")
+    public static ChannelMessageContent BuildCreateFormWithMembers(int projectId, int teamId, List<string> members)
     {
+        var assigneeOptions = members.Select(m => new { label = m, value = m }).ToArray();
+
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+                new
+                {
+                    title = "📝 Tạo Task mới",
+                    description = "Vui lòng điền thông tin task:",
+                    color = "#FEE75C",
+                    fields = BuildDetailFields(assigneeOptions),
+                    footer = new { text = "Trạng thái mặc định: ToDo" }
+                }
+            },
+            Components = BuildFormButtons($"SUBMIT_TASK|{projectId}|{teamId}")
+        };
+    }
+
+    public static ChannelMessageContent BuildUpdateFormForMentor(TaskDto task, List<string> members)
+    {
+        var memberOptions = members.Select(m => new
+        {
+            label = m,
+            value = m,
+            @default = m == task.AssignedTo
+        }).ToArray();
+
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+                new
+                {
+                    title = $"✏️ Cập nhật Task #{task.Id}",
+                    description = $"TeamId: {task.TeamId ?? 0}",
+                    color = "#5865F2",
+                    fields = BuildUpdateFields(task, memberOptions),
+                    footer = new { text = $"Người tạo: {task.CreatedBy}" }
+                }
+            },
+            Components = BuildFormButtons($"UPDATE_TASK|{task.Id}", "💾 Lưu", "CANCEL_UPDATE", "❌ Hủy")
+        };
+    }
+
+    public static ChannelMessageContent BuildUpdateFormForMember(TaskDto task)
+    {
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+                new
+                {
+                    title = $"📊 Cập nhật trạng thái Task #{task.Id}",
+                    description = $"📌 {task.Title}",
+                    color = "#FEE75C",
+                    fields = BuildStatusUpdateFields(task),
+                    footer = new { text = $"Giao cho: {task.AssignedTo}" }
+                }
+            },
+            Components = BuildFormButtons($"UPDATE_STATUS|{task.Id}", "💾 Cập nhật", "CANCEL_UPDATE", "❌ Hủy")
+        };
+    }
+
+    public static ChannelMessageContent BuildTaskList(List<TaskDto> tasks, bool isMentor, string? filterBy = null)
+    {
+        var description = isMentor
+            ? "Với tư cách Mentor, bạn có thể quản lý tất cả task."
+            : "Danh sách task được giao cho bạn.";
+
         var taskList = tasks.Count == 0
             ? "Không có task nào."
             : string.Join("\n\n", tasks.Select((t, i) =>
-                $"{i + 1}. **{t.Title}**\n" +
-                $"   🆔 ID: `{t.Id}`\n" +
-                $"   📊 Trạng thái: {GetStatusText(t.Status)}\n" +
-                $"   ⚡ Ưu tiên: {GetPriorityText(t.Priority)}\n" +
-                $"   ⏰ Deadline: {t.DueDate:dd/MM/yyyy HH:mm}\n" +
-                $"   👤 Giao cho: {t.AssignedTo}\n" +
-                $"   👤 Người tạo: {t.CreatedBy}"));
-
-        var interactive = new
-        {
-            title = $"📋 Danh sách Task ({tasks.Count})",
-            description = role == "PM" ? "Với tư cách Mentor, bạn có thể quản lý tất cả task." : "Với tư cách Member, bạn chỉ thấy task của mình.",
-            color = "#57F287",
-            fields = new object[]
-            {
-                new
-                {
-                    name = "📝 Danh sách",
-                    value = taskList,
-                    inline = false
-                }
-            }
-        };
+                $"**{i + 1}. {t.Title}**\n" +
+                $"🆔 `{t.Id}` | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)}\n" +
+                $"⏰ {t.DueDate:dd/MM/yyyy HH:mm} | 👤 {t.AssignedTo}"));
 
         var components = new List<object>();
 
-        // Thêm các nút lọc (chỉ cho Mentor)
-        if (role == "PM")
+        if (isMentor)
         {
-            components.Add(new
-            {
-                id = "FILTER_BY_STATUS",
-                type = 1,
-                component = new { label = "🔍 Lọc theo trạng thái", style = 2 }
-            });
-            components.Add(new
-            {
-                id = "FILTER_BY_DEADLINE",
-                type = 1,
-                component = new { label = "⏰ Lọc theo deadline", style = 2 }
-            });
+            components.Add(new { id = "FILTER_STATUS", type = 1, component = new { label = "🔍 Lọc theo trạng thái", style = 2 } });
+            components.Add(new { id = "FILTER_USER", type = 1, component = new { label = "👤 Lọc theo người", style = 2 } });
+            components.Add(new { id = "FILTER_DEADLINE", type = 1, component = new { label = "⏰ Lọc theo deadline", style = 2 } });
         }
+
+        components.Add(new { id = "CLOSE_LIST", type = 1, component = new { label = "❌ Đóng", style = 4 } });
 
         return new ChannelMessageContent
         {
-            Text = "interactive",
-            Embed = new[] { interactive },
-            Components = new[]
+            Embed = new[]
             {
                 new
                 {
-                    type = 1,
-                    components = components.ToArray()
+                    title = $"📋 Danh sách Task ({tasks.Count})",
+                    description = description,
+                    color = "#57F287",
+                    fields = new object[]
+                    {
+                        new { name = "📝 Tasks", value = taskList, inline = false }
+                    }
                 }
-            }
+            },
+            Components = new[] { new { components = components.ToArray() } }
         };
     }
 
-    // Form xác nhận xóa task
-    public static ChannelMessageContent BuildDeleteTaskConfirmForm(TaskDto task)
+    public static ChannelMessageContent BuildDeleteConfirm(TaskDto task)
     {
-        var interactive = new
-        {
-            title = $"⚠️ Xác nhận xóa Task",
-            description = $"Bạn có chắc chắn muốn xóa task này?",
-            color = "#ED4245",
-            fields = new object[]
-            {
-                new
-                {
-                    name = "📌 Tiêu đề",
-                    value = task.Title,
-                    inline = false
-                },
-                new
-                {
-                    name = "🆔 ID",
-                    value = task.Id.ToString(),
-                    inline = true
-                },
-                new
-                {
-                    name = "👤 Người tạo",
-                    value = task.CreatedBy,
-                    inline = true
-                }
-            },
-            footer = new
-            {
-                text = "Hành động này không thể hoàn tác!"
-            }
-        };
-
         return new ChannelMessageContent
         {
-            Text = "interactive",
-            Embed = new[] { interactive },
+            Embed = new[]
+            {
+                new
+                {
+                    title = "⚠️ Xác nhận xóa Task",
+                    description = "Hành động này không thể hoàn tác!",
+                    color = "#ED4245",
+                    fields = new object[]
+                    {
+                        new { name = "📌 Tiêu đề", value = task.Title, inline = false },
+                        new { name = "🆔 ID", value = task.Id.ToString(), inline = true },
+                        new { name = "👤 Người tạo", value = task.CreatedBy, inline = true }
+                    }
+                }
+            },
             Components = new[]
             {
                 new
                 {
-                    type = 1,
                     components = new object[]
                     {
-                        new
-                        {
-                            id = $"CONFIRM_DELETE_TASK|{task.Id}",
-                            type = 1,
-                            component = new { label = "✅ Xác nhận xóa", style = 4 }
-                        },
-                        new
-                        {
-                            id = $"CANCEL_DELETE|{task.Id}",
-                            type = 1,
-                            component = new { label = "❌ Hủy", style = 2 }
-                        }
+                        new { id = $"CONFIRM_DELETE|{task.Id}", type = 1, component = new { label = "✅ Xác nhận xóa", style = 4 } },
+                        new { id = "CANCEL_DELETE", type = 1, component = new { label = "❌ Hủy", style = 2 } }
                     }
                 }
             }
         };
     }
 
-    private static string GetPriorityText(EPriorityLevel priority)
+    public static ChannelMessageContent BuildTaskResult(TaskDto task)
     {
-        return priority switch
+        return new ChannelMessageContent
         {
-            EPriorityLevel.High => "🔴 Cao",
-            EPriorityLevel.Medium => "🟡 Trung bình",
-            EPriorityLevel.Low => "🟢 Thấp",
-            _ => "⚪ Không xác định"
+            Embed = new[]
+            {
+                new
+                {
+                    title = "✅ Task đã được tạo!",
+                    description = task.Title,
+                    color = "#57F287",
+                    fields = new object[]
+                    {
+                        new { name = "🆔 ID", value = task.Id.ToString(), inline = true },
+                        new { name = "📊 Trạng thái", value = GetStatusText(task.Status), inline = true },
+                        new { name = "⚡ Ưu tiên", value = GetPriorityText(task.Priority), inline = true },
+                        new { name = "⏰ Deadline", value = task.DueDate?.ToString("dd/MM/yyyy HH:mm") ?? "Không có", inline = true },
+                        new { name = "👤 Giao cho", value = task.AssignedTo ?? "Chưa giao", inline = true },
+                        new { name = "👤 Người tạo", value = task.CreatedBy ?? "Unknown", inline = true }
+                    },
+                    footer = new { text = $"Tạo lúc: {task.CreatedAt:dd/MM/yyyy HH:mm}" }
+                }
+            },
+            Components = Array.Empty<object>()
         };
     }
 
-    private static string GetStatusText(ETaskStatus status)
+
+    private static object[] BuildFormFields(object[] projectOptions, object[] teamOptions, object[] assigneeOptions)
     {
-        return status switch
+        return new object[]
         {
-            ETaskStatus.ToDo => "📋 ToDo",
-            ETaskStatus.Doing => "🔄 Doing",
-            ETaskStatus.Review => "✅ Review",
-            ETaskStatus.Completed => "✔️ Completed",
-            ETaskStatus.Cancelled => "❌ Cancelled",
-            _ => "❓ Unknown"
+            BuildSelectField("📁 Project", "task_project", "Chọn project", projectOptions),
+            BuildSelectField("👥 Team", "task_team", "Chọn team", teamOptions),
+            BuildSelectField("👤 Giao cho", "task_assignee", "Chọn thành viên", assigneeOptions),
+            BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề (tối đa 100 ký tự)", maxLength: 100),
+            BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả (không bắt buộc)"),
+            BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM"),
+            BuildRadioField("⚡ Độ ưu tiên", "task_priority", new object[]
+            {
+                new { label = "🔴 Cao", value = "High" },
+                new { label = "🟡 Trung bình", value = "Medium", @default = true },
+                new { label = "🟢 Thấp", value = "Low" }
+            })
         };
     }
 
+    private static object[] BuildTeamOnlyFields(object[] teamOptions)
+    {
+        return new object[]
+        {
+            BuildSelectField("👥 Team", "task_team", "Chọn team", teamOptions)
+        };
+    }
 
-    public static (bool isValid, string message) ValidateTaskForm(string title, string deadline, string assignee)
+    private static object[] BuildDetailFields(object[] assigneeOptions)
+    {
+        return new object[]
+        {
+            BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề (tối đa 100 ký tự)", maxLength: 100),
+            BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả (không bắt buộc)"),
+            BuildRadioField("⚡ Độ ưu tiên", "task_priority", new object[]
+            {
+                new { label = "🔴 Cao", value = "High" },
+                new { label = "🟡 Trung bình", value = "Medium", @default = true },
+                new { label = "🟢 Thấp", value = "Low" }
+            }),
+            BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM"),
+            BuildSelectField("👤 AssignedTo", "task_assignee", "Chọn thành viên", assigneeOptions)
+        };
+    }
+
+    private static object[] BuildUpdateFields(TaskDto task, object[] memberOptions)
+    {
+        return new object[]
+        {
+            BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề", defaultValue: task.Title ?? "", maxLength: 100),
+            BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả", defaultValue: task.Description ?? ""),
+            BuildRadioField("⚡ Độ ưu tiên", "task_priority", new[]
+            {
+                new { label = "🔴 Cao", value = "High", @default = task.Priority == EPriorityLevel.High },
+                new { label = "🟡 Trung bình", value = "Medium", @default = task.Priority == EPriorityLevel.Medium },
+                new { label = "🟢 Thấp", value = "Low", @default = task.Priority == EPriorityLevel.Low }
+            }),
+            BuildRadioField("📊 Trạng thái", "task_status", new[]
+            {
+                new { label = "📋 ToDo", value = "ToDo", @default = task.Status == ETaskStatus.ToDo },
+                new { label = "🔄 Doing", value = "Doing", @default = task.Status == ETaskStatus.Doing },
+                new { label = "✅ Review", value = "Review", @default = task.Status == ETaskStatus.Review },
+                new { label = "✔️ Completed", value = "Completed", @default = task.Status == ETaskStatus.Completed },
+                new { label = "❌ Cancelled", value = "Cancelled", @default = task.Status == ETaskStatus.Cancelled }
+            }),
+            BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM", defaultValue: task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? ""),
+            BuildSelectField("👤 AssignedTo", "task_assignee", "Chọn thành viên", memberOptions)
+        };
+    }
+
+    private static object[] BuildStatusUpdateFields(TaskDto task)
+    {
+        return new object[]
+        {
+            BuildRadioField("📊 Trạng thái mới", "task_status", new[]
+            {
+                new { label = "🔄 Doing", value = "Doing", @default = task.Status == ETaskStatus.Doing },
+                new { label = "✅ Review", value = "Review", @default = task.Status == ETaskStatus.Review }
+            })
+        };
+    }
+
+    private static object BuildSelectField(string name, string id, string placeholder, object[] options)
+    {
+        return new
+        {
+            name,
+            inputs = new
+            {
+                id,
+                type = 2,
+                component = new { placeholder, options }
+            }
+        };
+    }
+
+    private static object BuildTextField(string name, string id, string placeholder, string defaultValue = "", int? maxLength = null)
+    {
+        var component = new Dictionary<string, object>
+        {
+            ["id"] = $"{id}_input",
+            ["placeholder"] = placeholder,
+            ["defaultValue"] = defaultValue,
+            ["type"] = "text",
+            ["textarea"] = false
+        };
+
+        if (maxLength.HasValue)
+            component["maxLength"] = maxLength.Value;
+
+        return new
+        {
+            name,
+            value = defaultValue,
+            inputs = new
+            {
+                id,
+                type = 3,
+                component
+            }
+        };
+    }
+
+    private static object BuildTextAreaField(string name, string id, string placeholder, string defaultValue = "")
+    {
+        return new
+        {
+            name,
+            value = defaultValue,
+            inputs = new
+            {
+                id,
+                type = 3,
+                component = new
+                {
+                    id = $"{id}_input",
+                    placeholder,
+                    defaultValue,
+                    type = "text",
+                    textarea = true
+                }
+            }
+        };
+    }
+
+    private static object BuildRadioField(string name, string id, object[] options)
+    {
+        return new
+        {
+            name,
+            inputs = new
+            {
+                id,
+                type = 5,
+                component = options
+            }
+        };
+    }
+
+    private static object[] BuildFormButtons(string submitId, string submitLabel = "✅ Tạo Task", string cancelId = "CANCEL_TASK", string cancelLabel = "❌ Hủy")
+    {
+        return new[]
+        {
+            new
+            {
+                components = new object[]
+                {
+                    new { id = submitId, type = 1, component = new { label = submitLabel, style = 3 } },
+                    new { id = cancelId, type = 1, component = new { label = cancelLabel, style = 4 } }
+                }
+            }
+        };
+    }
+
+    public static (bool IsValid, string Message) ValidateTaskForm(string title, string deadline, string assignee)
     {
         if (string.IsNullOrWhiteSpace(title))
-        {
             return (false, "❌ Tiêu đề không được để trống");
-        }
 
         if (title.Length > 100)
-        {
             return (false, "❌ Tiêu đề tối đa 100 ký tự");
-        }
 
         if (string.IsNullOrWhiteSpace(deadline))
-        {
             return (false, "❌ Deadline không được để trống");
-        }
 
         if (!DateTime.TryParse(deadline, out var deadlineDate))
-        {
             return (false, "❌ Định dạng deadline không hợp lệ. Dùng: YYYY-MM-DD HH:MM");
-        }
 
         if (deadlineDate <= DateTime.Now)
-        {
             return (false, "❌ Deadline phải lớn hơn thời gian hiện tại");
-        }
 
         if (string.IsNullOrWhiteSpace(assignee))
-        {
             return (false, "❌ Vui lòng chọn người được giao");
-        }
 
         return (true, "✅ Hợp lệ");
     }
+
+    public static string GetStatusText(ETaskStatus status) => status switch
+    {
+        ETaskStatus.ToDo => "📋 ToDo",
+        ETaskStatus.Doing => "🔄 Doing",
+        ETaskStatus.Review => "✅ Review",
+        ETaskStatus.Completed => "✔️ Completed",
+        ETaskStatus.Cancelled => "❌ Cancelled",
+        _ => "❓ Unknown"
+    };
+
+    public static string GetPriorityText(EPriorityLevel priority) => priority switch
+    {
+        EPriorityLevel.High => "🔴 Cao",
+        EPriorityLevel.Medium => "🟡 Trung bình",
+        EPriorityLevel.Low => "🟢 Thấp",
+        _ => "⚪ Unknown"
+    };
 }
