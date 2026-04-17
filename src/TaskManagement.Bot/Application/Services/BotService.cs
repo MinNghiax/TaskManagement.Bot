@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using Mezon.Sdk;
@@ -39,6 +39,7 @@ public class BotService : IBotService
     private readonly MezonClient _client;
     private readonly IEnumerable<ICommandHandler> _commandHandlers;
     private readonly IEnumerable<IComponentHandler> _componentHandlers;
+    private readonly IMezonUserService _userService;
     private readonly ConcurrentDictionary<string, string> _channelClanMap = new();
     private HashSet<string> _dmChannelIds = new();
     private string? _botUserId;
@@ -47,12 +48,14 @@ public class BotService : IBotService
         ILogger<BotService> logger,
         MezonClient client,
         IEnumerable<ICommandHandler> commandHandlers,
-        IEnumerable<IComponentHandler> componentHandlers)
+        IEnumerable<IComponentHandler> componentHandlers,
+        IMezonUserService userService)
     {
         _logger = logger;
         _client = client;
         _commandHandlers = commandHandlers;
         _componentHandlers = componentHandlers;
+        _userService = userService;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -79,6 +82,21 @@ public class BotService : IBotService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[DM CACHE] Failed to cache DM channel ids");
+        }
+
+        // 🚀 PRELOAD ALL CLAN MEMBERS using new MezonUserService
+        _logger.LogInformation("[USER_PRELOAD] Starting user preload from all clans...");
+        try
+        {
+            var totalUsers = await _userService.PreloadAllClanMembersAsync(cancellationToken);
+            _logger.LogInformation(
+                "[USER_PRELOAD] ✅ Successfully preloaded {TotalUsers} users. Cache size: {CacheSize}",
+                totalUsers,
+                _userService.GetCacheSize());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[USER_PRELOAD] ❌ Failed to preload users. Will rely on message-based caching.");
         }
 
         _logger.LogInformation("Bot connected and ready");
@@ -233,6 +251,36 @@ public class BotService : IBotService
             if (!string.IsNullOrWhiteSpace(message.ChannelId) && !string.IsNullOrWhiteSpace(message.ClanId))
             {
                 _channelClanMap[message.ChannelId] = message.ClanId;
+            }
+
+            // 📨 Cache user from message (real-time updates)
+            if (!string.IsNullOrWhiteSpace(message.SenderId))
+            {
+                _userService.CacheUserFromMessage(
+                    message.SenderId,
+                    message.ClanNick,
+                    message.DisplayName,
+                    message.Username,
+                    message.ClanAvatar,
+                    message.ClanId);
+            }
+
+            // Cache all mentioned users
+            if (message.Mentions != null)
+            {
+                foreach (var mention in message.Mentions)
+                {
+                    if (!string.IsNullOrWhiteSpace(mention.UserId))
+                    {
+                        _userService.CacheUserFromMessage(
+                            mention.UserId,
+                            null, // ApiMessageMention doesn't have ClanNick
+                            null, // ApiMessageMention doesn't have DisplayName
+                            mention.Username,
+                            null,
+                            message.ClanId);
+                    }
+                }
             }
 
             var content = ParseContent(message.Content?.Text);

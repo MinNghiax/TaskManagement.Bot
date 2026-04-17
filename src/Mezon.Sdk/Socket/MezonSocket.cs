@@ -655,19 +655,26 @@ public sealed class MezonSocket : IMezonSocket
         try
         {
             var mentionList = Proto.MessageMentionList.Parser.ParseFrom(rawMentions);
-            return mentionList.Mentions
-                .Select(m => new ApiMessageMention
+            var mentions = mentionList.Mentions
+                .Select(m =>
                 {
-                    Id = m.Id == 0 ? null : m.Id.ToString(),
-                    UserId = m.UserId == 0 ? null : m.UserId.ToString(),
-                    Username = string.IsNullOrWhiteSpace(m.Username) ? null : m.Username,
-                    RoleId = m.RoleId == 0 ? null : m.RoleId.ToString(),
-                    RoleName = string.IsNullOrWhiteSpace(m.Rolename) ? null : m.Rolename,
-                    CreateTime = m.CreateTimeSeconds == 0 ? null : m.CreateTimeSeconds.ToString(),
-                    S = m.S,
-                    E = m.E
+                    var mention = new ApiMessageMention
+                    {
+                        Id = m.Id == 0 ? null : m.Id.ToString(),
+                        UserId = m.UserId == 0 ? null : m.UserId.ToString(),
+                        Username = string.IsNullOrWhiteSpace(m.Username) ? null : m.Username,
+                        RoleId = m.RoleId == 0 ? null : m.RoleId.ToString(),
+                        RoleName = string.IsNullOrWhiteSpace(m.Rolename) ? null : m.Rolename,
+                        CreateTime = m.CreateTimeSeconds == 0 ? null : m.CreateTimeSeconds.ToString(),
+                        S = m.S,
+                        E = m.E
+                    };
+                    
+                    return mention;
                 })
                 .ToArray();
+            
+            return mentions;
         }
         catch (Exception ex)
         {

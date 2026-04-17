@@ -832,6 +832,11 @@ public sealed class MessageMention
     public long CreateTimeSeconds { get; set; }
     public int S { get; set; }
     public int E { get; set; }
+    
+    // Additional fields for user display info
+    public string DisplayName { get; set; } = "";
+    public string ClanNick { get; set; } = "";
+    public string Avatar { get; set; } = "";
 
     public byte[] Encode()
     {
@@ -845,6 +850,9 @@ public sealed class MessageMention
         if (CreateTimeSeconds != 0) WriteFixed64(writer, 6, (ulong)CreateTimeSeconds);
         if (S != 0) WriteVarintField(writer, 7, S);
         if (E != 0) WriteVarintField(writer, 8, E);
+        WriteString(writer, 9, DisplayName);
+        WriteString(writer, 10, ClanNick);
+        WriteString(writer, 11, Avatar);
         return ms.ToArray();
     }
 
@@ -875,6 +883,9 @@ public sealed class MessageMention
                     case 3: m.Username = Encoding.UTF8.GetString(data); break;
                     case 4: m.RoleId = Encoding.UTF8.GetString(data); break;
                     case 5: m.RoleName = Encoding.UTF8.GetString(data); break;
+                    case 9: m.DisplayName = Encoding.UTF8.GetString(data); break;
+                    case 10: m.ClanNick = Encoding.UTF8.GetString(data); break;
+                    case 11: m.Avatar = Encoding.UTF8.GetString(data); break;
                 }
             }
             else if (wireType == 0)

@@ -1,71 +1,47 @@
 using TaskManagement.Bot.Application.DTOs;
-using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.Services;
 
 public interface IReportService
 {
-    // ===== EXISTING METHODS =====
-    Task<PersonalReportDto> GetPersonalReportAsync(
-        string userId,
-        string? clanId = null,
-        string? channelId = null);
-
-    Task<TeamReportDto> GetTeamReportAsync(
-        string? clanId = null,
-        string? channelId = null);
-
-    Task<StatisticsReportDto> GetStatisticsReportAsync(
-        ETimeRange timeRange,
-        string? clanId = null,
-        string? channelId = null);
-
-    Task<List<DetailedTaskReportDto>> GetOverdueTasksAsync(
-        string? clanId = null,
-        string? channelId = null);
-
-    Task<List<DetailedTaskReportDto>> GetProgressReportAsync(
-        string? userId = null,
-        string? clanId = null,
-        string? channelId = null);
-
-    // ===== NEW COMPREHENSIVE METHODS =====
+    /// <summary>
+    /// !report me - Báo cáo cá nhân cho MEMBER
+    /// Hiển thị: Projects → Teams → Tasks của user
+    /// </summary>
+    Task<UserPersonalReportDto> GetUserPersonalReportAsync(string userId);
 
     /// <summary>
-    /// Get comprehensive report for a single task with all related information:
-    /// task details, team/project context, reminders, complaints, health metrics
+    /// !report - Báo cáo cho PM
+    /// Trả về danh sách Projects mà PM tạo để chọn
     /// </summary>
-    Task<ComprehensiveTaskReportDto> GetComprehensiveTaskReportAsync(int taskId);
+    Task<PMProjectListDto> GetPMProjectsAsync(string pmUserId);
 
     /// <summary>
-    /// Get enhanced personal report showing all tasks with health status tracking
+    /// Lấy danh sách Teams thuộc Project (cho PM chọn)
     /// </summary>
-    Task<EnhancedPersonalTaskReportDto> GetEnhancedPersonalReportAsync(
-        string userId,
-        string? clanId = null,
-        string? channelId = null);
+    Task<List<TeamSummaryDto>> GetTeamsByProjectAsync(int projectId);
 
     /// <summary>
-    /// Get team health report - overall team metrics and member performance
+    /// Lấy báo cáo chi tiết của Team (group theo Member)
     /// </summary>
-    Task<TeamHealthReportDto> GetTeamHealthReportAsync(int teamId);
+    Task<TeamDetailReportDto> GetTeamDetailReportAsync(int teamId);
 
     /// <summary>
-    /// Get task analytics - productivity and velocity metrics for time period
+    /// !report @user - Báo cáo của 1 user cụ thể cho PM
+    /// PM chỉ được xem báo cáo của user trong các Project mà PM tạo
     /// </summary>
-    Task<TaskAnalyticsReportDto> GetTaskAnalyticsReportAsync(
-        ETimeRange timeRange,
-        string? clanId = null,
-        string? channelId = null);
+    Task<UserReportByPMDto> GetUserReportByPMAsync(string targetUserId, string pmUserId);
 
     /// <summary>
-    /// Find tasks by various criteria for dashboard/filtering
+    /// !report today/week/month - Báo cáo theo thời gian cho PM
+    /// Filter tasks theo DueDate, group theo Member
     /// </summary>
-    Task<List<ComprehensiveTaskReportDto>> FindTasksAsync(
-        string? status = null,
-        string? priority = null,
-        string? assignedTo = null,
-        string? createdBy = null,
-        bool? onlyOverdue = false,
-        bool? onlyAtRisk = false);
+    Task<TimeBasedReportDto> GetTimeBasedReportAsync(string pmUserId, TimeRangeFilter timeRange);
+}
+
+public enum TimeRangeFilter
+{
+    Today,
+    Week,
+    Month
 }
