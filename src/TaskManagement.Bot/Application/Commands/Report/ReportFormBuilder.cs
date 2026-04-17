@@ -1,9 +1,10 @@
 using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.DTOs;
+using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.Commands.Report;
 
-public class ReportFormBuilder
+public static class ReportFormBuilder
 {
     private static DateTime GetVietnamTime()
     {
@@ -16,378 +17,470 @@ public class ReportFormBuilder
         return $"{GetVietnamTime():dd-MM-yyyy HH:mm:ss} (GMT+7)";
     }
 
-    private static string BuildProjectSummary(ProjectStatisticsDto project)
+    public static ChannelMessageContent BuildUserPersonalReportForm(UserPersonalReportDto report)
     {
-        return $"{project.ProjectName}: +{project.CreatedTasks}, closed {project.CompletedTasks}, todo {project.PendingTasks}, doing {project.DoingTasks}, review {project.ReviewTasks}, late {project.LateTasks}, overdue {project.OverdueTasks}";
+        var fields = new List<object>
+        {
+            new { name = "👤 User", value = report.Username, inline = true },
+            new { name = "📌 Total Tasks", value = report.TotalTasks.ToString(), inline = true },
+            new { name = "✅ Completed", value = report.CompletedTasks.ToString(), inline = true },
+            new { name = "📈 Completion Rate", value = $"{report.CompletionRate:F1}%", inline = true },
+        };
+
+        foreach (var project in report.Projects)
+        {
+            fields.Add(new
+            {
+                name = $"🎯 Project: {project.ProjectName}",
+                value = "━━━━━━━━━━━━━━━━━━━━",
+                inline = false
+            });
+
+            foreach (var team in project.Teams)
+            {
+                var taskList = team.Tasks.Count == 0
+                    ? "  _Không có task_"
+                    : string.Join("\n", team.Tasks.Select(t =>
+                        $"  • **{t.Title}** - {GetStatusEmoji(t.Status)} {t.Status} | {GetPriorityEmoji(t.Priority)} {t.Priority} | 📅 {t.DueDate:dd/MM/yyyy}"));
+
+                var teamSummary = $"**👥 Team: {team.TeamName}**\n" +
+                                  $"📊 {team.TotalTasks} tasks | ✅ {team.CompletedTasks} completed | 📈 {team.CompletionRate:F1}%\n\n" +
+                                  $"{taskList}";
+
+                fields.Add(new
+                {
+                    name = $"",
+                    value = teamSummary,
+                    inline = false
+                });
+            }
+        }
+
+        if (report.TotalTasks == 0)
+        {
+            fields.Add(new
+            {
+                name = "ℹ️ Thông báo",
+                value = "Bạn chưa có task nào được giao.",
+                inline = false
+            });
+        }
+
+        var interactive = new
+        {
+            title = $"📊 BÁO CÁO CÁ NHÂN - {report.Username}",
+            description = "Danh sách task của bạn theo Project và Team",
+            color = "#0099ff",
+            fields = fields.ToArray(),
+            footer = new
+            {
+                text = $"Được tạo vào {FormatVNTime()}"
+            }
+        };
+
+        return new ChannelMessageContent
+        {
+            Embed = new[] { interactive }
+        };
     }
 
-    private static string BuildProjectCoverageText(StatisticsReportDto report)
+    public static ChannelMessageContent BuildPMProjectSelectionForm(PMProjectListDto report, string clanId)
     {
         if (report.Projects.Count == 0)
         {
-            return "No project data";
+            return new ChannelMessageContent
+            {
+                Text = "❌ Bạn chưa tạo project nào. Sử dụng lệnh `!create team` để tạo project và team."
+            };
         }
 
-        return string.Join(
-            "\n",
-            report.Projects
-                .Take(3)
-                .Select(BuildProjectSummary));
-    }
+        var projectOptions = report.Projects.Select(p => new
+        {
+            label = $"{p.ProjectName} ({p.TeamCount} teams, {p.TotalTasks} tasks)",
+            value = p.ProjectId.ToString()
+        }).ToArray();
 
-    public static ChannelMessageContent BuildPersonalReportForm(
-        PersonalReportDto report,
-        string username)
-    {
+        var fields = new List<object>
+        {
+            new
+            {
+                name = "📁 Danh sách Projects",
+                value = string.Join("\n", report.Projects.Select(p =>
+                    $"• **{p.ProjectName}** - {p.TeamCount} teams, {p.TotalTasks} tasks")),
+                inline = false
+            }
+        };
+
         var interactive = new
         {
-            title = $"📊 PERSONAL REPORT - {username}",
-            description = $"Task summary for {username}",
-            color = "#0099ff",
-            fields = new object[]
-            {
-                new { name = "👤 User", value = username, inline = true },
-                new { name = "📌 Total Tasks", value = report.TotalTasks.ToString(), inline = true },
-                new { name = "✅ Completed", value = report.CompletedTasks.ToString(), inline = true },
-                new { name = "🚧 Doing", value = report.DoingTasks.ToString(), inline = true },
-                new { name = "⏳ Todo", value = report.ToDoTasks.ToString(), inline = true },
-                new { name = "⚠️ Late", value = report.LateTasks.ToString(), inline = true },
-                new { name = "📈 Completion Rate", value = $"{report.CompletionRate:F2}%", inline = false }
-            },
+            title = "📊 BÁO CÁO TEAM - Chọn Project",
+            description = "Vui lòng chọn Project để xem báo cáo:",
+            color = "#5865F2",
+            fields = fields.ToArray(),
             footer = new
             {
-                text = $"Được tạo vào ngày {FormatVNTime()}"
+                text = "Chọn project từ dropdown bên dưới và nhấn 'Tiếp tục'"
             }
         };
 
         return new ChannelMessageContent
         {
-            Text = $"Báo cáo thông kê cho Sốp iu đây, hẹ hẹ!",
-            Embed = [interactive]
+            Embed = new[] { interactive },
+            Components = new[]
+            {
+                new
+                {
+                    type = 1,
+                    components = new object[]
+                    {
+                        new
+                        {
+                            id = "selected_project",
+                            type = 2,
+                            component = new
+                            {
+                                placeholder = "Chọn project...",
+                                options = projectOptions
+                            }
+                        }
+                    }
+                },
+                new
+                {
+                    type = 1,
+                    components = new object[]
+                    {
+                        new
+                        {
+                            id = $"REPORT_SELECT_PROJECT|{clanId}",
+                            type = 1,
+                            component = new { label = "➡️ Tiếp tục", style = 3 }
+                        },
+                        new
+                        {
+                            id = $"REPORT_CANCEL|{clanId}",
+                            type = 1,
+                            component = new { label = "❌ Hủy", style = 4 }
+                        }
+                    }
+                }
+            }
         };
     }
 
-    public static ChannelMessageContent BuildTeamReportForm(
-        TeamReportDto report,
-        string? channelLabel)
+    public static ChannelMessageContent BuildTeamSelectionForm(int projectId, string projectName, List<TeamSummaryDto> teams, string clanId)
     {
+        if (teams.Count == 0)
+        {
+            return new ChannelMessageContent
+            {
+                Text = $"❌ Project **{projectName}** chưa có team nào."
+            };
+        }
+
+        var teamOptions = teams.Select(t => new
+        {
+            label = $"{t.TeamName} ({t.MemberCount} members, {t.TotalTasks} tasks)",
+            value = t.TeamId.ToString()
+        }).ToArray();
+
+        var fields = new List<object>
+        {
+            new
+            {
+                name = "👥 Danh sách Teams",
+                value = string.Join("\n", teams.Select(t =>
+                    $"• **{t.TeamName}** - {t.MemberCount} members, {t.TotalTasks} tasks")),
+                inline = false
+            }
+        };
+
         var interactive = new
         {
-            title = "👥 TEAM REPORT",
-            description = $"Team task summary for {channelLabel ?? "this channel"}",
-            color = "#00cc99",
-            fields = new object[]
-            {
-                new { name = "👨 Total Members", value = report.TotalMembers.ToString(), inline = true },
-                new { name = "📌 Total Tasks", value = report.TotalTasks.ToString(), inline = true },
-                new { name = "✅ Completed", value = report.CompletedTasks.ToString(), inline = true },
-                new { name = "⚠️ Overdue", value = report.TotalOverdueTasks.ToString(), inline = true },
-                new { name = "📈 Team Completion", value = $"{report.TeamCompletionRate:F2}%", inline = false }
-            },
+            title = $"📊 BÁO CÁO TEAM - Chọn Team",
+            description = $"Project: **{projectName}**",
+            color = "#5865F2",
+            fields = fields.ToArray(),
             footer = new
             {
-                text = $"Được tạo vào ngày {FormatVNTime()}"
+                text = "Chọn team từ dropdown bên dưới và nhấn 'Xem báo cáo'"
             }
         };
 
         return new ChannelMessageContent
         {
-            Text = $"Báo cáo thông kê cho Sốp iu đây, hẹ hẹ!",
-            Embed = [interactive]
-        };
-    }
-
-    public static ChannelMessageContent BuildStatisticsReportForm(
-        StatisticsReportDto report)
-    {
-        var timeRangeText = report.TimeRange.ToString().ToUpper();
-        var periodDesc = report.TimeRange.ToString().ToLower();
-
-        var interactive = new
-        {
-            title = $"📊 {timeRangeText} STATISTICS",
-            description = $"Activity and current task snapshot for {periodDesc}",
-            color = "#ff6600",
-            fields = new object[]
+            Text = "📊 Chọn Team để xem báo cáo",
+            Embed = new[] { interactive },
+            Components = new[]
             {
-                new { name = "📌 Created", value = report.TaskCreated.ToString(), inline = true },
-                new { name = "✅ Completed", value = report.TaskCompleted.ToString(), inline = true },
-                new { name = "🚧 In Progress", value = report.TaskInProgress.ToString(), inline = true },
-                new { name = "⏳ Pending", value = report.TaskPending.ToString(), inline = true },
-                new { name = "⚠️ Overdue", value = report.OverdueTasks.ToString(), inline = true },
-                new { name = "📈 Completion Rate", value = $"{report.CompletionRate:F2}%", inline = true }
-            },
-            footer = new
-            {
-                text = $"Period: {report.StartDate:dd-MM-yyyy} to {report.EndDate:dd-MM-yyyy} (VN Time) | Được tạo vào ngày {FormatVNTime()}"
+                new
+                {
+                    type = 1,
+                    components = new object[]
+                    {
+                        new
+                        {
+                            id = "selected_team",
+                            type = 2,
+                            component = new
+                            {
+                                placeholder = "Chọn team...",
+                                options = teamOptions
+                            }
+                        }
+                    }
+                },
+                new
+                {
+                    type = 1,
+                    components = new object[]
+                    {
+                        new
+                        {
+                            id = $"REPORT_SELECT_TEAM|{clanId}|{projectId}",
+                            type = 1,
+                            component = new { label = "➡️ Xem báo cáo", style = 3 }
+                        },
+                        new
+                        {
+                            id = $"REPORT_BACK_PROJECT|{clanId}",
+                            type = 1,
+                            component = new { label = "⬅️ Quay lại", style = 2 }
+                        },
+                        new
+                        {
+                            id = $"REPORT_CANCEL|{clanId}",
+                            type = 1,
+                            component = new { label = "❌ Hủy", style = 4 }
+                        }
+                    }
+                }
             }
         };
-
-        return new ChannelMessageContent
-        {
-            Text = $"Báo cáo thông kê cho Sốp iu đây, hẹ hẹ!",
-            Embed = [interactive]
-        };
     }
 
-    // ===== NEW COMPREHENSIVE REPORT FORMATTERS =====
-
-    public static ChannelMessageContent BuildComprehensiveTaskReport(ComprehensiveTaskReportDto task)
+    public static ChannelMessageContent BuildTeamDetailReportForm(TeamDetailReportDto report)
     {
         var fields = new List<object>
         {
-            new { name = $"{task.StatusIcon} Status", value = $"{task.Status} ({task.HealthStatus})", inline = true },
-            new { name = $"{task.PriorityIcon} Priority", value = task.Priority.ToString(), inline = true },
-            new { name = $"{task.TimeStatusIcon} Health", value = task.HealthStatus, inline = true },
-
-            new { name = "📌 Title", value = task.Title, inline = false },
+            new { name = "🎯 Project", value = report.ProjectName, inline = true },
+            new { name = "👥 Team", value = report.TeamName, inline = true },
+            new { name = "👨‍💼 Members", value = report.Members.Count.ToString(), inline = true },
         };
 
-        if (!string.IsNullOrEmpty(task.Description))
+        fields.Add(new
         {
-            var desc = task.Description.Length > 200 ? task.Description.Substring(0, 200) + "..." : task.Description;
-            fields.Add(new { name = "📝 Description", value = desc, inline = false });
-        }
-
-        fields.AddRange(new List<object>
-        {
-            new { name = "👤 Assignee", value = task.AssignedTo, inline = true },
-            new { name = "👨‍💼 Created By", value = task.CreatedBy, inline = true },
+            name = "━━━━━━━━━━━━━━━━━━━━",
+            value = "**CHI TIẾT THEO MEMBER**",
+            inline = false
         });
 
-        if (!string.IsNullOrEmpty(task.TeamName))
-            fields.Add(new { name = "👥 Team", value = task.TeamName, inline = true });
-        if (!string.IsNullOrEmpty(task.ProjectName))
-            fields.Add(new { name = "🎯 Project", value = task.ProjectName, inline = true });
-
-        // Timeline info
-        var dueDateStr = task.DueDate?.ToString("dd-MM-yyyy") ?? "No deadline";
-        var createdStr = task.CreatedAt.ToString("dd-MM-yyyy HH:mm");
-        fields.Add(new { name = "📅 Due Date", value = dueDateStr, inline = true });
-        fields.Add(new { name = "⏱️ Created", value = createdStr, inline = true });
-
-        // Time metrics
-        if (task.DaysOverdue > 0)
-            fields.Add(new { name = "🔴 Overdue", value = $"{task.DaysOverdue} days", inline = true });
-        else if (task.DaysUntilDue != int.MaxValue && task.DaysUntilDue > 0)
-            fields.Add(new { name = "🟡 Days Until Due", value = $"{task.DaysUntilDue} days ({(int)((double)task.DaysUntilDue / Math.Max(task.TotalDaysAllocated, 1) * 100)}%)", inline = true });
-
-        // Progress
-        if (task.TotalDaysAllocated > 0)
-            fields.Add(new { name = "📈 Progress", value = $"{task.ProgressPercentage:F1}% ({task.ProgressPercentage:F0}% of timeline)", inline = false });
-
-        // Associations
-        var clans = string.Join(", ", task.ClanIds.Take(3));
-        var channels = string.Join(", ", task.ChannelIds.Take(3));
-        if (!string.IsNullOrEmpty(clans))
-            fields.Add(new { name = "🏘️ Clans", value = clans, inline = true });
-        if (!string.IsNullOrEmpty(channels))
-            fields.Add(new { name = "📢 Channels", value = channels, inline = true });
-
-        // Reminders & Complaints
-        if (task.TotalReminders > 0)
+        foreach (var member in report.Members)
         {
-            var nextReminder = task.NextReminderAt?.ToString("HH:mm") ?? "N/A";
-            fields.Add(new { name = "🔔 Reminders", value = $"{task.TotalReminders} total | {task.PendingReminders} pending | Next: {nextReminder}", inline = false });
+            var taskList = member.Tasks.Count == 0
+                ? "  _Không có task_"
+                : string.Join("\n", member.Tasks.Select(t =>
+                    $"  • **{t.Title}** - {GetStatusEmoji(t.Status)} {t.Status} | {GetPriorityEmoji(t.Priority)} {t.Priority} | 📅 {t.DueDate:dd/MM/yyyy}"));
+
+            var memberSummary = $"**👤 {member.Username}**\n" +
+                                $"📊 {member.TotalTasks} tasks | ✅ {member.CompletedTasks} completed | 📈 {member.CompletionRate:F1}%\n\n" +
+                                $"{taskList}";
+
+            fields.Add(new
+            {
+                name = "",
+                value = memberSummary,
+                inline = false
+            });
         }
 
-        if (task.TotalComplaints > 0)
+        if (report.Members.Count == 0 || report.Members.All(m => m.TotalTasks == 0))
         {
-            var complaintSummary = $"Total: {task.TotalComplaints} | Pending: {task.PendingComplaints} | Approved: {task.ApprovedComplaints} | Rejected: {task.RejectedComplaints}";
-            fields.Add(new { name = "⚠️ Complaints", value = complaintSummary, inline = false });
+            fields.Add(new
+            {
+                name = "ℹ️ Thông báo",
+                value = "Team chưa có task nào.",
+                inline = false
+            });
         }
-
-        var color = task.HealthStatus switch
-        {
-            "Done" => "#00cc00",
-            "Overdue" => "#ff0000",
-            "At Risk" => "#ffaa00",
-            "On Track" => "#0099ff",
-            _ => "#808080"
-        };
 
         var interactive = new
         {
-            title = $"{task.StatusIcon} Task #{task.Id}: {task.Title}",
-            description = $"{task.TimeStatusIcon} {task.HealthStatus}",
-            color = color,
+            title = $"📊 BÁO CÁO TEAM - {report.TeamName}",
+            description = $"Project: {report.ProjectName}",
+            color = "#00cc99",
             fields = fields.ToArray(),
             footer = new
             {
-                text = $"Generated {FormatVNTime()}"
+                text = $"Được tạo vào {FormatVNTime()}"
             }
         };
 
         return new ChannelMessageContent
         {
-            Text = "📊 Chi tiết công việc chi tiết",
-            Embed = [interactive]
+            Embed = new[] { interactive }
         };
     }
 
-    public static ChannelMessageContent BuildEnhancedPersonalTaskReport(EnhancedPersonalTaskReportDto report, string username)
+    public static ChannelMessageContent BuildTimeBasedReportForm(TimeBasedReportDto report)
     {
-        var healthStatus = report.HealthScore >= 80 ? "🟢 Excellent"
-            : report.HealthScore >= 60 ? "🟡 Good"
-            : report.HealthScore >= 40 ? "🟠 Fair"
-            : "🔴 Needs Attention";
+        var timeRangeText = report.TimeRange switch
+        {
+            Application.Services.TimeRangeFilter.Today => "HÔM NAY",
+            Application.Services.TimeRangeFilter.Week => "TUẦN NÀY",
+            Application.Services.TimeRangeFilter.Month => "THÁNG NÀY",
+            _ => "CUSTOM"
+        };
 
         var fields = new List<object>
         {
-            new { name = "👤 User", value = username, inline = true },
-            new { name = "📊 Health Score", value = $"{report.HealthScore:F0}/100 {healthStatus}", inline = true },
-
-            new { name = "📌 Total Tasks", value = report.TotalTasks.ToString(), inline = true },
-            new { name = "✅ Completed", value = report.CompletedCount.ToString(), inline = true },
-            new { name = "🚧 Doing", value = report.DoingCount.ToString(), inline = true },
-            new { name = "📋 Review", value = report.ReviewCount.ToString(), inline = true },
-
-            new { name = "⏳ Todo", value = report.ToDoCount.ToString(), inline = true },
-            new { name = "⏸️ Paused", value = report.PausedCount.ToString(), inline = true },
-            new { name = "⚠️ Late", value = report.LateCount.ToString(), inline = true },
-
-            new { name = "📈 Completion Rate", value = $"{report.CompletionRate:F1}%", inline = true },
-            new { name = "🔴 Overdue Tasks", value = report.OverdueTasksCount.ToString(), inline = true },
-            new { name = "🟡 At-Risk Tasks", value = report.AtRiskTasksCount.ToString(), inline = true },
-
-            new { name = "📅 Total Overdue Days", value = report.TotalOverdueDays.ToString(), inline = true },
-            new { name = "👥 Teams", value = report.TeamCount.ToString(), inline = true },
-            new { name = "🔔 Pending Reminders", value = report.TotalPendingReminders.ToString(), inline = true },
+            new { name = "📅 Khoảng thời gian", value = $"{report.StartDate:dd/MM/yyyy} - {report.EndDate:dd/MM/yyyy}", inline = false },
+            new { name = "👥 Số members", value = report.Members.Count.ToString(), inline = true },
+            new { name = "📌 Tổng tasks", value = report.Members.Sum(m => m.TotalTasks).ToString(), inline = true },
         };
 
-        if (report.OverdueTasks.Any())
+        fields.Add(new
         {
-            var overdueStr = string.Join(", ", report.OverdueTasks.Take(3).Select(t => $"{t.Title} ({t.DaysOverdue}d)"));
-            fields.Add(new { name = "🔴 Overdue", value = overdueStr, inline = false });
+            name = "━━━━━━━━━━━━━━━━━━━━",
+            value = "**CHI TIẾT THEO MEMBER**",
+            inline = false
+        });
+
+        foreach (var member in report.Members)
+        {
+            var taskList = member.Tasks.Count == 0
+                ? "  _Không có task_"
+                : string.Join("\n", member.Tasks.Take(5).Select(t =>
+                    $"  • **{t.Title}** - {GetStatusEmoji(t.Status)} {t.Status} | 📅 {t.DueDate:dd/MM/yyyy}"));
+
+            if (member.Tasks.Count > 5)
+            {
+                taskList += $"\n  _... và {member.Tasks.Count - 5} tasks khác_";
+            }
+
+            var memberSummary = $"**👤 {member.Username}** ({member.TotalTasks} tasks)\n{taskList}";
+
+            fields.Add(new
+            {
+                name = "",
+                value = memberSummary,
+                inline = false
+            });
         }
 
-        if (report.AtRiskTasks.Any())
+        if (report.Members.Count == 0 || report.Members.All(m => m.TotalTasks == 0))
         {
-            var atRiskStr = string.Join(", ", report.AtRiskTasks.Take(3).Select(t => $"{t.Title} ({t.DaysUntilDue}d)"));
-            fields.Add(new { name = "🟡 At Risk", value = atRiskStr, inline = false });
+            fields.Add(new
+            {
+                name = "ℹ️ Thông báo",
+                value = $"Không có task nào trong khoảng thời gian {timeRangeText.ToLower()}.",
+                inline = false
+            });
         }
 
         var interactive = new
         {
-            title = $"📊 PERSONAL REPORT - {username}",
-            description = $"Health: {healthStatus}",
-            color = report.HealthScore >= 80 ? "#00cc00" : report.HealthScore >= 60 ? "#ffaa00" : "#ff0000",
+            title = $"📊 BÁO CÁO {timeRangeText}",
+            description = $"Tasks có deadline từ {report.StartDate:dd/MM/yyyy} đến {report.EndDate:dd/MM/yyyy}",
+            color = "#9b59b6",
             fields = fields.ToArray(),
             footer = new
             {
-                text = $"Generated {FormatVNTime()}"
+                text = $"Được tạo vào {FormatVNTime()}"
             }
         };
 
         return new ChannelMessageContent
         {
-            Text = $"📊 Báo cáo chi tiết cho {username}",
-            Embed = [interactive]
+            Embed = new[] { interactive }
         };
     }
 
-    public static ChannelMessageContent BuildTeamHealthReport(TeamHealthReportDto report)
+    public static ChannelMessageContent BuildUserReportByPMForm(UserReportByPMDto report)
     {
-        var healthColor = report.TeamHealthStatus switch
-        {
-            "Healthy" => "#00cc00",
-            "At Risk" => "#ffaa00",
-            "Critical" => "#ff0000",
-            _ => "#808080"
-        };
-
-        var healthEmoji = report.TeamHealthStatus switch
-        {
-            "Healthy" => "🟢",
-            "At Risk" => "🟡",
-            "Critical" => "🔴",
-            _ => "❓"
-        };
-
         var fields = new List<object>
         {
-            new { name = $"{healthEmoji} Team Health", value = report.TeamHealthStatus, inline = true },
-            new { name = "👥 Total Members", value = report.TotalMembers.ToString(), inline = true },
-            new { name = "🔧 Active Members", value = report.ActiveMembers.ToString(), inline = true },
-
+            new { name = "👤 User", value = report.Username, inline = true },
             new { name = "📌 Total Tasks", value = report.TotalTasks.ToString(), inline = true },
             new { name = "✅ Completed", value = report.CompletedTasks.ToString(), inline = true },
-            new { name = "📈 Completion Rate", value = $"{report.TeamCompletionRate:F1}%", inline = true },
-
-            new { name = "🔴 Overdue", value = $"{report.OverdueTasksCount} ({report.OverduePercentage:F1}%)", inline = true },
-            new { name = "🟡 At Risk", value = report.AtRiskTasksCount.ToString(), inline = true },
-
-            new { name = "🔥 Critical Priority", value = report.CriticalPriorityTasks.ToString(), inline = true },
-            new { name = "🔴 High Priority", value = report.HighPriorityTasks.ToString(), inline = true },
-            new { name = "🟡 Medium Priority", value = report.MediumPriorityTasks.ToString(), inline = true },
-            new { name = "🟢 Low Priority", value = report.LowPriorityTasks.ToString(), inline = true },
+            new { name = "📈 Completion Rate", value = $"{report.CompletionRate:F1}%", inline = true },
         };
 
-        if (report.MemberBreakdowns.Any())
+        if (report.StatusBreakdown.Any())
         {
-            var topMembers = report.MemberBreakdowns.OrderByDescending(m => m.CompletionRate).Take(3);
-            var memberStats = string.Join(" | ", topMembers.Select(m => $"{m.MemberId}: {m.CompletionRate:F0}%"));
-            fields.Add(new { name = "👥 Top Performers", value = memberStats, inline = false });
+            var statusText = string.Join(" | ", report.StatusBreakdown.Select(kvp =>
+                $"{GetStatusEmoji(kvp.Key)} {kvp.Key}: {kvp.Value}"));
+
+            fields.Add(new
+            {
+                name = "📊 Phân bố trạng thái",
+                value = statusText,
+                inline = false
+            });
+        }
+
+        if (report.Tasks.Any())
+        {
+            var taskList = string.Join("\n", report.Tasks.Select(t =>
+                $"• **{t.Title}** - {GetStatusEmoji(t.Status)} {t.Status} | {GetPriorityEmoji(t.Priority)} {t.Priority} | 📅 {t.DueDate:dd/MM/yyyy}"));
+
+            fields.Add(new
+            {
+                name = "📝 Danh sách Tasks",
+                value = taskList,
+                inline = false
+            });
+        }
+        else
+        {
+            fields.Add(new
+            {
+                name = "ℹ️ Thông báo",
+                value = "User chưa có task nào.",
+                inline = false
+            });
         }
 
         var interactive = new
         {
-            title = $"👥 TEAM HEALTH - {report.TeamName}",
-            description = $"{healthEmoji} {report.TeamHealthStatus}",
-            color = healthColor,
+            title = $"📊 BÁO CÁO USER - {report.Username}",
+            description = "Báo cáo chi tiết tasks của user trong các Project bạn quản lý",
+            color = "#ff6600",
             fields = fields.ToArray(),
             footer = new
             {
-                text = $"Project: {report.ProjectName ?? "N/A"} | {FormatVNTime()}"
+                text = $"Được tạo vào {FormatVNTime()}"
             }
         };
 
         return new ChannelMessageContent
         {
-            Text = $"👥 Báo cáo sức khỏe team {report.TeamName}",
-            Embed = [interactive]
+            Embed = new[] { interactive }
         };
     }
 
-    public static ChannelMessageContent BuildTaskAnalyticsReport(TaskAnalyticsReportDto analytics)
+    private static string GetStatusEmoji(ETaskStatus status)
     {
-        var fields = new List<object>
+        return status switch
         {
-            new { name = "📊 Period", value = analytics.ReportPeriod?.ToString() ?? "Custom", inline = true },
-            new { name = "📅 Range", value = $"{analytics.PeriodStartDate:dd-MM} to {analytics.PeriodEndDate:dd-MM}", inline = true },
-
-            new { name = "📌 Tasks Created", value = analytics.TasksCreated.ToString(), inline = true },
-            new { name = "✅ Tasks Completed", value = analytics.TasksCompleted.ToString(), inline = true },
-            new { name = "📈 Delivery Rate", value = $"{analytics.DeliveryRate:F1}%", inline = true },
-            new { name = "🚀 Velocity", value = $"{analytics.CompletionVelocity:F2}/day", inline = true },
-
-            new { name = "🔥 Critical Created", value = analytics.CriticalTasksCompleted.ToString(), inline = true },
-            new { name = "🔥 Critical Completed", value = analytics.CriticalTasksPending.ToString(), inline = true },
-            new { name = "🔥 Critical Rate", value = $"{analytics.CriticalCompletionRate:F1}%", inline = true },
-
-            new { name = "⚠️ Total Complaints", value = analytics.TotalComplaints.ToString(), inline = true },
-            new { name = "📅 Extensions", value = analytics.TimeExtensionRequests.ToString(), inline = true },
-            new { name = "❌ Cancellations", value = analytics.CancellationRequests.ToString(), inline = true },
-
-            new { name = "📊 Approval Rate", value = $"{analytics.ApprovalRate:F1}%", inline = false },
+            ETaskStatus.ToDo => "⏳",
+            ETaskStatus.Doing => "🚧",
+            ETaskStatus.Review => "👀",
+            ETaskStatus.Late => "⚠️",
+            ETaskStatus.Completed => "✅",
+            ETaskStatus.Cancelled => "❌",
+            _ => "❓"
         };
+    }
 
-        var interactive = new
+    private static string GetPriorityEmoji(EPriorityLevel priority)
+    {
+        return priority switch
         {
-            title = "📊 TASK ANALYTICS REPORT",
-            description = $"Performance metrics for {analytics.ReportPeriod}",
-            color = "#0099ff",
-            fields = fields.ToArray(),
-            footer = new
-            {
-                text = $"Generated {FormatVNTime()}"
-            }
-        };
-
-        return new ChannelMessageContent
-        {
-            Text = "📊 Báo cáo phân tích năng suất",
-            Embed = [interactive]
+            EPriorityLevel.Low => "🟢",
+            EPriorityLevel.Medium => "🟡",
+            EPriorityLevel.High => "🔴",
+            _ => "⚪"
         };
     }
 }

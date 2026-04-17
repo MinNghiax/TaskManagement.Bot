@@ -48,6 +48,9 @@ services.AddScoped<IProjectService, ProjectService>();
 services.AddScoped<ITeamWorkflowService, TeamWorkflowService>();
 services.AddScoped<IPendingTeamRequestService, PendingTeamRequestService>();
 services.AddScoped<SessionService>();
+services.AddSingleton<ReportStateService>();
+services.AddSingleton<UserDisplayNameResolver>();
+services.AddSingleton<IMezonUserService, MezonUserService>();
 
 services.AddScoped<IBotService, BotService>();
 services.AddScoped<ICommandHandler, TaskCommandHandler>();
@@ -55,6 +58,7 @@ services.AddScoped<ICommandHandler, TeamCommandHandler>();
 services.AddScoped<IComponentHandler, TeamComponentHandler>();
 services.AddScoped<IReportService, ReportService>();
 services.AddScoped<ICommandHandler, ReportCommandHandler>();
+services.AddScoped<IComponentHandler, ReportComponentHandler>();
 services.AddScoped<IComponentHandler, TaskComponentHandler>();
 
 var serviceProvider = services.BuildServiceProvider();
