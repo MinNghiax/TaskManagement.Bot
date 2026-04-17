@@ -6,5 +6,5 @@ public enum EPriorityLevel
 
     Medium = 1,
 
-    High = 2,
+    High = 2
 }

@@ -202,4 +202,39 @@ public class TeamService : ITeamService
             .Where(t => teamIds.Contains(t.Id) && !t.IsDeleted)
             .ToListAsync();
     }
+
+    public async Task<List<Team>> GetTeamsByProjectAsync(int projectId)
+    {
+        return await _context.Teams
+            .Where(t => t.ProjectId == projectId && !t.IsDeleted)
+            .ToListAsync();
+    }
+
+    public async Task<List<Team>> GetAllAsync()
+    {
+        return await _context.Teams
+            .Where(t => !t.IsDeleted)
+            .ToListAsync();
+    }
+
+    public async Task<List<string>> GetAllMembersAsync()
+    {
+        return await _context.TeamMembers
+            .Where(m => !m.IsDeleted)
+            .Select(m => m.Username)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    public async Task<bool> IsUserPMInAnyTeam(string userId)
+    {
+        return await _context.Teams
+            .AnyAsync(t => t.CreatedBy == userId);
+    }
+
+    public async Task<string?> GetPMIdAsync(int teamId)
+    {
+        var team = await _context.Teams.FindAsync(teamId);
+        return team?.CreatedBy;
+    }
 }
