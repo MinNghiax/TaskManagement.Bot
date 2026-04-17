@@ -38,35 +38,71 @@ public sealed class UserManager
 
     /// <summary>
     /// Fetch a specific user and add to cache
-    /// Note: MezonRestApi doesn't have GetUserAsync yet, so this is a placeholder
     /// </summary>
-    public Task<User?> FetchAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task<User?> FetchAsync(string userId, CancellationToken cancellationToken = default)
     {
-        // TODO: Implement when GetUserAsync is added to MezonRestApi
-        // For now, users are cached as they interact via messages
-        return Task.FromResult<User?>(null);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return null;
+        }
+
+        if (Cache.TryGetValue(userId, out var cachedUser))
+        {
+            return cachedUser;
+        }
+
+        var users = await FetchAllAsync(cancellationToken);
+        return users.FirstOrDefault(x => string.Equals(x.Id, userId, StringComparison.Ordinal));
     }
 
     /// <summary>
     /// Fetch all users in the clan (if API supports it)
     /// </summary>
-    public Task<List<User>> FetchAllAsync(CancellationToken cancellationToken = default)
+    public async Task<List<User>> FetchAllAsync(CancellationToken cancellationToken = default)
     {
         var users = new List<User>();
 
         try
         {
             var sessionToken = _getSessionToken();
-            // Note: This would require a ListClanUsers API endpoint
-            // For now, this is a placeholder
-            // In practice, users are typically cached as they interact
+            if (string.IsNullOrWhiteSpace(sessionToken))
+            {
+                return GetAll();
+            }
+
+            var clanUsers = await _api.ListClanUsersAsync(
+                sessionToken,
+                _clanId,
+                ct: cancellationToken);
+
+            foreach (var clanUser in clanUsers.ClanUsers ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(clanUser.User?.Id))
+                {
+                    continue;
+                }
+
+                var user = new User(
+                    userId: clanUser.User.Id,
+                    client: _client,
+                    api: _api,
+                    getSessionToken: _getSessionToken,
+                    username: clanUser.User.Username,
+                    displayName: clanUser.User.DisplayName,
+                    clanNick: clanUser.ClanNick,
+                    clanAvatar: clanUser.ClanAvatar,
+                    avatarUrl: clanUser.User.AvatarUrl);
+
+                Cache[user.Id] = user;
+                users.Add(user);
+            }
         }
         catch
         {
             // Ignore errors
         }
 
-        return Task.FromResult(users);
+        return users.Count > 0 ? users : GetAll();
     }
 
     /// <summary>

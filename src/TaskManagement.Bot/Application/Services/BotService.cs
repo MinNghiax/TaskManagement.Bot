@@ -108,7 +108,7 @@ public class BotService : IBotService
         var references = BuildMessageReferences(replyToMessageId, originalMessage);
 
         _logger.LogInformation(
-            "[SEND] ClanId={ClanId} ChannelId={ChannelId} Mode={Mode} IsPublic={IsPublic}",
+            "[SEND] ClanId={ClanId} ChannelId={ChannelId} Mode={Mode} IsPublic={IsPublic} ReplyTo={ReplyToMessageId}",
             clanId,
             channelId,
             mode,

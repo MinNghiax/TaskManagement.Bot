@@ -53,9 +53,9 @@ services.AddScoped<IBotService, BotService>();
 services.AddScoped<ICommandHandler, TaskCommandHandler>();
 services.AddScoped<ICommandHandler, TeamCommandHandler>();
 services.AddScoped<IComponentHandler, TeamComponentHandler>();
+services.AddScoped<IReportService, ReportService>();
+services.AddScoped<ICommandHandler, ReportCommandHandler>();
 services.AddScoped<IComponentHandler, TaskComponentHandler>();
-//services.AddScoped<IReportService, ReportService>();
-//services.AddScoped<ICommandHandler, ReportCommandHandler>();
 
 var serviceProvider = services.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
@@ -76,6 +76,7 @@ try
     IBotService? botService = null;
 
     await dbContext.Database.MigrateAsync(cancellationSource.Token);
+
     logger.LogInformation("Database connected and migrated successfully.");
 
     try

@@ -571,6 +571,7 @@ public sealed class MezonSocket : IMezonSocket
                 var domainMsg = new Domain.ChannelMessage
                 {
                     Id = protoMsg.MessageId.ToString(),
+                    MessageId = protoMsg.MessageId.ToString(),
                     ChannelId = protoMsg.ChannelId.ToString(),
                     ChannelLabel = protoMsg.ChannelLabel ?? "",
                     ClanId = protoMsg.ClanId.ToString(),
@@ -579,13 +580,20 @@ public sealed class MezonSocket : IMezonSocket
                     //reponse Displayname and Clannick for client
                     DisplayName = protoMsg.DisplayName,
                     ClanNick = protoMsg.ClanNick,
-                    Content = string.IsNullOrEmpty(protoMsg.Content) ? null :
-                        System.Text.Json.JsonSerializer.Deserialize<Domain.ChannelMessageContent>(protoMsg.Content),
+                    Content = ParseChannelMessageContent(protoMsg.Content),
+                    Mentions = ParseMentions(protoMsg.Mentions),
                     CreateTimeSeconds = protoMsg.CreateTimeSeconds,
                     Code = protoMsg.Code,
                     Mode = protoMsg.Mode,
                     IsPublic = protoMsg.IsPublic,
                 };
+
+                if (domainMsg.Mentions?.Any() == true)
+                {
+                    Console.WriteLine(
+                        $"[DEBUG][SOCKET] Message {domainMsg.MessageId} in channel {domainMsg.ChannelId} has mentions: {string.Join(", ", domainMsg.Mentions.Select(x => x.UserId ?? x.RoleId ?? "unknown"))}");
+                }
+
                 OnChannelMessage?.Invoke(this, new Interfaces.MezonEventArgs { Data = domainMsg });
             }
             catch (Exception ex)
@@ -618,6 +626,55 @@ public sealed class MezonSocket : IMezonSocket
     {
         Id = data != null ? Realtime.Channel.Decode(data).Id : ""
     };
+
+    private static Domain.ChannelMessageContent? ParseChannelMessageContent(string? rawContent)
+    {
+        if (string.IsNullOrWhiteSpace(rawContent))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Domain.ChannelMessageContent>(rawContent)
+                ?? new Domain.ChannelMessageContent { Text = rawContent };
+        }
+        catch
+        {
+            return new Domain.ChannelMessageContent { Text = rawContent };
+        }
+    }
+
+    private static IReadOnlyList<ApiMessageMention>? ParseMentions(ByteString rawMentions)
+    {
+        if (rawMentions == null || rawMentions.IsEmpty)
+        {
+            return null;
+        }
+
+        try
+        {
+            var mentionList = Proto.MessageMentionList.Parser.ParseFrom(rawMentions);
+            return mentionList.Mentions
+                .Select(m => new ApiMessageMention
+                {
+                    Id = m.Id == 0 ? null : m.Id.ToString(),
+                    UserId = m.UserId == 0 ? null : m.UserId.ToString(),
+                    Username = string.IsNullOrWhiteSpace(m.Username) ? null : m.Username,
+                    RoleId = m.RoleId == 0 ? null : m.RoleId.ToString(),
+                    RoleName = string.IsNullOrWhiteSpace(m.Rolename) ? null : m.Rolename,
+                    CreateTime = m.CreateTimeSeconds == 0 ? null : m.CreateTimeSeconds.ToString(),
+                    S = m.S,
+                    E = m.E
+                })
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Failed to decode mentions: {ex.Message}");
+            return null;
+        }
+    }
 
     private static ChannelMessageAck ToChannelMessageAck(byte[]? data) => new()
     {
