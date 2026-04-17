@@ -7,6 +7,4 @@ public enum EPriorityLevel
     Medium = 1,
 
     High = 2,
-
-    Critical = 3
 }

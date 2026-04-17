@@ -502,7 +502,6 @@ public class ReportService : IReportService
                 EPriorityLevel.Low => "🟢",
                 EPriorityLevel.Medium => "🟡",
                 EPriorityLevel.High => "🔴",
-                EPriorityLevel.Critical => "🔥",
                 _ => "⚪"
             },
             IsAtRisk = isAtRisk,
@@ -623,7 +622,6 @@ public class ReportService : IReportService
                 OverdueCount = memberTasks.Count(t => t.DueDate.HasValue && t.DueDate < now && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled),
                 AtRiskCount = memberTasks.Count(t => !t.DueDate.HasValue || (t.DueDate >= now && (t.DueDate.Value - now).TotalDays <= 3 && t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled)),
                 HighestPriorityTask = memberTasks.Max(t => (EPriorityLevel?)t.Priority),
-                CriticalTaskTitle = memberTasks.Where(t => t.Priority == EPriorityLevel.Critical && t.Status != ETaskStatus.Completed).FirstOrDefault()?.Title,
                 WorkloadScore = memberTasks.Count(t => t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled)
             };
         }).ToList();
@@ -650,7 +648,6 @@ public class ReportService : IReportService
             LowPriorityTasks = tasks.Count(t => t.Priority == EPriorityLevel.Low),
             MediumPriorityTasks = tasks.Count(t => t.Priority == EPriorityLevel.Medium),
             HighPriorityTasks = tasks.Count(t => t.Priority == EPriorityLevel.High),
-            CriticalPriorityTasks = tasks.Count(t => t.Priority == EPriorityLevel.Critical)
         };
     }
 
@@ -680,8 +677,6 @@ public class ReportService : IReportService
         var completionVelocity = daysDiff > 0 ? tasksCompleted / daysDiff : 0;
         var deliveryRate = tasksCreated > 0 ? (tasksCompleted * 100.0 / tasksCreated) : 0;
 
-        var criticalTasks = tasksInPeriod.Where(t => t.Priority == EPriorityLevel.Critical).ToList();
-        var criticalCompleted = criticalTasks.Count(t => t.Status == ETaskStatus.Completed);
 
         var allComplaints = tasksInPeriod.SelectMany(t => t.Complains).ToList();
         var approvedComplaints = allComplaints.Count(c => c.Status == EComplainStatus.Approved);
@@ -696,9 +691,6 @@ public class ReportService : IReportService
             TasksCompleted = tasksCompleted,
             CompletionVelocity = completionVelocity,
             DeliveryRate = deliveryRate,
-            CriticalTasksCompleted = criticalCompleted,
-            CriticalTasksPending = criticalTasks.Count(t => t.Status != ETaskStatus.Completed && t.Status != ETaskStatus.Cancelled),
-            CriticalCompletionRate = criticalTasks.Count == 0 ? 0 : (criticalCompleted * 100.0 / criticalTasks.Count),
             TotalComplaints = allComplaints.Count,
             TimeExtensionRequests = allComplaints.Count(c => c.Type == EComplainType.Extend),
             CancellationRequests = allComplaints.Count(c => c.Type == EComplainType.Cancel),
