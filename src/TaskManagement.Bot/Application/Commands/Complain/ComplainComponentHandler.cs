@@ -29,9 +29,9 @@ public class ComplainComponentHandler : IComponentHandler
     {
         return customId == "complain_submit" ||
                customId == "complain_cancel" ||
-               customId == "approve_submit" ||
-               customId == "reject_submit" ||
-               customId == "approve_cancel" ||  
+               customId == "complain_approve_submit" ||
+               customId == "complain_reject_submit" ||
+               customId == "approve_cancel" ||
                customId.StartsWith("complain_approve_") ||
                customId.StartsWith("complain_reject_");
     }
@@ -55,7 +55,6 @@ public class ComplainComponentHandler : IComponentHandler
                 .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
         }
 
-        // THÊM XỬ LÝ CHO approve_cancel
         if (customId == "approve_cancel")
         {
             return ComponentResponse
@@ -68,12 +67,12 @@ public class ComplainComponentHandler : IComponentHandler
             return await HandleComplainSubmit(context, userName, cancellationToken);
         }
 
-        if (customId == "approve_submit")
+        if (customId == "complain_approve_submit")
         {
             return await HandleApproveSubmitFromForm(context, userName, cancellationToken);
         }
 
-        if (customId == "reject_submit")
+        if (customId == "complain_reject_submit")
         {
             return await HandleRejectSubmitFromForm(context, userName, cancellationToken);
         }
@@ -115,24 +114,21 @@ public class ComplainComponentHandler : IComponentHandler
         if (!int.TryParse(taskIdStr, out var taskId))
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Please select a task.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Please select a task.", mode, isPublic, messageId, null);
         }
 
         // Validate complaint type
         if (string.IsNullOrEmpty(complainType))
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Please select a complaint type.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Please select a complaint type.", mode, isPublic, messageId, null);
         }
 
         // Validate reason
         if (string.IsNullOrWhiteSpace(reason))
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Please enter a reason.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Please enter a reason.", mode, isPublic, messageId, null);
         }
 
         // Get task
@@ -140,8 +136,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (task == null)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Task does not exist.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Task does not exist.", mode, isPublic, messageId, null);
         }
 
         // Handle RequestExtend
@@ -151,16 +146,14 @@ public class ComplainComponentHandler : IComponentHandler
             if (string.IsNullOrEmpty(durationStr) || !int.TryParse(durationStr, out var hours) || hours <= 0)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, "❌ Invalid duration selected. Please choose a valid extension time.", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, "❌ Invalid duration selected. Please choose a valid extension time.", mode, isPublic, messageId, null);
             }
 
             // Validate hours range (max 72 hours)
             if (hours > 72)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, "❌ Extension duration cannot exceed 72 hours.", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, "❌ Extension duration cannot exceed 72 hours.", mode, isPublic, messageId, null);
             }
 
             var newDue = (task.DueDate ?? DateTime.UtcNow).AddHours(hours);
@@ -169,8 +162,7 @@ public class ComplainComponentHandler : IComponentHandler
             if (task.DueDate.HasValue && newDue <= task.DueDate)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, "❌ New deadline must be after current deadline.", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, "❌ New deadline must be after current deadline.", mode, isPublic, messageId, null);
             }
 
             var dto = new CreateComplainDto
@@ -186,8 +178,7 @@ public class ComplainComponentHandler : IComponentHandler
             if (error != null)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
             }
 
             return ComponentResponse
@@ -200,15 +191,13 @@ public class ComplainComponentHandler : IComponentHandler
             if (task.Status == ETaskStatus.Completed)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, "❌ Cannot cancel a completed task.", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, "❌ Cannot cancel a completed task.", mode, isPublic, messageId, null);
             }
 
             if (task.Status == ETaskStatus.Cancelled)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, "❌ Task is already cancelled.", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, "❌ Task is already cancelled.", mode, isPublic, messageId, null);
             }
 
             var dto = new CreateComplainDto
@@ -223,8 +212,7 @@ public class ComplainComponentHandler : IComponentHandler
             if (error != null)
             {
                 return ComponentResponse
-                    .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null)
-                    .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                    .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
             }
 
             return ComponentResponse
@@ -248,23 +236,20 @@ public class ComplainComponentHandler : IComponentHandler
         if (!int.TryParse(complainIdStr, out var complainId))
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Please select a complaint.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Please select a complaint.", mode, isPublic, messageId, null);
         }
 
         var complain = await _complainService.GetByIdAsync(complainId, ct);
         if (complain == null)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null);
         }
 
         if (complain.Status != "Pending")
         {
             return ComponentResponse
-                .FromText(clanId, channelId, $"❌ This complaint has already been {complain.Status.ToLower()}.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, $"❌ This complaint has already been {complain.Status.ToLower()}.", mode, isPublic, messageId, null);
         }
 
         var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
@@ -281,8 +266,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (!success)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
 
         return ComponentResponse
@@ -299,18 +283,15 @@ public class ComplainComponentHandler : IComponentHandler
         var mode = context.Mode;
         var isPublic = context.IsPublic;
 
-        // Lấy extra data từ payload
         var extraData = ComponentPayloadHelper.GetExtraData(context.Payload);
 
-        // Parse giống bản cũ
         var complainIdStr = ParseExtraData(extraData, "approve_complain_select");
         var rejectReason = ParseExtraData(extraData, "reject_reason");
 
         if (!int.TryParse(complainIdStr, out var complainId))
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Please select a complaint.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Please select a complaint.", mode, isPublic, messageId, null);
         }
 
         if (string.IsNullOrWhiteSpace(rejectReason))
@@ -323,15 +304,13 @@ public class ComplainComponentHandler : IComponentHandler
         if (complain == null)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null);
         }
 
         if (complain.Status != "Pending")
         {
             return ComponentResponse
-                .FromText(clanId, channelId, $"❌ This complaint has already been {complain.Status.ToLower()}.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, $"❌ This complaint has already been {complain.Status.ToLower()}.", mode, isPublic, messageId, null);
         }
 
         var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
@@ -349,8 +328,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (!success)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
 
         return ComponentResponse
@@ -371,8 +349,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (complain == null)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null);
         }
 
         var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
@@ -389,8 +366,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (!success)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
 
         return ComponentResponse
@@ -417,8 +393,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (complain == null)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null);
         }
 
         var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
@@ -436,8 +411,7 @@ public class ComplainComponentHandler : IComponentHandler
         if (!success)
         {
             return ComponentResponse
-                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+                .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
 
         return ComponentResponse
@@ -483,22 +457,29 @@ public class ComplainComponentHandler : IComponentHandler
 
     private static ChannelMessageContent BuildExtendSuccessMessage(ComplainDto complain, TaskDto task, string userName, string reason, DateTime newDue, int hours)
     {
+        var createdAt = FormatDateWithVietnamTime(complain.CreatedAt);
+
         var embed = new
         {
             title = "✅ Deadline extension request submitted",
             color = "#00D26A",
             fields = new object[]
             {
-                new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-                new { name = "📌 Type", value = "RequestExtend", inline = true },
-                new { name = "📌 Task", value = task.Title, inline = true },
-                new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-                new { name = "⏰ Old deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
-                new { name = "⏰ New deadline", value = FormatDateWithVietnamTime(newDue), inline = true },
-                new { name = "📈 Added", value = $"+{hours} hours", inline = true },
-                new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-                new { name = "👤 Submitted by", value = userName, inline = true },
-                new { name = "📝 Reason", value = reason, inline = true }
+            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+            new { name = "🏷️ Type", value = "RequestExtend", inline = true },
+            new { name = "📌 Task", value = task.Title, inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "⏰ Old deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
+            new { name = "⏰ New deadline", value = FormatDateWithVietnamTime(newDue), inline = true },
+            new { name = "📈 Added", value = $"+{hours} hours", inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "👤 Submitted by", value = userName, inline = true },
+            new { name = "💬 Reason", value = reason, inline = true },
+            new { name = "🕐 Submitted at", value = createdAt, inline = true }
             }
         };
 
@@ -507,21 +488,29 @@ public class ComplainComponentHandler : IComponentHandler
 
     private static ChannelMessageContent BuildCancelSuccessMessage(ComplainDto complain, TaskDto task, string userName, string reason)
     {
+        var createdAt = FormatDateWithVietnamTime(complain.CreatedAt);
+
         var embed = new
         {
             title = "✅ Task cancellation request submitted",
             color = "#FF8C00",
             fields = new object[]
             {
-                new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-                new { name = "📌 Type", value = "RequestCancel", inline = true },
-                new { name = "📌 Task", value = task.Title, inline = true },
-                new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-                new { name = "📊 Status", value = GetStatusText(task.Status), inline = true },
-                new { name = "⏰ Deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
-                new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-                new { name = "👤 Submitted by", value = userName, inline = true },
-                new { name = "📝 Reason", value = reason, inline = true }
+            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+            new { name = "🏷️ Type", value = "RequestCancel", inline = true },
+            new { name = "📌 Task", value = task.Title, inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "📊 Status", value = GetStatusText(task.Status), inline = true },
+            new { name = "⏰ Deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
+            new { name = "\u200B", value = "\u200B", inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "👤 Submitted by", value = userName, inline = true },
+            new { name = "💬 Reason", value = reason, inline = true },
+            new { name = "🕐 Submitted at", value = createdAt, inline = true }
             }
         };
 
@@ -531,25 +520,46 @@ public class ComplainComponentHandler : IComponentHandler
     private static ChannelMessageContent BuildApproveSuccessMessage(ComplainDto complain, TaskDto? task, string? complainantName, string approverName)
     {
         var isExtend = complain.Type == "RequestExtend";
+        var approvedTime = complain.ApprovedAt.HasValue
+            ? FormatDateWithVietnamTime(complain.ApprovedAt.Value)
+            : FormatDateWithVietnamTime(DateTime.UtcNow);
+        var createdAt = FormatDateWithVietnamTime(complain.CreatedAt);
+
         var fields = new List<object>
-        {
-            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-            new { name = "📌 Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
-            new { name = "📌 Task", value = task?.Title, inline = true },
-            new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-            new { name = "🔄 New status", value = GetStatusText(task?.Status), inline = true }
-        };
+    {
+        new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+        new { name = "🏷️ Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
+        new { name = "📌 Task", value = task?.Title ?? "N/A", inline = true },
+
+        new { name = "\u200B", value = "\u200B", inline = false },
+
+        new { name = "🔄 New status", value = GetStatusText(task?.Status), inline = true }
+    };
 
         if (isExtend && complain.NewDueDate.HasValue)
         {
             fields.Add(new { name = "⏰ New deadline", value = FormatDateWithVietnamTime(complain.NewDueDate), inline = true });
+            fields.Add(new { name = "\u200B", value = "\u200B", inline = true });
+        }
+        else
+        {
+            fields.Add(new { name = "\u200B", value = "\u200B", inline = true });
+            fields.Add(new { name = "\u200B", value = "\u200B", inline = true });
         }
 
         fields.AddRange(new object[]
         {
-            new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-            new { name = "👤 Complainant", value = complainantName, inline = true },
-            new { name = "👤 Approved by", value = approverName, inline = true }
+        new { name = "\u200B", value = "\u200B", inline = false },
+
+        new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
+        new { name = "👤 Approved by", value = approverName, inline = true },
+        new { name = "\u200B", value = "\u200B", inline = true },
+
+        new { name = "\u200B", value = "\u200B", inline = false },
+
+        new { name = "🕐 Created at", value = createdAt, inline = true },
+        new { name = "🕐 Approved at", value = approvedTime, inline = true },
+        new { name = "\u200B", value = "\u200B", inline = true }
         });
 
         var embed = new
@@ -565,21 +575,40 @@ public class ComplainComponentHandler : IComponentHandler
     private static ChannelMessageContent BuildRejectSuccessMessage(ComplainDto complain, TaskDto? task, string? complainantName, string rejectorName, string rejectReason)
     {
         var isExtend = complain.Type == "RequestExtend";
+        var rejectedTime = complain.ApprovedAt.HasValue
+            ? FormatDateWithVietnamTime(complain.ApprovedAt.Value)
+            : FormatDateWithVietnamTime(DateTime.UtcNow);
+        var createdAt = FormatDateWithVietnamTime(complain.CreatedAt);
+
         var embed = new
         {
             title = "❌ Request rejected",
             color = "#FF3B30",
             fields = new object[]
             {
-                new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-                new { name = "📌 Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
-                new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-                new { name = "📌 Task", value = task?.Title, inline = true },
-                new { name = "📝 Original reason", value = complain.Reason, inline = true },
-                new { name = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", value = "\u200B", inline = false },
-                new { name = "👤 Complainant", value = complainantName, inline = true },
-                new { name = "👤 Rejected by", value = rejectorName, inline = true },
-                new { name = "📝 Rejection reason", value = rejectReason, inline = true }
+            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+            new { name = "🏷️ Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
+            new { name = "📌 Task", value = task?.Title ?? "N/A", inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "💬 Original reason", value = complain.Reason, inline = false },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
+            new { name = "👤 Rejected by", value = rejectorName, inline = true },
+            new { name = "\u200B", value = "\u200B", inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "🕐 Created at", value = createdAt, inline = true },
+            new { name = "🕐 Rejected at", value = rejectedTime, inline = true },
+            new { name = "\u200B", value = "\u200B", inline = true },
+
+            new { name = "\u200B", value = "\u200B", inline = false },
+
+            new { name = "💬 Rejection reason", value = rejectReason, inline = false }
             }
         };
 

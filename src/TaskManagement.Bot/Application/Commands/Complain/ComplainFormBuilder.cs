@@ -189,8 +189,10 @@ public static class ComplainFormBuilder
                     type = 1,
                     components = new object[]
                     {
-                        new { type = 1, id = "approve_submit", component = new { label = "✅ Approve", style = 3 } },
-                        new { type = 1, id = "reject_submit", component = new { label = "❌ Reject", style = 4 } },
+                        //new { type = 1, id = "approve_submit", component = new { label = "✅ Approve", style = 3 } },
+                        //new { type = 1, id = "reject_submit", component = new { label = "❌ Reject", style = 4 } },
+                        new { type = 1, id = "complain_approve_submit", component = new { label = "✅ Approve", style = 3 } },
+                        new { type = 1, id = "complain_reject_submit",  component = new { label = "❌ Reject",  style = 4 } },
                         new { type = 1, id = "approve_cancel", component = new { label = "Cancel", style = 2 } }
                     }
                 }
