@@ -5,10 +5,10 @@ namespace Mezon.Sdk.Builders;
 
 public class FormUpdateHelper
 {
-    private readonly IMezonClient _client;
+    private readonly MezonClient _client;
     private readonly Dictionary<string, FormContext> _contexts = new();
 
-    public FormUpdateHelper(IMezonClient client)
+    public FormUpdateHelper(MezonClient client)
     {
         _client = client;
     }
@@ -52,7 +52,7 @@ public class FormUpdateHelper
 
         try
         {
-            await _client.Socket.UpdateChannelMessageAsync(
+            await _client.UpdateMessageAsync(
                 clanId,
                 channelId,
                 mode,
