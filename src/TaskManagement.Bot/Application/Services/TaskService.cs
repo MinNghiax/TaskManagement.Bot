@@ -190,6 +190,17 @@ public class TaskService : ITaskService
         await _context.SaveChangesAsync(ct);
     }
 
+    public async Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken ct = default)
+    {
+        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == taskId && !t.IsDeleted, ct);
+        if (task == null) return;
+
+        task.DueDate = newDueDate;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(ct);
+    }
+
     public async Task DeleteAsync(int taskId, CancellationToken ct = default)
     {
         var id = taskId;

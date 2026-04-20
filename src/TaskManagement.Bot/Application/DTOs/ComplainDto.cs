@@ -1,37 +1,38 @@
-namespace TaskManagement.Bot.Application.DTOs;
-
+﻿// TaskManagement.Bot.Application.DTOs.ComplainDto.cs
 using TaskManagement.Bot.Infrastructure.Enums;
+
+namespace TaskManagement.Bot.Application.DTOs;
 
 public class ComplainDto
 {
     public int Id { get; set; }
-    public int TaskId { get; set; }
-    public string? Title { get; set; }
-    public string? Content { get; set; }
-    public string? ComplainType { get; set; }
-    public string? CreatedBy { get; set; }
-    public string? MezonUserId { get; set; }
-    public EComplainStatus Status { get; set; }
-    public string? RespondedBy { get; set; }
-    public string? Response { get; set; }
-    public DateTime? RespondedAt { get; set; }
-    public int SupportCount { get; set; }
+    public int TaskItemId { get; set; }
+    public string? TaskTitle { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime? NewDueDate { get; set; }
+    public DateTime? OldDueDate { get; set; }
+    public string? ApprovedBy { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public string? RejectReason { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
 public class CreateComplainDto
 {
-    public int TaskId { get; set; }
-    public required string Title { get; set; }
-    public required string Content { get; set; }
-    public required string ComplainType { get; set; }
-    public required string CreatedBy { get; set; }
-    public required string MezonUserId { get; set; }
+    public int TaskItemId { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public EComplainType Type { get; set; }
+    public DateTime? NewDueDate { get; set; } // Chỉ dùng cho RequestExtend
 }
 
-public class UpdateComplainStatusDto
+public class ApproveComplainDto
 {
-    public EComplainStatus Status { get; set; }
-    public string? Response { get; set; }
-    public string? RespondedBy { get; set; }
+    public int ComplainId { get; set; }
+    public string ApprovedBy { get; set; } = string.Empty;
+    public string? RejectReason { get; set; } // Chỉ dùng khi reject
+    public bool IsApproved { get; set; }
 }

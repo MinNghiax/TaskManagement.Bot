@@ -117,6 +117,18 @@ public class InMemoryTaskService : ITaskService
         return Task.CompletedTask;
     }
 
+    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
+    {
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task != null)
+        {
+            task.DueDate = newDueDate;
+            task.UpdatedAt = DateTime.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task DeleteAsync(int taskId, CancellationToken cancellationToken = default)
     {
         var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
