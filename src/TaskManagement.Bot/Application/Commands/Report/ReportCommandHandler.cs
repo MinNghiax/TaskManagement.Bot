@@ -10,15 +10,18 @@ public class ReportCommandHandler : ICommandHandler
     private readonly ILogger<ReportCommandHandler> _logger;
     private readonly IReportService _reportService;
     private readonly IMezonUserService _userService;
+    private readonly ReportStateService _stateService;
 
     public ReportCommandHandler(
         ILogger<ReportCommandHandler> logger,
         IReportService reportService,
-        IMezonUserService userService)
+        IMezonUserService userService,
+        ReportStateService stateService)
     {
         _logger = logger;
         _reportService = reportService;
         _userService = userService;
+        _stateService = stateService;
     }
 
     public bool CanHandle(string content)
@@ -39,18 +42,15 @@ public class ReportCommandHandler : ICommandHandler
             var parts = content.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var userId = message.SenderId ?? "";
             var clanId = message.ClanId ?? "";
+            var messageId = message.Id ?? "";
 
             _logger.LogInformation("[REPORT] Command: {Command} | User: {UserId}", content, userId);
 
             return parts.Length switch
             {
-                1 => await HandleReportAsync(userId, clanId),
+                1 => await HandleReportAsync(userId, clanId, messageId, message),
                 2 when parts[1].Equals("me", StringComparison.OrdinalIgnoreCase) 
                     => await HandleReportMeAsync(userId),
-                2 when IsTimeRangeCommand(parts[1]) 
-                    => await HandleTimeBasedReportAsync(userId, ParseTimeRange(parts[1])),
-                2 when parts[1].StartsWith("@") || parts[1].StartsWith("<@")
-                    => await HandleReportUserAsync(userId, clanId, parts[1], message),
                 _ => new CommandResponse(BuildUsageText())
             };
         }
@@ -81,57 +81,24 @@ public class ReportCommandHandler : ICommandHandler
         return new CommandResponse(form);
     }
 
-    private async Task<CommandResponse> HandleReportAsync(string pmUserId, string clanId)
+    private async Task<CommandResponse> HandleReportAsync(string pmUserId, string clanId, string messageId, ChannelMessage message)
     {
-        _logger.LogInformation("[REPORT_PM] PM: {PMUserId}", pmUserId);
+        _logger.LogInformation(
+            "[REPORT_PM] PM: {PMUserId} | OriginalMessageId: {MessageId}", 
+            pmUserId, 
+            messageId);
+
+        _stateService.InitializeState(pmUserId, messageId, message);
+        
+        var state = _stateService.GetState(pmUserId);
+        _logger.LogInformation(
+            "[REPORT_PM] State initialized. OriginalMessageId in state: {OriginalMessageId}",
+            state?.OriginalMessageId);
 
         var report = await _reportService.GetPMProjectsAsync(pmUserId);
-        var form = ReportFormBuilder.BuildPMProjectSelectionForm(report, clanId);
+        var form = ReportFormBuilder.BuildReportFilterForm(report, clanId);
 
         return new CommandResponse(form);
-    }
-
-    private async Task<CommandResponse> HandleTimeBasedReportAsync(string pmUserId, TimeRangeFilter timeRange)
-    {
-        _logger.LogInformation("[REPORT_TIME] PM: {PMUserId} | Range: {TimeRange}", pmUserId, timeRange);
-
-        var report = await _reportService.GetTimeBasedReportAsync(pmUserId, timeRange);
-        var form = ReportFormBuilder.BuildTimeBasedReportForm(report);
-
-        return new CommandResponse(form);
-    }
-
-    private async Task<CommandResponse> HandleReportUserAsync(string pmUserId, string clanId, string mentionToken, ChannelMessage message)
-    {
-        _logger.LogInformation("[REPORT_USER] PM: {PMUserId} | Mention: {Mention}", pmUserId, mentionToken);
-
-        var targetUserId = UserHelper.ExtractUserIdFromMention(mentionToken, message);
-        
-        if (string.IsNullOrWhiteSpace(targetUserId))
-        {
-            return new CommandResponse("❌ Không tìm thấy user. Vui lòng mention user bằng @username");
-        }
-
-        var report = await _reportService.GetUserReportByPMAsync(targetUserId, pmUserId);
-        var form = ReportFormBuilder.BuildUserReportByPMForm(report);
-
-        return new CommandResponse(form);
-    }
-
-    private static bool IsTimeRangeCommand(string command)
-    {
-        return command.ToLowerInvariant() is "today" or "week" or "month";
-    }
-
-    private static TimeRangeFilter ParseTimeRange(string command)
-    {
-        return command.ToLowerInvariant() switch
-        {
-            "today" => TimeRangeFilter.Today,
-            "week" => TimeRangeFilter.Week,
-            "month" => TimeRangeFilter.Month,
-            _ => TimeRangeFilter.Today
-        };
     }
 
     private static string BuildUsageText()
@@ -144,10 +111,6 @@ public class ReportCommandHandler : ICommandHandler
 
 **Cho PM:**
 • `!report` - Xem báo cáo team (chọn Project → Team)
-• `!report @user` - Xem báo cáo của 1 user cụ thể
-• `!report today` - Xem tasks có deadline hôm nay
-• `!report week` - Xem tasks có deadline tuần này
-• `!report month` - Xem tasks có deadline tháng này
 
 **Lưu ý:**
 - MEMBER chỉ được dùng `!report me`
