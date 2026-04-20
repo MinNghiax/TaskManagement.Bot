@@ -2,7 +2,6 @@ using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.DTOs;
 
-// ===== !report me - MEMBER Personal Report =====
 public class UserPersonalReportDto
 {
     public string UserId { get; set; } = string.Empty;
@@ -30,7 +29,6 @@ public class TeamTaskGroupDto
     public double CompletionRate { get; set; }
 }
 
-// ===== !report - PM Project List =====
 public class PMProjectListDto
 {
     public string PMUserId { get; set; } = string.Empty;
@@ -53,7 +51,6 @@ public class TeamSummaryDto
     public int TotalTasks { get; set; }
 }
 
-// ===== Team Detail Report (sau khi PM chọn Project + Team) =====
 public class TeamDetailReportDto
 {
     public int TeamId { get; set; }
@@ -71,33 +68,4 @@ public class MemberTaskReportDto
     public int TotalTasks { get; set; }
     public int CompletedTasks { get; set; }
     public double CompletionRate { get; set; }
-}
-
-// ===== !report @user - User Report by PM =====
-public class UserReportByPMDto
-{
-    public string UserId { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-    public List<TaskSummaryDto> Tasks { get; set; } = new();
-    public int TotalTasks { get; set; }
-    public int CompletedTasks { get; set; }
-    public double CompletionRate { get; set; }
-    public Dictionary<ETaskStatus, int> StatusBreakdown { get; set; } = new();
-}
-
-// ===== !report today/week/month - Time-based Report =====
-public class TimeBasedReportDto
-{
-    public Application.Services.TimeRangeFilter TimeRange { get; set; }
-    public DateTime StartDate { get; set; }
-    public DateTime EndDate { get; set; }
-    public List<MemberTimeReportDto> Members { get; set; } = new();
-}
-
-public class MemberTimeReportDto
-{
-    public string UserId { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-    public List<TaskSummaryDto> Tasks { get; set; } = new();
-    public int TotalTasks { get; set; }
 }

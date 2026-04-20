@@ -52,7 +52,6 @@ services.AddScoped<ITeamWorkflowService, TeamWorkflowService>();
 services.AddScoped<IPendingTeamRequestService, PendingTeamRequestService>();
 services.AddScoped<SessionService>();
 services.AddSingleton<ReportStateService>();
-services.AddSingleton<UserDisplayNameResolver>();
 services.AddSingleton<IMezonUserService, MezonUserService>();
 
 services.AddScoped<IBotService, BotService>();

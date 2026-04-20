@@ -148,97 +148,6 @@ public class ReportService : IReportService
         };
     }
 
-
-
-    public async Task<TimeBasedReportDto> GetTimeBasedReportAsync(string pmUserId, TimeRangeFilter timeRange)
-    {
-        _logger.LogInformation("[REPORT_TIME] Getting {TimeRange} report for PM: {PMUserId}", timeRange, pmUserId);
-
-        var (startDate, endDate) = GetDateRange(timeRange);
-
-        var projects = await _context.Projects
-            .Include(p => p.Teams)
-                .ThenInclude(t => t.Tasks)
-            .Where(p => p.CreatedBy == pmUserId && !p.IsDeleted)
-            .ToListAsync();
-
-        var tasks = projects
-            .SelectMany(p => p.Teams)
-            .SelectMany(t => t.Tasks)
-            .Where(t => t.DueDate.HasValue 
-                && t.DueDate.Value >= startDate 
-                && t.DueDate.Value <= endDate
-                && !t.IsDeleted)
-            .ToList();
-
-        var memberGroups = tasks.GroupBy(t => t.AssignedTo).ToList();
-        var memberReports = new List<MemberTimeReportDto>();
-        
-        foreach (var group in memberGroups)
-        {
-            var username = await _userService.GetDisplayNameAsync(group.Key);
-            
-            memberReports.Add(new MemberTimeReportDto
-            {
-                UserId = group.Key,
-                Username = username,
-                Tasks = group.Select(MapToTaskSummary).OrderBy(t => t.DueDate).ToList(),
-                TotalTasks = group.Count()
-            });
-        }
-
-        return new TimeBasedReportDto
-        {
-            TimeRange = timeRange,
-            StartDate = startDate,
-            EndDate = endDate,
-            Members = memberReports.OrderByDescending(m => m.TotalTasks).ToList()
-        };
-    }
-
-    public async Task<UserReportByPMDto> GetUserReportByPMAsync(string targetUserId, string pmUserId)
-    {
-        _logger.LogInformation("[REPORT_USER] PM {PMUserId} requesting report for {TargetUserId}", pmUserId, targetUserId);
-
-        var allTasks = await _context.TaskItems
-            .Include(t => t.Team)
-                .ThenInclude(t => t!.Project)
-            .Where(t => t.AssignedTo == targetUserId && t.Team != null && !t.IsDeleted)
-            .OrderBy(t => t.DueDate)
-            .ToListAsync();
-
-        var pmTasks = allTasks.Where(t => t.Team!.Project.CreatedBy == pmUserId).ToList();
-
-        _logger.LogInformation("[REPORT_USER] Found {Count} tasks in PM's projects", pmTasks.Count);
-
-        if (pmTasks.Count == 0)
-        {
-            var userExists = await _context.TeamMembers.AnyAsync(tm => tm.Username == targetUserId && !tm.IsDeleted);
-
-            if (!userExists && allTasks.Count == 0)
-            {
-                throw new KeyNotFoundException($"User không tồn tại trong hệ thống");
-            }
-
-            throw new UnauthorizedAccessException($"Bạn không có quyền xem báo cáo của user này");
-        }
-
-        var completedCount = pmTasks.Count(t => t.Status == ETaskStatus.Completed);
-        var statusBreakdown = pmTasks.GroupBy(t => t.Status).ToDictionary(g => g.Key, g => g.Count());
-        var username = await _userService.GetDisplayNameAsync(targetUserId);
-
-        return new UserReportByPMDto
-        {
-            UserId = targetUserId,
-            Username = username,
-            Tasks = pmTasks.Select(MapToTaskSummary).ToList(),
-            TotalTasks = pmTasks.Count,
-            CompletedTasks = completedCount,
-            CompletionRate = CalculateCompletionRate(completedCount, pmTasks.Count),
-            StatusBreakdown = statusBreakdown
-        };
-    }
-
     private List<ProjectTaskGroupDto> BuildProjectTaskGroups(
         List<Infrastructure.Entities.TeamMember> teamMembers, 
         string userId)
@@ -284,8 +193,6 @@ public class ReportService : IReportService
         return projects;
     }
 
-
-
     private static TaskSummaryDto MapToTaskSummary(Infrastructure.Entities.TaskItem task)
     {
         return new TaskSummaryDto
@@ -301,19 +208,5 @@ public class ReportService : IReportService
     private static double CalculateCompletionRate(int completed, int total)
     {
         return total > 0 ? (double)completed / total * 100 : 0;
-    }
-
-    private static (DateTime startDate, DateTime endDate) GetDateRange(TimeRangeFilter timeRange)
-    {
-        var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
-        var vnNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vnTimeZone);
-
-        return timeRange switch
-        {
-            TimeRangeFilter.Today => (vnNow.Date, vnNow.Date.AddDays(1).AddSeconds(-1)),
-            TimeRangeFilter.Week => (vnNow.Date.AddDays(-(int)vnNow.DayOfWeek), vnNow.Date.AddDays(7 - (int)vnNow.DayOfWeek).AddSeconds(-1)),
-            TimeRangeFilter.Month => (new DateTime(vnNow.Year, vnNow.Month, 1), new DateTime(vnNow.Year, vnNow.Month, 1).AddMonths(1).AddSeconds(-1)),
-            _ => (vnNow.Date, vnNow.Date.AddDays(1).AddSeconds(-1))
-        };
     }
 }
