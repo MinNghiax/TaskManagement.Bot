@@ -2,7 +2,10 @@
 
 public enum EReminderTriggerType
 {
-    TimeBefore = 0,
-    TimeAfter = 1,
+    BeforeDeadline = 0,
+    AfterDeadline = 1,
     Repeat = 2,
+
+    TimeBefore = BeforeDeadline,
+    TimeAfter = AfterDeadline,
 }

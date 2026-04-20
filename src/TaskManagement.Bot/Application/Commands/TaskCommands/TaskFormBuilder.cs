@@ -37,8 +37,11 @@ public static class TaskFormBuilder
     public static ChannelMessageContent BuildFullCreateForm(
     List<Project> projects,
     List<Team> teams,
-    List<string> members)
+    List<string> members,
+    TaskReminderFieldState? reminderState = null)
     {
+        reminderState ??= TaskReminderFieldState.Default();
+
         var projectOptions = projects.Select(p => new
         {
             label = p.Name,
@@ -57,6 +60,24 @@ public static class TaskFormBuilder
             value = m
         }).ToArray();
 
+        var fields = new List<object>
+        {
+            BuildSelectField("📁 Project", "task_project", "Chọn project", projectOptions),
+            BuildSelectField("👥 Team", "task_team", "Chọn team", teamOptions),
+            BuildSelectField("👤 Giao cho", "task_assignee", "Chọn thành viên", memberOptions),
+            BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề", maxLength: 100),
+            BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả"),
+            BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM"),
+            BuildRadioField("⚡ Độ ưu tiên", "task_priority", new object[]
+            {
+                new { label = "🔴 Cao", value = "High" },
+                new { label = "🟡 Trung bình", value = "Medium", @default = true },
+                new { label = "🟢 Thấp", value = "Low" }
+            })
+        };
+
+        fields.AddRange(BuildReminderFields(reminderState));
+
         return new ChannelMessageContent
         {
             Embed = new[]
@@ -65,23 +86,7 @@ public static class TaskFormBuilder
             {
                 title = "📝 Tạo Task mới",
                 color = "#FEE75C",
-                fields = new object[]
-                {
-                    BuildSelectField("📁 Project", "task_project", "Chọn project", projectOptions),
-                    BuildSelectField("👥 Team", "task_team", "Chọn team", teamOptions),
-                    BuildSelectField("👤 Giao cho", "task_assignee", "Chọn thành viên", memberOptions),
-
-                    BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề", maxLength: 100),
-                    BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả"),
-                    BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM"),
-
-                    BuildRadioField("⚡ Độ ưu tiên", "task_priority", new object[]
-                    {
-                        new { label = "🔴 Cao", value = "High" },
-                        new { label = "🟡 Trung bình", value = "Medium", @default = true },
-                        new { label = "🟢 Thấp", value = "Low" }
-                    })
-                },
+                fields = fields.ToArray(),
                 footer = new { text = "Trạng thái mặc định: ToDo" }
             }
         },
@@ -309,7 +314,7 @@ public static class TaskFormBuilder
 
     private static object[] BuildDetailFields(object[] assigneeOptions)
     {
-        return new object[]
+        var fields = new List<object>
         {
             BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề (tối đa 100 ký tự)", maxLength: 100),
             BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả (không bắt buộc)"),
@@ -322,11 +327,15 @@ public static class TaskFormBuilder
             BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM"),
             BuildSelectField("👤 AssignedTo", "task_assignee", "Chọn thành viên", assigneeOptions)
         };
+
+        fields.AddRange(BuildReminderFields(TaskReminderFieldState.Default()));
+
+        return fields.ToArray();
     }
 
     private static object[] BuildUpdateFields(TaskDto task, object[] memberOptions)
     {
-        return new object[]
+        var fields = new List<object>
         {
             BuildTextField("📌 Tiêu đề", "task_title", "Nhập tiêu đề", defaultValue: task.Title ?? "", maxLength: 100),
             BuildTextAreaField("📝 Mô tả", "task_description", "Nhập mô tả", defaultValue: task.Description ?? ""),
@@ -347,6 +356,10 @@ public static class TaskFormBuilder
             BuildTextField("⏰ Deadline", "task_deadline", "YYYY-MM-DD HH:MM", defaultValue: task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? ""),
             BuildSelectField("👤 AssignedTo", "task_assignee", "Chọn thành viên", memberOptions)
         };
+
+        fields.AddRange(BuildReminderFields(TaskReminderFieldState.FromRules(task.ReminderRules)));
+
+        return fields.ToArray();
     }
 
     private static object[] BuildStatusUpdateFields(TaskDto task)
@@ -361,8 +374,75 @@ public static class TaskFormBuilder
         };
     }
 
-    private static object BuildSelectField(string name, string id, string placeholder, object[] options)
+    private static object[] BuildReminderFields(TaskReminderFieldState state)
     {
+        var disabled = !state.IsEnabled;
+
+        return new object[]
+        {
+            BuildBooleanSelectField("🔔 Bật reminder", "task_reminder_enabled", state.IsEnabled),
+            BuildNumberField("🔔 Trước deadline", "task_reminder_before_value", "Số thời gian", state.BeforeValue, disabled),
+            BuildTimeUnitSelectField("Đơn vị trước deadline", "task_reminder_before_unit", state.BeforeUnit, disabled),
+            BuildNumberField("🔔 Sau deadline", "task_reminder_after_value", "Số thời gian", state.AfterValue, disabled),
+            BuildTimeUnitSelectField("Đơn vị sau deadline", "task_reminder_after_unit", state.AfterUnit, disabled),
+            BuildBooleanSelectField("Lặp lại sau deadline", "task_reminder_after_repeat", state.IsAfterRepeatEnabled, disabled),
+            BuildNumberField("🔁 Báo lặp", "task_reminder_repeat_value", "Số thời gian", state.RepeatValue, disabled),
+            BuildTimeUnitSelectField("Đơn vị báo lặp", "task_reminder_repeat_unit", state.RepeatUnit, disabled)
+        };
+    }
+
+    private static object BuildBooleanSelectField(string name, string id, bool selectedValue, bool disabled = false)
+    {
+        var options = new object[]
+        {
+            new { label = "Có", value = bool.TrueString },
+            new { label = "Không", value = bool.FalseString }
+        };
+
+        var selected = selectedValue
+            ? new { label = "Có", value = bool.TrueString }
+            : new { label = "Không", value = bool.FalseString };
+
+        return BuildSelectField(name, id, "Chọn", options, selected, disabled);
+    }
+
+    private static object BuildTimeUnitSelectField(string name, string id, ETimeUnit? selectedUnit, bool disabled)
+    {
+        var options = new object[]
+        {
+            new { label = "Phút", value = ETimeUnit.Minutes.ToString() },
+            new { label = "Giờ", value = ETimeUnit.Hours.ToString() },
+            new { label = "Ngày", value = ETimeUnit.Days.ToString() },
+            new { label = "Tuần", value = ETimeUnit.Weeks.ToString() }
+        };
+
+        var selected = selectedUnit.HasValue
+            ? new { label = GetTimeUnitLabel(selectedUnit.Value), value = selectedUnit.Value.ToString() }
+            : null;
+
+        return BuildSelectField(name, id, "Chọn đơn vị", options, selected, disabled);
+    }
+
+    private static object BuildSelectField(
+        string name,
+        string id,
+        string placeholder,
+        object[] options,
+        object? valueSelected = null,
+        bool disabled = false)
+    {
+        var component = new Dictionary<string, object?>
+        {
+            ["placeholder"] = placeholder,
+            ["options"] = options
+        };
+
+        if (valueSelected != null)
+            component["valueSelected"] = valueSelected;
+
+        if (disabled)
+            component["disabled"] = true;
+
         return new
         {
             name,
@@ -370,14 +450,14 @@ public static class TaskFormBuilder
             {
                 id,
                 type = 2,
-                component = new { placeholder, options }
+                component
             }
         };
     }
 
-    private static object BuildTextField(string name, string id, string placeholder, string defaultValue = "", int? maxLength = null)
+    private static object BuildTextField(string name, string id, string placeholder, string defaultValue = "", int? maxLength = null, bool disabled = false)
     {
-        var component = new Dictionary<string, object>
+        var component = new Dictionary<string, object?>
         {
             ["id"] = $"{id}_input",
             ["placeholder"] = placeholder,
@@ -389,10 +469,12 @@ public static class TaskFormBuilder
         if (maxLength.HasValue)
             component["maxLength"] = maxLength.Value;
 
+        if (disabled)
+            component["disabled"] = true;
+
         return new
         {
             name,
-            value = defaultValue,
             inputs = new
             {
                 id,
@@ -402,27 +484,68 @@ public static class TaskFormBuilder
         };
     }
 
-    private static object BuildTextAreaField(string name, string id, string placeholder, string defaultValue = "")
+    private static object BuildTextAreaField(string name, string id, string placeholder, string defaultValue = "", bool disabled = false)
     {
+        var component = new Dictionary<string, object?>
+        {
+            ["id"] = $"{id}_input",
+            ["placeholder"] = placeholder,
+            ["defaultValue"] = defaultValue,
+            ["type"] = "text",
+            ["textarea"] = true
+        };
+
+        if (disabled)
+            component["disabled"] = true;
+
         return new
         {
             name,
-            value = defaultValue,
             inputs = new
             {
                 id,
                 type = 3,
-                component = new
-                {
-                    id = $"{id}_input",
-                    placeholder,
-                    defaultValue,
-                    type = "text",
-                    textarea = true
-                }
+                component
             }
         };
     }
+
+    private static object BuildNumberField(string name, string id, string placeholder, string defaultValue, bool disabled)
+    {
+        var component = new Dictionary<string, object?>
+        {
+            ["id"] = $"{id}_input",
+            ["placeholder"] = placeholder,
+            ["defaultValue"] = defaultValue,
+            ["type"] = "number",
+            ["textarea"] = false,
+            ["min"] = 1,
+            ["step"] = 1
+        };
+
+        if (disabled)
+            component["disabled"] = true;
+
+        return new
+        {
+            name,
+            inputs = new
+            {
+                id,
+                type = 3,
+                component
+            }
+        };
+    }
+
+    private static string GetTimeUnitLabel(ETimeUnit unit) => unit switch
+    {
+        ETimeUnit.Minutes => "Phút",
+        ETimeUnit.Hours => "Giờ",
+        ETimeUnit.Days => "Ngày",
+        ETimeUnit.Weeks => "Tuần",
+        _ => unit.ToString()
+    };
 
     private static object BuildRadioField(string name, string id, object[] options)
     {

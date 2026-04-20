@@ -84,6 +84,7 @@ public class TaskComponentHandler : IComponentHandler
 
         var projectIdStr = ReadValue(context.Payload, "task_project");
         var teamIdStr = ReadValue(context.Payload, "task_team");
+        var reminderState = ReadReminderState(context.Payload);
 
         // Validate
         var (isValid, message) = TaskFormBuilder.ValidateTaskForm(title, deadlineStr, assignee);
@@ -93,11 +94,17 @@ public class TaskComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người tạo");
 
-        if (!int.TryParse(projectIdStr, out var projectId))
+        if (!int.TryParse(projectIdStr, out var projectId) &&
+            (parts.Length < 2 || !int.TryParse(parts[1], out projectId)))
+        {
             return BuildTextResponse(context, "❌ Vui lòng chọn project");
+        }
 
-        if (!int.TryParse(teamIdStr, out var teamId))
+        if (!int.TryParse(teamIdStr, out var teamId) &&
+            (parts.Length < 3 || !int.TryParse(parts[2], out teamId)))
+        {
             return BuildTextResponse(context, "❌ Vui lòng chọn team");
+        }
 
 
         //  Validate team thuộc project 
@@ -109,6 +116,10 @@ public class TaskComponentHandler : IComponentHandler
         var members = await _teamService.GetMembers(teamId);
         if (!members.Contains(assignee))
             return BuildTextResponse(context, "❌ Người được giao phải thuộc team");
+
+        var reminderValidation = reminderState.Validate();
+        if (!reminderValidation.IsValid)
+            return BuildTextResponse(context, reminderValidation.Message);
 
         //  Parse data
         var priority = priorityStr switch
@@ -130,7 +141,8 @@ public class TaskComponentHandler : IComponentHandler
             Priority = priority,
             TeamId = teamId,
             ClanIds = new List<string> { context.ClanId! },
-            ChannelIds = new List<string> { context.ChannelId! }
+            ChannelIds = new List<string> { context.ChannelId! },
+            ReminderRules = reminderValidation.Rules.ToList()
         };
 
         //  Save
@@ -192,6 +204,14 @@ public class TaskComponentHandler : IComponentHandler
         var statusStr = ReadValue(context.Payload, "task_status");
         var deadlineStr = ReadValue(context.Payload, "task_deadline");
         var assignee = ReadValue(context.Payload, "task_assignee");
+        var hasReminderState = TryReadReminderState(context.Payload, out var reminderState);
+        TaskReminderValidationResult? reminderValidation = null;
+        if (hasReminderState)
+        {
+            reminderValidation = reminderState.Validate();
+            if (!reminderValidation.IsValid)
+                return BuildTextResponse(context, reminderValidation.Message);
+        }
 
         var updateDto = new UpdateTaskDto
         {
@@ -200,7 +220,8 @@ public class TaskComponentHandler : IComponentHandler
             Priority = ParsePriority(priorityStr),
             Status = ParseStatus(statusStr),
             DueDate = DateTime.TryParse(deadlineStr, out var d) ? d : null,
-            AssignedTo = string.IsNullOrWhiteSpace(assignee) ? null : assignee
+            AssignedTo = string.IsNullOrWhiteSpace(assignee) ? null : assignee,
+            ReminderRules = hasReminderState ? reminderValidation!.Rules.ToList() : null
         };
 
         await _taskService.UpdateAsync(taskId, updateDto, ct);
@@ -527,26 +548,149 @@ public class TaskComponentHandler : IComponentHandler
         _ => null
     };
 
+    private static TaskReminderFieldState ReadReminderState(JsonElement payload)
+    {
+        return new TaskReminderFieldState
+        {
+            IsEnabled = ReadBool(payload, "task_reminder_enabled", defaultValue: true),
+            BeforeValue = ReadValueOrDefault(payload, "task_reminder_before_value", "30"),
+            BeforeUnit = ReadTimeUnit(payload, "task_reminder_before_unit") ?? ETimeUnit.Minutes,
+            AfterValue = ReadValueOrDefault(payload, "task_reminder_after_value", "10"),
+            AfterUnit = ReadTimeUnit(payload, "task_reminder_after_unit") ?? ETimeUnit.Minutes,
+            IsAfterRepeatEnabled = ReadBool(payload, "task_reminder_after_repeat", defaultValue: true),
+            RepeatValue = ReadValue(payload, "task_reminder_repeat_value"),
+            RepeatUnit = ReadTimeUnit(payload, "task_reminder_repeat_unit")
+        };
+    }
+
+    private static bool TryReadReminderState(JsonElement payload, out TaskReminderFieldState state)
+    {
+        if (!TryReadFormElement(payload, "task_reminder_enabled", out _))
+        {
+            state = TaskReminderFieldState.Default(isEnabled: false);
+            return false;
+        }
+
+        state = ReadReminderState(payload);
+        return true;
+    }
+
+    private static ETimeUnit? ReadTimeUnit(JsonElement payload, string key)
+    {
+        var value = ReadValue(payload, key);
+
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        if (Enum.TryParse<ETimeUnit>(value, ignoreCase: true, out var unit))
+            return unit;
+
+        return int.TryParse(value, out var numericUnit) && Enum.IsDefined(typeof(ETimeUnit), numericUnit)
+            ? (ETimeUnit)numericUnit
+            : null;
+    }
+
+    private static string ReadValueOrDefault(JsonElement payload, string key, string defaultValue) =>
+        TryReadFormElement(payload, key, out var element)
+            ? ConvertElementToString(element)
+            : defaultValue;
+
     private static string ReadValue(JsonElement payload, string key)
     {
+        return TryReadFormElement(payload, key, out var element)
+            ? ConvertElementToString(element)
+            : string.Empty;
+    }
+
+    private static bool ReadBool(JsonElement payload, string key, bool defaultValue)
+    {
+        if (!TryReadFormElement(payload, key, out var element))
+            return defaultValue;
+
+        return ConvertElementToBool(element, defaultValue);
+    }
+
+    private static bool TryReadFormElement(JsonElement payload, string key, out JsonElement element)
+    {
         var valuesNode = ComponentPayloadHelper.GetValues(payload);
-        var value = ComponentPayloadHelper.GetPropertyIgnoreCase(valuesNode, key)?.GetString();
-        if (!string.IsNullOrWhiteSpace(value))
-            return value;
+        var valueElement = ComponentPayloadHelper.GetPropertyIgnoreCase(valuesNode, key);
+        if (valueElement.HasValue)
+        {
+            element = valueElement.Value;
+            return true;
+        }
 
         var extraData = ComponentPayloadHelper.GetExtraData(payload);
         if (string.IsNullOrWhiteSpace(extraData) || !extraData.TrimStart().StartsWith("{"))
-            return string.Empty;
+        {
+            element = default;
+            return false;
+        }
 
         try
         {
             using var json = JsonDocument.Parse(extraData);
-            return ComponentPayloadHelper.GetPropertyIgnoreCase(json.RootElement, key)?.GetString() ?? string.Empty;
+            valueElement = ComponentPayloadHelper.GetPropertyIgnoreCase(json.RootElement, key);
+            if (valueElement.HasValue)
+            {
+                element = valueElement.Value.Clone();
+                return true;
+            }
         }
         catch
         {
-            return string.Empty;
         }
+
+        element = default;
+        return false;
+    }
+
+    private static string ConvertElementToString(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? string.Empty,
+            JsonValueKind.Number => element.GetRawText(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "value") is { } value =>
+                ConvertElementToString(value),
+            JsonValueKind.Array => element.EnumerateArray().Select(ConvertElementToString).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    private static bool ConvertElementToBool(JsonElement element, bool defaultValue)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number => element.TryGetInt32(out var value) ? value != 0 : defaultValue,
+            JsonValueKind.String => ParseBoolString(element.GetString(), defaultValue),
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "checked") is { } checkedValue =>
+                ConvertElementToBool(checkedValue, defaultValue),
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "value") is { } value =>
+                ConvertElementToBool(value, defaultValue),
+            JsonValueKind.Array => element.EnumerateArray().Any(item => ConvertElementToBool(item, false)),
+            _ => defaultValue
+        };
+    }
+
+    private static bool ParseBoolString(string? value, bool defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultValue;
+
+        if (bool.TryParse(value, out var parsed))
+            return parsed;
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "1" or "on" or "yes" or "checked" => true,
+            "0" or "off" or "no" or "unchecked" => false,
+            _ => defaultValue
+        };
     }
 
     private static ComponentResponse BuildSuccessResponse(ComponentContext context, ChannelMessageContent content)

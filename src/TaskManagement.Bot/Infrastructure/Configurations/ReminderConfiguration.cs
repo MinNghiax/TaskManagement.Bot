@@ -14,6 +14,7 @@ public class ReminderConfiguration : IEntityTypeConfiguration<Reminder>
             .IsRequired();
 
         entity.Property(e => e.TargetUserId)
+            .HasMaxLength(100)
             .IsRequired();
 
         entity.Property(e => e.Status)

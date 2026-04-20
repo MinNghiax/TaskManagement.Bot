@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
@@ -433,7 +434,7 @@ public class ReportService : IReportService
             TriggerAt = r.TriggerAt,
             NextTriggerAt = r.NextTriggerAt,
             Status = r.Status,
-            ReminderRuleName = r.ReminderRule?.Name,
+            ReminderRuleName = r.ReminderRule is null ? null : BuildReminderRuleLabel(r.ReminderRule),
             TriggerType = r.ReminderRule?.TriggerType
         }).OrderBy(r => r.TriggerAt).ToList() ?? new();
 
@@ -746,5 +747,36 @@ public class ReportService : IReportService
 
         return results;
     }
+
+    private static string BuildReminderRuleLabel(ReminderRule rule)
+    {
+        return rule.TriggerType switch
+        {
+            EReminderTriggerType.BeforeDeadline => $"{FormatDuration(rule.Value, rule.IntervalUnit)} before deadline",
+            EReminderTriggerType.AfterDeadline => rule.IsRepeat
+                ? $"{FormatDuration(rule.Value, rule.IntervalUnit)} after deadline, repeats"
+                : $"{FormatDuration(rule.Value, rule.IntervalUnit)} after deadline",
+            EReminderTriggerType.Repeat => $"Every {FormatDuration(rule.Value, rule.IntervalUnit)}",
+            _ => $"Rule #{rule.Id}"
+        };
+    }
+
+    private static string FormatDuration(double value, ETimeUnit? unit)
+    {
+        var formattedValue = Math.Abs(value - Math.Round(value)) < 0.0001
+            ? value.ToString("0", CultureInfo.InvariantCulture)
+            : value.ToString("0.##", CultureInfo.InvariantCulture);
+
+        return $"{formattedValue} {GetTimeUnitText(unit)}";
+    }
+
+    private static string GetTimeUnitText(ETimeUnit? unit) => unit switch
+    {
+        ETimeUnit.Minutes => "minute(s)",
+        ETimeUnit.Hours => "hour(s)",
+        ETimeUnit.Days => "day(s)",
+        ETimeUnit.Weeks => "week(s)",
+        _ => "unit(s)"
+    };
 }
 

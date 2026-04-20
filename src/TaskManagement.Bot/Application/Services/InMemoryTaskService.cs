@@ -34,7 +34,8 @@ public class InMemoryTaskService : ITaskService
                 DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 ClanIds = dto.ClanIds,
-                ChannelIds = dto.ChannelIds
+                ChannelIds = dto.ChannelIds,
+                ReminderRules = dto.ReminderRules.ToList()
             };
 
             _store.Add(task.Id, task);
@@ -163,6 +164,9 @@ public class InMemoryTaskService : ITaskService
 
         if (!string.IsNullOrWhiteSpace(updateDto.AssignedTo))
             task.AssignedTo = updateDto.AssignedTo;
+
+        if (updateDto.ReminderRules is not null)
+            task.ReminderRules = updateDto.ReminderRules.ToList();
 
         task.UpdatedAt = DateTime.UtcNow;
 
