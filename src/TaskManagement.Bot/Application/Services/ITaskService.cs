@@ -16,6 +16,9 @@ public interface ITaskService
 
     Task ChangeStatusAsync(int taskId, ETaskStatus newStatus, CancellationToken cancellationToken = default);
 
+    //Them phan Complain
+    Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default);
+
     Task DeleteAsync(int taskId, CancellationToken cancellationToken = default);
 
     Task<List<TaskDto>> GetAllAsync(CancellationToken cancellationToken = default);
