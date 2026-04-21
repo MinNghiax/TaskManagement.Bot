@@ -1,7 +1,6 @@
 ﻿using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.Services;
-using TaskManagement.Bot.Infrastructure.Enums;  // ✅ THÊM: using cho ETaskStatus
-
+using TaskManagement.Bot.Infrastructure.Enums; 
 namespace TaskManagement.Bot.Application.Commands.Complain;
 
 public class ComplainCommandHandler : ICommandHandler
@@ -49,7 +48,7 @@ public class ComplainCommandHandler : ICommandHandler
             return new CommandResponse("❌ You have no tasks to complain about.");
         }
 
-        // ✅ THÊM: Lọc thêm task Review ở đây (double-check)
+        //  Lọc thêm task Review
         var validTasks = tasks.Where(t => t.Status != ETaskStatus.Review).ToList();
 
         if (!validTasks.Any())
@@ -61,7 +60,7 @@ public class ComplainCommandHandler : ICommandHandler
             .Select(t => (object)new { label = $"#{t.Id} {t.Title} [{t.Status}]", value = t.Id.ToString() })
             .ToArray();
 
-        var formContent = ComplainFormBuilder.BuildComplainForm(options);
+        var formContent = ComplainFormBuilder.BuildComplainForm(options, userId);
         return new CommandResponse(formContent);
     }
 
@@ -85,7 +84,7 @@ public class ComplainCommandHandler : ICommandHandler
             });
         }
 
-        var formContent = ComplainFormBuilder.BuildApproveForm(options.ToArray());
+        var formContent = ComplainFormBuilder.BuildApproveForm(options.ToArray(), userId);
         return new CommandResponse(formContent);
     }
 }

@@ -25,20 +25,42 @@ public class ComplainComponentHandler : IComponentHandler
         _userService = userService;
     }
 
+    //public bool CanHandle(string customId)
+    //{
+    //    return customId == "complain_submit" ||
+    //           customId == "complain_cancel" ||
+    //           customId == "complain_approve_submit" ||
+    //           customId == "complain_reject_submit" ||
+    //           customId == "approve_cancel" ||
+    //           customId.StartsWith("complain_approve_") ||
+    //           customId.StartsWith("complain_reject_");
+    //}
+
     public bool CanHandle(string customId)
     {
-        return customId == "complain_submit" ||
-               customId == "complain_cancel" ||
-               customId == "complain_approve_submit" ||
-               customId == "complain_reject_submit" ||
-               customId == "approve_cancel" ||
-               customId.StartsWith("complain_approve_") ||
-               customId.StartsWith("complain_reject_");
+        var (clean, _) = ParseCustomId(customId);
+        return clean == "complain_submit" ||
+               clean == "complain_cancel" ||
+               clean == "complain_approve_submit" ||
+               clean == "complain_reject_submit" ||
+               clean == "approve_cancel" ||
+               clean.StartsWith("complain_approve_") ||
+               clean.StartsWith("complain_reject_");
     }
 
     public async Task<ComponentResponse> HandleAsync(ComponentContext context, CancellationToken cancellationToken)
     {
-        var customId = context.CustomId;
+        //var customId = context.CustomId;
+        var (customId, ownerId) = ParseCustomId(context.CustomId);
+
+        // Chỉ người tạo form mới được thao tác
+        if (!string.IsNullOrEmpty(ownerId) && ownerId != context.CurrentUserId)
+        {
+            return ComponentResponse.FromText(
+                context.ClanId!, context.ChannelId!,
+                "⛔ You are not authorized to interact with this form.",
+                context.Mode, context.IsPublic, context.MessageId!, null);
+        }
         var clanId = context.ClanId!;
         var channelId = context.ChannelId!;
         var userId = context.CurrentUserId!;
@@ -608,5 +630,13 @@ public class ComplainComponentHandler : IComponentHandler
         };
 
         return new ChannelMessageContent { Text = null, Embed = new object[] { embed } };
+    }
+
+    private static (string CustomId, string? OwnerId) ParseCustomId(string rawCustomId)
+    {
+        var parts = rawCustomId.Split('|');
+        return parts.Length >= 2
+            ? (parts[0], parts[1])
+            : (rawCustomId, null);
     }
 }

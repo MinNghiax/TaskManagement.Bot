@@ -32,7 +32,7 @@ public static class ComplainFormBuilder
     /// <summary>
     /// Single form: Select task, complain type, reason and duration (if extend).
     /// </summary>
-    public static ChannelMessageContent BuildComplainForm(object[] taskOptions)
+    public static ChannelMessageContent BuildComplainForm(object[] taskOptions, string ownerId)
     {
         var fields = new List<object>
         {
@@ -120,8 +120,10 @@ public static class ComplainFormBuilder
                     type = 1,
                     components = new object[]
                     {
-                        new { type = 1, id = "complain_submit", component = new { label = "✅ Submit", style = 3 } },
-                        new { type = 1, id = "complain_cancel", component = new { label = "❌ Cancel", style = 4 } }
+                        //new { type = 1, id = "complain_submit", component = new { label = "✅ Submit", style = 3 } },
+                        //new { type = 1, id = "complain_cancel", component = new { label = "❌ Cancel", style = 4 } }
+                        new { type = 1, id = $"complain_submit|{ownerId}", component = new { label = "✅ Submit", style = 3 } },
+                        new { type = 1, id = $"complain_cancel|{ownerId}", component = new { label = "❌ Cancel", style = 4 } }
                     }
                 }
             }
@@ -131,7 +133,7 @@ public static class ComplainFormBuilder
     /// <summary>
     /// PM review form: select complaint to approve/reject.
     /// </summary>
-    public static ChannelMessageContent BuildApproveForm(object[] complainOptions)
+    public static ChannelMessageContent BuildApproveForm(object[] complainOptions, string ownerId)
     {
         var fields = new List<object>
         {
@@ -191,9 +193,9 @@ public static class ComplainFormBuilder
                     {
                         //new { type = 1, id = "approve_submit", component = new { label = "✅ Approve", style = 3 } },
                         //new { type = 1, id = "reject_submit", component = new { label = "❌ Reject", style = 4 } },
-                        new { type = 1, id = "complain_approve_submit", component = new { label = "✅ Approve", style = 3 } },
-                        new { type = 1, id = "complain_reject_submit",  component = new { label = "❌ Reject",  style = 4 } },
-                        new { type = 1, id = "approve_cancel", component = new { label = "Cancel", style = 2 } }
+                        new { type = 1, id = $"complain_approve_submit|{ownerId}", component = new { label = "✅ Approve", style = 3 } },
+new { type = 1, id = $"complain_reject_submit|{ownerId}",  component = new { label = "❌ Reject",  style = 4 } },
+new { type = 1, id = $"approve_cancel|{ownerId}", component = new { label = "Cancel", style = 2 } }
                     }
                 }
             }
