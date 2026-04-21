@@ -19,6 +19,7 @@ public static class MessageBuilder
         var rule = reminder.ReminderRule;
         var triggerType = rule?.TriggerType;
         var taskId = task?.Id ?? reminder.TaskId;
+        var projectTitle = Normalize(task?.Title, $"Task #{taskId}");
         var fields = new List<object>
         {
             BuildField("👤 Người được giao", Normalize(assigneeUsername, UnknownUserValue), inline: true),
@@ -39,7 +40,7 @@ public static class MessageBuilder
 
         var embed = new
         {
-            title = $"{GetReminderTitle(triggerType)} - Task #{taskId}",
+            title = $"{GetReminderTitle(triggerType)} - {projectTitle}",
             description = GetReminderDescription(triggerType),
             color = GetReminderColor(triggerType),
             fields = fields.ToArray(),
@@ -51,7 +52,7 @@ public static class MessageBuilder
 
         return new ChannelMessageContent
         {
-            Text = $"{GetReminderLabel(triggerType)} Task #{taskId}",
+            Text = $"{GetReminderLabel(triggerType)} {projectTitle}",
             Embed = new object[] { embed }
         };
     }
