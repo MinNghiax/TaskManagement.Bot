@@ -101,6 +101,7 @@ public static class ReportFormBuilder
 
         var fields = new List<object>();
 
+        // 1. PROJECT SELECT - Always show
         var projectOptions = projectList.Projects.Select(p => new
         {
             label = $"{p.ProjectName} ({p.TeamCount} teams, {p.TotalTasks} tasks)",

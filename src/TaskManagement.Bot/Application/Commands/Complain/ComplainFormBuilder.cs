@@ -194,8 +194,8 @@ public static class ComplainFormBuilder
                         //new { type = 1, id = "approve_submit", component = new { label = "✅ Approve", style = 3 } },
                         //new { type = 1, id = "reject_submit", component = new { label = "❌ Reject", style = 4 } },
                         new { type = 1, id = $"complain_approve_submit|{ownerId}", component = new { label = "✅ Approve", style = 3 } },
-                        new { type = 1, id = $"complain_reject_submit|{ownerId}", component = new { label = "❌ Reject", style = 4 } },
-                        new { type = 1, id = $"approve_cancel|{ownerId}", component = new { label = "Cancel", style = 2 } }
+new { type = 1, id = $"complain_reject_submit|{ownerId}",  component = new { label = "❌ Reject",  style = 4 } },
+new { type = 1, id = $"approve_cancel|{ownerId}", component = new { label = "Cancel", style = 2 } }
                     }
                 }
             }

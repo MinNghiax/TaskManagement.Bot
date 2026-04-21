@@ -1,3 +1,4 @@
+using Mezon.Sdk;
 using Microsoft.EntityFrameworkCore;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
@@ -9,20 +10,30 @@ namespace TaskManagement.Bot.Application.Services;
 public class TaskService : ITaskService
 {
     private readonly TaskManagementDbContext _context;
-    public TaskService(TaskManagementDbContext context)
+    private readonly MezonClient? _client;
+
+    public TaskService(TaskManagementDbContext context, MezonClient? client = null)
     {
         _context = context;
+        _client = client;
     }
-    private static TaskDto MapToDto(TaskItem task)
+
+    private TaskDto MapToDto(TaskItem task)
     {
         var clanInfo = task.Clans.FirstOrDefault();
+        var clanId = clanInfo?.ClanId;
+
         return new TaskDto
         {
             Id = task.Id,
             Title = task.Title,
             Description = task.Description,
-            AssignedTo = task.AssignedTo,
-            CreatedBy = task.CreatedBy,
+            AssignedTo = clanId != null
+                ? GetDisplayName(task.AssignedTo, clanId)
+                : task.AssignedTo,
+            CreatedBy = clanId != null
+                ? GetDisplayName(task.CreatedBy, clanId)
+                : task.CreatedBy,
             DueDate = task.DueDate,
             Status = task.Status,
             ReviewStartedAt = task.ReviewStartedAt,
@@ -311,5 +322,15 @@ public class TaskService : ITaskService
 
         if (previousStatus == ETaskStatus.Review)
             task.ReviewStartedAt = null;
+    }
+
+    private string GetDisplayName(string userId, string clanId)
+    {
+        var user = _client?.Clans.Get(clanId)?.Users.Get(userId);
+
+        return user?.DisplayName
+            ?? user?.ClanNick
+            ?? user?.Username
+            ?? $"User-{userId.Substring(0, 4)}";
     }
 }
