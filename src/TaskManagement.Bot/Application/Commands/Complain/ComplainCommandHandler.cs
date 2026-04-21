@@ -1,4 +1,4 @@
-using Mezon.Sdk.Domain;
+﻿using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Enums;  // ✅ THÊM: using cho ETaskStatus
 
@@ -30,11 +30,13 @@ public class ComplainCommandHandler : ICommandHandler
         var userId = message.SenderId!;
         var clanId = message.ClanId!;
 
+        // Handle !approve command
         if (command.Equals("!approve", StringComparison.OrdinalIgnoreCase))
         {
             return await HandleApproveCommand(userId, clanId, cancellationToken);
         }
 
+        // Handle !complain command
         return await HandleComplainCommand(userId, cancellationToken);
     }
 
