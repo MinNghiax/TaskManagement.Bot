@@ -2,6 +2,9 @@ namespace Mezon.Sdk.Domain;
 
 using System.Text.Json.Serialization;
 
+/// <summary>
+/// The content payload of a channel message, containing text, embeds, components, and rich content markers.
+/// </summary>
 public sealed record ChannelMessageContent
 {
     [JsonPropertyName("t")]
@@ -32,6 +35,9 @@ public sealed record ChannelMessageContent
     public object[]? Components { get; init; }
 }
 
+/// <summary>
+/// A hashtag detected in message content.
+/// </summary>
 public sealed record HashtagOnMessage
 {
     public required int S { get; init; }
@@ -39,6 +45,9 @@ public sealed record HashtagOnMessage
     public string? ChannelId { get; init; }
 }
 
+/// <summary>
+/// An emoji detected in message content.
+/// </summary>
 public sealed record EmojiOnMessage
 {
     public required int S { get; init; }
@@ -46,12 +55,18 @@ public sealed record EmojiOnMessage
     public string? EmojiId { get; init; }
 }
 
+/// <summary>
+/// A plain link detected in message content.
+/// </summary>
 public sealed record LinkOnMessage
 {
     public required int S { get; init; }
     public required int E { get; init; }
 }
 
+/// <summary>
+/// A markdown segment in message content.
+/// </summary>
 public sealed record MarkdownOnMessage
 {
     public required int S { get; init; }
@@ -59,12 +74,18 @@ public sealed record MarkdownOnMessage
     public string? Type { get; init; }
 }
 
+/// <summary>
+/// A voice room link detected in message content.
+/// </summary>
 public sealed record VoiceLinkOnMessage
 {
     public required int S { get; init; }
     public required int E { get; init; }
 }
 
+/// <summary>
+/// A mention of a user or role in a message.
+/// </summary>
 public sealed record ApiMessageMention
 {
     public string? CreateTime { get; init; }
@@ -82,6 +103,9 @@ public sealed record ApiMessageMention
     public string? SenderId { get; init; }
 }
 
+/// <summary>
+/// A file attachment on a message.
+/// </summary>
 public sealed record ApiMessageAttachment
 {
     public string? Filename { get; init; }
@@ -97,6 +121,9 @@ public sealed record ApiMessageAttachment
     public string? SenderId { get; init; }
 }
 
+/// <summary>
+/// A reference (reply/quote) to another message.
+/// </summary>
 public sealed record ApiMessageRef
 {
     public string? MessageId { get; init; }
@@ -114,6 +141,9 @@ public sealed record ApiMessageRef
     public string? ChannelLabel { get; init; }
 }
 
+/// <summary>
+/// A reaction (emoji) on a message.
+/// </summary>
 public sealed record ApiMessageReaction
 {
     public bool? Action { get; init; }
@@ -130,6 +160,9 @@ public sealed record ApiMessageReaction
     public string? MessageId { get; init; }
 }
 
+/// <summary>
+/// Acknowledgement returned when a message is sent.
+/// </summary>
 public sealed record ChannelMessageAck
 {
     public required string ChannelId { get; init; }
@@ -142,6 +175,9 @@ public sealed record ChannelMessageAck
     public bool? Persistence { get; init; }
 }
 
+/// <summary>
+/// A realtime channel presence entry.
+/// </summary>
 public sealed record Presence
 {
     public required string UserId { get; init; }
@@ -151,6 +187,9 @@ public sealed record Presence
     public string? Status { get; init; }
 }
 
+/// <summary>
+/// A channel joined via the realtime socket.
+/// </summary>
 public sealed record Channel
 {
     public required string Id { get; init; }
@@ -161,6 +200,9 @@ public sealed record Channel
     public string? CategoryName { get; init; }
 }
 
+/// <summary>
+/// A full channel message received from the realtime socket.
+/// </summary>
 public sealed record ChannelMessage
 {
     public required string Id { get; init; }

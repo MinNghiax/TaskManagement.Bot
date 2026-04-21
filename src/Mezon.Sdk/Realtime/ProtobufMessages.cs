@@ -3,11 +3,18 @@ using System.Text;
 
 namespace Mezon.Sdk.Realtime;
 
+/// <summary>
+/// Wire-format envelope for the Mezon realtime protocol.
+/// Uses a length-delimited binary encoding: each inner field is serialized as
+/// [varint(length)][payload bytes], matching protobuf wire semantics.
+/// </summary>
 public sealed class Envelope
 {
 
+    // ─── oneof fields (stored as raw length-delimited bytes) ─────────────────
     public string? Cid { get; set; }
 
+    // Each inner field stores its serialized bytes
     public byte[]? Channel { get; set; }
     public byte[]? ClanJoin { get; set; }
     public byte[]? ChannelJoinMsg { get; set; }
@@ -61,6 +68,7 @@ public sealed class Envelope
     public byte[]? Rpc { get; set; }
 
 
+    // ─── Wire encode / decode ──────────────────────────────────────────────
     public byte[] Encode()
     {
         var ms = new MemoryStream();
@@ -200,6 +208,7 @@ public sealed class Envelope
                 case 51: env.Error = ReadLengthDelimitedBytes(reader); break;
                 case 52: env.Rpc = ReadLengthDelimitedBytes(reader); break;
                 default:
+                    // Unknown field — skip
                     if (wireType == 0) ReadVarint64(reader);
                     else if (wireType == 2) { var len = ReadVarint32(reader); reader.BaseStream.Position += len; }
                     else if (wireType == 1) reader.BaseStream.Position += 8;
@@ -210,9 +219,10 @@ public sealed class Envelope
     }
 
 
+    // ─── Low-level wire helpers ─────────────────────────────────────────────
     private static void WriteField(BinaryWriter writer, int fieldNumber, byte[] data)
     {
-        var tag = (fieldNumber << 3) | 2; 
+        var tag = (fieldNumber << 3) | 2; // wire type 2 = LENGTH_DELIMITED
         WriteVarint(writer, tag);
         WriteVarint(writer, data.Length);
         writer.Write(data);
@@ -288,6 +298,7 @@ public sealed class Envelope
 }
 
 
+// ─── Serialization helpers ────────────────────────────────────────────────────
 public static class RealtimeSerializer
 {
     public static byte[] Encode(Envelope envelope) => envelope.Encode();
@@ -296,6 +307,7 @@ public static class RealtimeSerializer
 }
 
 
+// ─── Ping / Pong (empty messages) ───────────────────────────────────────────
 public sealed class Ping
 {
     public static Ping Default { get; } = new();
@@ -308,6 +320,7 @@ public sealed class Pong
 }
 
 
+// ─── UserPresence ─────────────────────────────────────────────────────────────
 public sealed class UserPresence
 {
     public string UserId { get; set; } = "";
@@ -427,6 +440,7 @@ public sealed class UserPresence
 }
 
 
+// ─── Channel ─────────────────────────────────────────────────────────────────
 public sealed class Channel
 {
     public string Id { get; set; } = "";
@@ -536,6 +550,7 @@ public sealed class Channel
 }
 
 
+// ─── ClanJoin ────────────────────────────────────────────────────────────────
 public sealed class ClanJoin
 {
     public string ClanId { get; set; } = "";
@@ -575,6 +590,7 @@ public sealed class ClanJoin
 }
 
 
+// ─── ChannelJoin / ChannelLeave ─────────────────────────────────────────────
 public sealed class ChannelJoin
 {
     public string ClanId { get; set; } = "";
@@ -688,6 +704,7 @@ public sealed class ChannelLeave
 }
 
 
+// ─── ChannelMessageSend ──────────────────────────────────────────────────────
 public sealed class ChannelMessageSend
 {
     public string ClanId { get; set; } = "";
@@ -804,6 +821,7 @@ public sealed class ChannelMessageSend
 }
 
 
+// ─── MessageMention / MessageAttachment / MessageRef ────────────────────────────
 public sealed class MessageMention
 {
     public string Id { get; set; } = "";
@@ -1064,6 +1082,7 @@ public sealed class MessageRef
 }
 
 
+// ─── ChannelMessageAck ────────────────────────────────────────────────────────
 public sealed class RealtimeChannelMessageAck
 {
     public string ChannelId { get; set; } = "";
@@ -1168,6 +1187,7 @@ public sealed class RealtimeChannelMessageAck
 }
 
 
+// ─── ChannelMessageUpdate / ChannelMessageRemove ─────────────────────────────
 public sealed class ChannelMessageUpdate
 {
     public string ClanId { get; set; } = "";
@@ -1240,6 +1260,7 @@ public sealed class ChannelMessageRemove
 }
 
 
+// ─── ChannelMessage ──────────────────────────────────────────────────────────
 public sealed class RealtimeChannelMessage
 {
     public string ClanId { get; set; } = "";
@@ -1316,6 +1337,7 @@ public sealed class RealtimeChannelMessage
 }
 
 
+// ─── Status + presence ───────────────────────────────────────────────────────
 public sealed class Status
 {
     public RepeatedField<UserPresence> Presences { get; } = new();
@@ -1371,6 +1393,7 @@ public sealed class Error { }
 public sealed class Rpc { }
 
 
+// ─── TokenSentEvent ───────────────────────────────────────────────────────────
 public sealed class TokenSentEvent
 {
     public string SenderId { get; set; } = "";

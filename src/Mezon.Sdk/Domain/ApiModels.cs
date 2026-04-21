@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace Mezon.Sdk.Domain;
 
+/// <summary>
+/// Response from the authenticate endpoint.
+/// </summary>
 public sealed record ApiSession
 {
     public string? Token { get; init; }
@@ -12,11 +15,17 @@ public sealed record ApiSession
     public string? IdToken { get; init; }
 }
 
+/// <summary>
+/// Request body sent to the authenticate endpoint.
+/// </summary>
 public sealed record ApiAuthenticateRequest
 {
     public ApiAccountApp? Account { get; init; }
 }
 
+/// <summary>
+/// App account credentials used for bot authentication.
+/// </summary>
 public sealed record ApiAccountApp
 {
     [JsonPropertyName("appid")]
@@ -32,11 +41,17 @@ public sealed record ApiAccountApp
     public Dictionary<string, string>? Vars { get; init; }
 }
 
+/// <summary>
+/// Response when listing clans.
+/// </summary>
 public sealed record ApiClanDescList
 {
     public IEnumerable<ApiClanDesc>? ClanDescs { get; init; }
 }
 
+/// <summary>
+/// A clan's summary description.
+/// </summary>
 public sealed record ApiClanDesc
 {
     public string? Banner { get; init; }
@@ -51,6 +66,9 @@ public sealed record ApiClanDesc
     public string? OnboardingBanner { get; init; }
 }
 
+/// <summary>
+/// Full channel description returned by channel detail/list endpoints.
+/// </summary>
 public sealed record ApiChannelDescription
 {
     public required string ClanId { get; init; }
@@ -86,6 +104,9 @@ public sealed record ApiChannelDescription
     public string? ParentId { get; init; }
 }
 
+/// <summary>
+/// Paginated list of channel descriptions.
+/// </summary>
 public sealed record ApiChannelDescList
 {
     public string? CacheableCursor { get; init; }
@@ -95,6 +116,9 @@ public sealed record ApiChannelDescList
     public string? PrevCursor { get; init; }
 }
 
+/// <summary>
+/// Minimal channel message header for last-seen/last-sent tracking.
+/// </summary>
 public sealed record ApiChannelMessageHeader
 {
     public string? Attachment { get; init; }
@@ -107,6 +131,9 @@ public sealed record ApiChannelMessageHeader
     public long? TimestampSeconds { get; init; }
 }
 
+/// <summary>
+/// Request to create a new channel.
+/// </summary>
 public sealed record ApiCreateChannelDescRequest
 {
     public string? CategoryId { get; init; }
@@ -119,11 +146,17 @@ public sealed record ApiCreateChannelDescRequest
     public IEnumerable<string>? UserIds { get; init; }
 }
 
+/// <summary>
+/// Users currently in a voice channel.
+/// </summary>
 public sealed record ApiVoiceChannelUserList
 {
     public IEnumerable<ApiVoiceChannelUser>? VoiceChannelUsers { get; init; }
 }
 
+/// <summary>
+/// A user in a voice channel session.
+/// </summary>
 public sealed record ApiVoiceChannelUser
 {
     public string? Id { get; init; }
@@ -132,6 +165,9 @@ public sealed record ApiVoiceChannelUser
     public IEnumerable<string>? UserIds { get; init; }
 }
 
+/// <summary>
+/// Response when listing roles.
+/// </summary>
 public sealed record ApiRoleListEventResponse
 {
     public string? ClanId { get; init; }
@@ -141,6 +177,9 @@ public sealed record ApiRoleListEventResponse
     public int? State { get; init; }
 }
 
+/// <summary>
+/// A list of roles with optional cursor.
+/// </summary>
 public sealed record ApiRoleList
 {
     public string? CacheableCursor { get; init; }
@@ -149,6 +188,9 @@ public sealed record ApiRoleList
     public IEnumerable<ApiRole>? Roles { get; init; }
 }
 
+/// <summary>
+/// A role description within a clan.
+/// </summary>
 public sealed record ApiRole
 {
     public string? Id { get; init; }
@@ -171,12 +213,18 @@ public sealed record ApiRole
     public int? OrderRole { get; init; }
 }
 
+/// <summary>
+/// Permission list within a role.
+/// </summary>
 public sealed record ApiPermissionList
 {
     public int? MaxLevelPermission { get; init; }
     public IEnumerable<ApiPermission>? Permissions { get; init; }
 }
 
+/// <summary>
+/// A single permission entry.
+/// </summary>
 public sealed record ApiPermission
 {
     public int? Active { get; init; }
@@ -188,12 +236,18 @@ public sealed record ApiPermission
     public string? Title { get; init; }
 }
 
+/// <summary>
+/// User list within a role.
+/// </summary>
 public sealed record ApiRoleUserList
 {
     public string? Cursor { get; init; }
     public IEnumerable<RoleUserListRoleUser>? RoleUsers { get; init; }
 }
 
+/// <summary>
+/// A user entry in a role's user list.
+/// </summary>
 public sealed record RoleUserListRoleUser
 {
     public string? AvatarUrl { get; init; }
@@ -205,6 +259,9 @@ public sealed record RoleUserListRoleUser
     public string? Username { get; init; }
 }
 
+/// <summary>
+/// Body sent when updating a role's fields.
+/// </summary>
 public sealed record MezonUpdateRoleBody
 {
     public IEnumerable<string>? ActivePermissionIds { get; init; }
@@ -221,6 +278,9 @@ public sealed record MezonUpdateRoleBody
     public string? Title { get; init; }
 }
 
+/// <summary>
+/// Quick menu access item.
+/// </summary>
 public sealed record ApiQuickMenuAccess
 {
     public string? ActionMsg { get; init; }
@@ -233,12 +293,18 @@ public sealed record ApiQuickMenuAccess
     public int? MenuType { get; init; }
 }
 
+/// <summary>
+/// Paginated list of quick menu items.
+/// </summary>
 public sealed record ApiQuickMenuAccessList
 {
     public IEnumerable<ApiQuickMenuAccess>? QuickMenus { get; init; }
     public IEnumerable<ApiQuickMenuAccess>? ListMenus { get; init; }
 }
 
+/// <summary>
+/// Request to add a quick menu entry.
+/// </summary>
 public sealed record ApiQuickMenuAccessRequest
 {
     public string? ActionMsg { get; init; }
@@ -251,6 +317,9 @@ public sealed record ApiQuickMenuAccessRequest
     public int? MenuType { get; init; }
 }
 
+/// <summary>
+/// Request to play media in a voice channel.
+/// </summary>
 public sealed record PlayMediaRequest
 {
     public required string RoomName { get; init; }
@@ -260,6 +329,9 @@ public sealed record PlayMediaRequest
     public required string Name { get; init; }
 }
 
+/// <summary>
+/// A user in the system.
+/// </summary>
 public sealed record ApiUser
 {
     public string? Id { get; init; }
@@ -280,6 +352,9 @@ public sealed record ApiUser
     public long? UpdateTime { get; init; }
 }
 
+/// <summary>
+/// A user within a clan with clan-specific properties.
+/// </summary>
 public sealed record ApiClanUser
 {
     public ApiUser? User { get; init; }
@@ -287,6 +362,9 @@ public sealed record ApiClanUser
     public string? ClanAvatar { get; init; }
 }
 
+/// <summary>
+/// List of users in a clan.
+/// </summary>
 public sealed record ApiClanUserList
 {
     public IEnumerable<ApiClanUser>? ClanUsers { get; init; }

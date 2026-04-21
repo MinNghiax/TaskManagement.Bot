@@ -2,6 +2,9 @@ using System.IdentityModel.Tokens.Jwt;
 
 namespace Mezon.Sdk.Domain;
 
+/// <summary>
+/// Represents an authenticated session with the Mezon server, wrapping a JWT token.
+/// </summary>
 public sealed class Session
 {
     public string Token { get; internal set; } = string.Empty;
@@ -17,6 +20,9 @@ public sealed class Session
 
     internal Session() { }
 
+    /// <summary>
+    /// Creates a session from an <see cref="ApiSession"/> response.
+    /// </summary>
     public Session(ApiSession response)
     {
         Token = response.Token ?? string.Empty;
@@ -28,6 +34,9 @@ public sealed class Session
         ParseJwt();
     }
 
+    /// <summary>
+    /// Restores a session from a previously serialized token string.
+    /// </summary>
     public static Session Restore(string token)
     {
         var session = new Session { Token = token };
@@ -58,13 +67,23 @@ public sealed class Session
         }
         catch
         {
+            // If JWT parsing fails, leave fields with defaults
         }
     }
 
+    /// <summary>
+    /// Returns true if the session token has expired.
+    /// </summary>
     public bool IsExpired() => ExpiresAt > 0 && ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
+    /// <summary>
+    /// Returns true if the refresh token has expired.
+    /// </summary>
     public bool IsRefreshExpired() => RefreshExpiresAt > 0 && RefreshExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
+    /// <summary>
+    /// Updates the session with a new token pair.
+    /// </summary>
     public void Update(string token, string refreshToken)
     {
         Token = token;

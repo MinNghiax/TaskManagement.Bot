@@ -1,5 +1,8 @@
 namespace Mezon.Sdk.Enums;
 
+/// <summary>
+/// Channel type constants used to identify the kind of channel.
+/// </summary>
 public static class ChannelType
 {
     public const int Channel = 1;

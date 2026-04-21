@@ -2,6 +2,10 @@ using System.Net.WebSockets;
 
 namespace Mezon.Sdk.Socket;
 
+/// <summary>
+/// Low-level WebSocket wrapper using <see cref="ClientWebSocket"/>.
+/// Sends/receives raw byte arrays. Designed to be replaced by a custom adapter.
+/// </summary>
 public sealed class WebSocketAdapter : IDisposable
 {
     private ClientWebSocket? _socket;
@@ -10,7 +14,7 @@ public sealed class WebSocketAdapter : IDisposable
     public event EventHandler<WebSocketCloseEventArgs>? OnClose;
     public event EventHandler<WebSocketErrorEventArgs>? OnError;
     public event EventHandler<ArraySegment<byte>>? OnMessage;
-#pragma warning disable CS0067 
+#pragma warning disable CS0067 // Event is never used - public API event for SDK consumers
     public event EventHandler? OnOpen;
 #pragma warning restore CS0067
 
@@ -44,7 +48,7 @@ public sealed class WebSocketAdapter : IDisposable
         if (_socket?.State == WebSocketState.Open)
         {
             try { _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).Wait(); }
-            catch {   }
+            catch { /* ignore */ }
         }
         _socket?.Dispose();
         _socket = null;
@@ -66,7 +70,7 @@ public sealed class WebSocketAdapter : IDisposable
                 OnMessage?.Invoke(this, new ArraySegment<byte>(buffer, 0, result.Count));
             }
         }
-        catch (OperationCanceledException) {   }
+        catch (OperationCanceledException) { /* expected */ }
         catch (Exception ex)
         {
             OnError?.Invoke(this, new WebSocketErrorEventArgs(ex));

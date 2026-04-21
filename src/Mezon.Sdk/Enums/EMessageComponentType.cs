@@ -1,5 +1,8 @@
 namespace Mezon.Sdk.Enums;
 
+/// <summary>
+/// Component type constants for interactive message builders.
+/// </summary>
 public static class EMessageComponentType
 {
     public const int Button = 1;

@@ -1,5 +1,8 @@
 namespace Mezon.Sdk.Enums;
 
+/// <summary>
+/// Button style options for interactive message buttons.
+/// </summary>
 public enum EButtonMessageStyle
 {
     Primary = 1,

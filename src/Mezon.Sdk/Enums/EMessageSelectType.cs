@@ -1,5 +1,8 @@
 namespace Mezon.Sdk.Enums;
 
+/// <summary>
+/// Select menu type constants for interactive message selects.
+/// </summary>
 public static class EMessageSelectType
 {
     public const int Text = 1;

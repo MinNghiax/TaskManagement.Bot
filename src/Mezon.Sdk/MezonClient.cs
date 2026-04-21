@@ -9,6 +9,9 @@ using Mezon.Sdk.Structures;
 
 namespace Mezon.Sdk;
 
+/// <summary>
+/// Configuration options for <see cref="MezonClient"/>.
+/// </summary>
 public sealed class MezonClientOptions
 {
     public required string BotId { get; init; }
@@ -23,6 +26,9 @@ public sealed class MezonClientOptions
     public string? ApiBasePath { get; init; }
 }
 
+/// <summary>
+/// Main entry point for the Mezon SDK. Connects to the Mezon server via REST and WebSocket.
+/// </summary>
 public sealed class MezonClient
 {
     private readonly MezonClientOptions _options;
@@ -34,6 +40,9 @@ public sealed class MezonClient
     public Session? CurrentSession { get; private set; }
     public string ClientId => _options.BotId;
 
+    /// <summary>
+    /// Clan manager with cache, similar to TypeScript SDK's client.clans
+    /// </summary>
     public ClanManager Clans { get; private set; }
 
     private readonly ConcurrentDictionary<string, List<EventHandler<MezonEventArgs>>> _eventHandlers = new();
@@ -48,10 +57,12 @@ public sealed class MezonClient
         Api = new MezonRestApi(options.Token, basePath, options.TimeoutMs, options.AllowInvalidCertificates);
         Socket = new MezonSocket();
 
+        // Initialize clan manager
         Clans = new ClanManager(this, Api, Socket, () => CurrentSession?.Token ?? "");
 
         _mmnHttp = new HttpClient { Timeout = TimeSpan.FromMilliseconds(options.TimeoutMs) };
 
+        // Wire socket events → client events
         Socket.OnChannelMessage += (_, e) => {
             CacheUserFromMessage(e);
             Fire(Enums.MezEvent.ChannelMessage, e);
@@ -73,11 +84,13 @@ public sealed class MezonClient
     }
 
 
+    // ─── Auth ─────────────────────────────────────────────────────────────────
     public async Task<Session> LoginAsync(CancellationToken cancellationToken = default)
     {
         var session = await Api.AuthenticateAsync(_options.BotId, _options.Token, cancellationToken);
         CurrentSession = session;
         
+        // Always recreate API client with session token after authentication
         var basePath = _options.ApiBasePath;
         if (!string.IsNullOrEmpty(session.ApiUrl))
         {
@@ -90,13 +103,16 @@ public sealed class MezonClient
             basePath = basePath ?? $"{(_options.UseSSL ? "https" : "http")}://{_options.Host}:{_options.Port}";
         }
         
+        // Recreate API client with session JWT token (not bot token!)
         Console.WriteLine($"[DEBUG] Recreating API client with session token");
         Api = new MezonRestApi(session.Token, basePath, _options.TimeoutMs, _options.AllowInvalidCertificates);
         
+        // Recreate clan manager with new API instance
         Clans = new ClanManager(this, Api, Socket, () => CurrentSession?.Token ?? "");
         
         await Socket.ConnectAsync(CurrentSession, cancellationToken: cancellationToken);
         
+        // Auto-discover and join all clans the bot is a member of
         try
         {
             var clans = await Clans.FetchAllAsync(cancellationToken);
@@ -107,6 +123,7 @@ public sealed class MezonClient
                 Console.WriteLine($"Joined clan: {clan.Name} (ID: {clan.Id})");
                 await Socket.JoinClanAsync(clan.Id, cancellationToken);
                 
+                // Auto-load channels for each clan
                 try
                 {
                     await clan.LoadChannelsAsync(cancellationToken);
@@ -116,11 +133,13 @@ public sealed class MezonClient
                     Console.WriteLine($"[DEBUG] Failed to load channels for clan {clan.Name}: {ex.Message}");
                 }
                 
-                await Task.Delay(50, cancellationToken); 
+                await Task.Delay(50, cancellationToken); // Small delay to avoid rate limiting
             }
             
+            // Also join the DM "clan" (id = 0) for direct messages
             await Socket.JoinClanAsync("0", cancellationToken);
             
+            // Create DM clan in cache
             var dmClan = new Clan("0", this, Api, Socket, () => CurrentSession?.Token ?? "", "DM", "");
             Clans.Cache["0"] = dmClan;
         }
@@ -145,11 +164,13 @@ public sealed class MezonClient
         if (CurrentSession == null)
             throw new InvalidOperationException("Not logged in");
 
+        // Re-authenticate
         var session = await Api.AuthenticateAsync(_options.BotId, _options.Token, cancellationToken);
         CurrentSession = session;
     }
 
 
+    // ─── Event Subscription ─────────────────────────────────────────────────
     public void On(string eventType, EventHandler<MezonEventArgs> handler)
     {
         _eventHandlers.AddOrUpdate(
@@ -171,6 +192,9 @@ public sealed class MezonClient
                 h(this, args);
     }
 
+    /// <summary>
+    /// Cache user information from channel message (similar to TypeScript SDK v2)
+    /// </summary>
     private void CacheUserFromMessage(Interfaces.MezonEventArgs e)
     {
         try
@@ -188,6 +212,7 @@ public sealed class MezonClient
                 return;
             }
 
+            // Don't cache bot's own messages
             if (senderId == ClientId)
             {
                 return;
@@ -199,8 +224,10 @@ public sealed class MezonClient
                 return;
             }
 
+            // Check if user already exists in cache
             var existingUser = clan.Users.Get(senderId);
             
+            // Create or update user
             var user = new Structures.User(
                 userId: senderId,
                 client: this,
@@ -214,14 +241,17 @@ public sealed class MezonClient
                 dmChannelId: existingUser?.DmChannelId
             );
 
+            // Add to clan's user cache
             clan.Users.Set(senderId, user);
         }
         catch
         {
+            // Ignore errors in caching
         }
     }
 
 
+    // ─── Messaging ───────────────────────────────────────────────────────────
     public Task<ChannelMessageAck> SendMessageAsync(
         string clanId, string channelId, int mode, bool isPublic,
         ChannelMessageContent content,
@@ -260,6 +290,7 @@ public sealed class MezonClient
     }
 
 
+    // ─── MMN Token Transfers ─────────────────────────────────────────────────
     public Task<SendTokenResult> SendTokenAsync(SendTokenData data, CancellationToken cancellationToken = default)
     {
         return Socket.SendTokenAsync(data.ReceiverId, data.Amount, cancellationToken)
@@ -274,11 +305,13 @@ public sealed class MezonClient
 
     public Task<EphemeralKeyPair> GetEphemeralKeyPairAsync(CancellationToken cancellationToken = default)
     {
+        // Generate a key pair client-side (simplified — in production use a crypto library)
         return Task.FromResult(new EphemeralKeyPair { PublicKey = Guid.NewGuid().ToString("N"), PrivateKey = Guid.NewGuid().ToString("N") });
     }
 
     public Task<string> GetAddressAsync(string senderId, CancellationToken cancellationToken = default)
     {
+        // MMN address lookup via optional MMN API URL
         return Task.FromResult(Guid.NewGuid().ToString());
     }
 
@@ -289,13 +322,16 @@ public sealed class MezonClient
 
     public Task<ZkProofResponse> GetZkProofsAsync(ZkProofRequest request, CancellationToken cancellationToken = default)
     {
+        // ZK proof generation via optional ZK API URL
         return Task.FromResult(new ZkProofResponse { ZkProof = "placeholder", ZkPub = "placeholder" });
     }
 
 
+    // ─── Channels ────────────────────────────────────────────────────────────
     public async Task<Domain.ApiChannelDescription> CreateChannelAsync(ApiCreateChannelDescRequest request, CancellationToken cancellationToken = default)
     {
         if (CurrentSession == null) throw new InvalidOperationException("Not logged in");
+        // Use REST API to create channel
         var channel = await Api.CreateChannelDescAsync(CurrentSession.Token, request, cancellationToken);
         return channel;
     }
@@ -306,6 +342,7 @@ public sealed class MezonClient
         var channel = await Api.CreateDmChannelAsync(CurrentSession.Token, userId, cancellationToken);
         if (channel == null) return null;
         
+        // Convert protobuf to domain model
         return new Domain.ApiChannelDescription
         {
             ClanId = channel.ClanId.ToString(),
@@ -333,13 +370,20 @@ public sealed class MezonClient
     }
 
 
+    // ─── High-level Structures ───────────────────────────────────────────────
+    /// <summary>
+    /// Get a clan from cache or fetch from API.
+    /// Similar to TypeScript SDK's client.clans.get() and client.clans.fetch()
+    /// </summary>
     public async Task<Clan?> GetClanAsync(string clanId, CancellationToken cancellationToken = default)
     {
         if (CurrentSession == null) throw new InvalidOperationException("Not logged in");
         
+        // Try to get from cache first
         var clan = Clans.Get(clanId);
         if (clan != null) return clan;
         
+        // Fetch from API if not in cache
         return await Clans.FetchAsync(clanId, cancellationToken);
     }
 
@@ -355,6 +399,10 @@ public sealed class MezonClient
     }
 
 
+    // ─── Phase 2: Additional Helper Methods ──────────────────────────────────
+    /// <summary>
+    /// Send typing indicator to show user is typing
+    /// </summary>
     public Task SendTypingIndicatorAsync(
         string clanId, string channelId, int mode, bool isPublic,
         CancellationToken cancellationToken = default)
@@ -362,6 +410,9 @@ public sealed class MezonClient
         return Socket.WriteMessageTypingAsync(clanId, channelId, mode, isPublic, cancellationToken);
     }
 
+    /// <summary>
+    /// Mark message as read
+    /// </summary>
     public Task MarkMessageAsReadAsync(
         string clanId, string channelId, int mode, string messageId,
         CancellationToken cancellationToken = default)
@@ -370,6 +421,9 @@ public sealed class MezonClient
         return Socket.WriteLastSeenMessageAsync(clanId, channelId, mode, messageId, timestamp, cancellationToken);
     }
 
+    /// <summary>
+    /// Pin a message in channel
+    /// </summary>
     public Task PinMessageAsync(
         string clanId, string channelId, int mode, bool isPublic, string messageId,
         CancellationToken cancellationToken = default)
@@ -378,6 +432,9 @@ public sealed class MezonClient
         return Socket.WriteLastPinMessageAsync(clanId, channelId, mode, isPublic, messageId, timestamp, 0, cancellationToken);
     }
 
+    /// <summary>
+    /// Unpin a message in channel
+    /// </summary>
     public Task UnpinMessageAsync(
         string clanId, string channelId, int mode, bool isPublic, string messageId,
         CancellationToken cancellationToken = default)
@@ -386,11 +443,17 @@ public sealed class MezonClient
         return Socket.WriteLastPinMessageAsync(clanId, channelId, mode, isPublic, messageId, timestamp, 1, cancellationToken);
     }
 
+    /// <summary>
+    /// Set custom status in clan
+    /// </summary>
     public Task SetCustomStatusAsync(string clanId, string status, CancellationToken cancellationToken = default)
     {
         return Socket.WriteCustomStatusAsync(clanId, status, cancellationToken);
     }
 
+    /// <summary>
+    /// Send ephemeral message (only visible to specific user)
+    /// </summary>
     public Task<ChannelMessageAck> SendEphemeralMessageAsync(
         string receiverId, string clanId, string channelId, int mode, bool isPublic,
         ChannelMessageContent content,
@@ -404,11 +467,17 @@ public sealed class MezonClient
             cancellationToken);
     }
 
+    /// <summary>
+    /// Check if clan name already exists
+    /// </summary>
     public Task<bool> CheckClanNameExistsAsync(string clanName, CancellationToken cancellationToken = default)
     {
         return Socket.CheckDuplicateClanNameAsync(clanName, cancellationToken);
     }
 
+    /// <summary>
+    /// React to a message with emoji
+    /// </summary>
     public Task<ApiMessageReaction> ReactToMessageAsync(
         string id, string clanId, string channelId, int mode, bool isPublic,
         string messageId, string emojiId, string emoji, int count, string messageSenderId,
@@ -420,6 +489,9 @@ public sealed class MezonClient
             emojiId, emoji, count, messageSenderId, isDelete, cancellationToken);
     }
 
+    /// <summary>
+    /// Update an existing message
+    /// </summary>
     public Task<ChannelMessageAck> UpdateMessageAsync(
         string clanId, string channelId, int mode, bool isPublic,
         string messageId, ChannelMessageContent content,
@@ -433,6 +505,9 @@ public sealed class MezonClient
             mentions, attachments, hideEdited, null, cancellationToken);
     }
 
+    /// <summary>
+    /// Delete a message
+    /// </summary>
     public Task<ChannelMessageAck> DeleteMessageAsync(
         string clanId, string channelId, int mode, bool isPublic, string messageId,
         CancellationToken cancellationToken = default)

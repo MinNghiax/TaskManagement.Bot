@@ -6,6 +6,9 @@ using Mezon.Sdk.Interfaces;
 
 namespace Mezon.Sdk.Api;
 
+/// <summary>
+/// REST API client for the Mezon server, built on <see cref="HttpClient"/>.
+/// </summary>
 public sealed class MezonApi : IMezonApi
 {
     private readonly HttpClient _http;
@@ -24,6 +27,7 @@ public sealed class MezonApi : IMezonApi
         BasePath = basePath;
         TimeoutMs = timeoutMs;
 
+        // Create HttpClientHandler with optional SSL bypass
         var handler = new HttpClientHandler();
         if (allowInvalidCertificates)
         {
@@ -45,6 +49,7 @@ public sealed class MezonApi : IMezonApi
         };
     }
 
+    /// <summary>Authenticate with app credentials.</summary>
     public async Task<ApiSession> MezAuthenticateAsync(
         string basicAuthUsername,
         string basicAuthPassword,
@@ -52,17 +57,22 @@ public sealed class MezonApi : IMezonApi
         CancellationToken cancellationToken = default)
     {
         
+        // Authorization: Basic {base64(apiKey:)} - note the colon at the end
+        // Body: JSON with Content-Type: application/proto
+        // Response: Protobuf binary
         var credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{basicAuthPassword}:"));
         
         using var req = new HttpRequestMessage(HttpMethod.Post, "v2/apps/authenticate/token");
         req.Headers.Add("Authorization", $"Basic {credentials}");
         req.Headers.Add("Accept", "application/x-protobuf");
         
+        // Send JSON body with Content-Type: application/proto (matches TypeScript SDK)
         var jsonBody = JsonSerializer.Serialize(body, _json);
         req.Content = new StringContent(jsonBody, System.Text.Encoding.UTF8, "application/proto");
 
         var resp = await RateLimitFetchAsync(req, cancellationToken);
         
+        // Check if response is successful
         if (!resp.IsSuccessStatusCode)
         {
             var errorContent = await resp.Content.ReadAsStringAsync(cancellationToken);
@@ -71,13 +81,27 @@ public sealed class MezonApi : IMezonApi
                 $"Authentication failed with status {resp.StatusCode}: {errorContent}");
         }
         
+        // Read response as binary (protobuf)
         var responseBytes = await resp.Content.ReadAsByteArrayAsync(cancellationToken);
         Console.WriteLine($"[DEBUG] Response bytes length: {responseBytes.Length}");
         Console.WriteLine($"[DEBUG] ✅ Authentication successful!");
         
+        // Decode protobuf Session message
         return DecodeSessionProtobuf(responseBytes);
     }
     
+    /// <summary>
+    /// Decode a protobuf Session message.
+    /// Based on TypeScript SDK's Session interface:
+    /// - created (bool, field 1)
+    /// - token (string, field 2)
+    /// - refresh_token (string, field 3)
+    /// - user_id (string, field 4)
+    /// - is_remember (bool, field 5)
+    /// - api_url (string, field 6)
+    /// - id_token (string, field 7)
+    /// - ws_url (string, field 8)
+    /// </summary>
     private static ApiSession DecodeSessionProtobuf(byte[] bytes)
     {
         using var ms = new MemoryStream(bytes);
@@ -98,31 +122,32 @@ public sealed class MezonApi : IMezonApi
             
             switch (fieldNumber)
             {
-                case 1: 
+                case 1: // created (bool) - skip
                     if (wireType == 0) ReadVarint32(reader);
                     break;
-                case 2: 
+                case 2: // token (string)
                     if (wireType == 2) token = ReadLengthDelimitedString(reader);
                     break;
-                case 3: 
+                case 3: // refresh_token (string)
                     if (wireType == 2) refreshToken = ReadLengthDelimitedString(reader);
                     break;
-                case 4: 
+                case 4: // user_id (string)
                     if (wireType == 2) userId = ReadLengthDelimitedString(reader);
                     break;
-                case 5: 
+                case 5: // is_remember (bool) - skip
                     if (wireType == 0) ReadVarint32(reader);
                     break;
-                case 6: 
+                case 6: // api_url (string)
                     if (wireType == 2) apiUrl = ReadLengthDelimitedString(reader);
                     break;
-                case 7: 
+                case 7: // id_token (string)
                     if (wireType == 2) idToken = ReadLengthDelimitedString(reader);
                     break;
-                case 8: 
+                case 8: // ws_url (string)
                     if (wireType == 2) wsUrl = ReadLengthDelimitedString(reader);
                     break;
                 default:
+                    // Skip unknown fields
                     SkipField(reader, wireType);
                     break;
             }
@@ -165,17 +190,17 @@ public sealed class MezonApi : IMezonApi
     {
         switch (wireType)
         {
-            case 0: 
+            case 0: // Varint
                 ReadVarint32(reader);
                 break;
-            case 1: 
+            case 1: // 64-bit
                 reader.BaseStream.Position += 8;
                 break;
-            case 2: 
+            case 2: // Length-delimited
                 var length = ReadVarint32(reader);
                 reader.BaseStream.Position += length;
                 break;
-            case 5: 
+            case 5: // 32-bit
                 reader.BaseStream.Position += 4;
                 break;
             default:
@@ -183,6 +208,7 @@ public sealed class MezonApi : IMezonApi
         }
     }
 
+    /// <summary>Create a new channel.</summary>
     public async Task<ApiChannelDescription> CreateChannelDescAsync(
         string bearerToken, ApiCreateChannelDescRequest body,
         CancellationToken cancellationToken = default)
@@ -193,6 +219,7 @@ public sealed class MezonApi : IMezonApi
             ?? throw new InvalidOperationException("Empty channel response");
     }
 
+    /// <summary>List clans.</summary>
     public async Task<ApiClanDescList> ListClanDescsAsync(
         string bearerToken, int? limit = null, int? state = null, string? cursor = null,
         CancellationToken cancellationToken = default)
@@ -203,6 +230,7 @@ public sealed class MezonApi : IMezonApi
             ?? new ApiClanDescList();
     }
 
+    /// <summary>Get channel detail.</summary>
     public async Task<ApiChannelDescription> ListChannelDetailAsync(
         string bearerToken, string channelId,
         CancellationToken cancellationToken = default)
@@ -212,6 +240,7 @@ public sealed class MezonApi : IMezonApi
             ?? throw new InvalidOperationException("Empty channel detail response");
     }
 
+    /// <summary>List channels.</summary>
     public async Task<ApiChannelDescList> ListChannelDescsAsync(
         string bearerToken, int? channelType = null, string? clanId = null,
         int? limit = null, int? state = null, string? cursor = null, bool? isMobile = null,
@@ -225,6 +254,7 @@ public sealed class MezonApi : IMezonApi
             ?? new ApiChannelDescList();
     }
 
+    /// <summary>List users in a voice channel.</summary>
     public async Task<ApiVoiceChannelUserList> ListChannelVoiceUsersAsync(
         string bearerToken, string? clanId = null, int? limit = null,
         CancellationToken cancellationToken = default)
@@ -235,6 +265,7 @@ public sealed class MezonApi : IMezonApi
             ?? new ApiVoiceChannelUserList();
     }
 
+    /// <summary>Update role fields.</summary>
     public async Task UpdateRoleAsync(
         string bearerToken, string roleId, MezonUpdateRoleBody body,
         CancellationToken cancellationToken = default)
@@ -244,6 +275,7 @@ public sealed class MezonApi : IMezonApi
         resp.EnsureSuccessStatusCode();
     }
 
+    /// <summary>List roles in a clan.</summary>
     public async Task<ApiRoleListEventResponse> ListRolesAsync(
         string bearerToken, string? clanId = null, int? limit = null, int? state = null, string? cursor = null,
         CancellationToken cancellationToken = default)
@@ -254,6 +286,7 @@ public sealed class MezonApi : IMezonApi
             ?? new ApiRoleListEventResponse();
     }
 
+    /// <summary>Add quick menu access.</summary>
     public async Task AddQuickMenuAccessAsync(
         string bearerToken, ApiQuickMenuAccessRequest body,
         CancellationToken cancellationToken = default)
@@ -263,6 +296,7 @@ public sealed class MezonApi : IMezonApi
         resp.EnsureSuccessStatusCode();
     }
 
+    /// <summary>Delete quick menu access.</summary>
     public async Task DeleteQuickMenuAccessAsync(
         string bearerToken, string? id = null, string? clanId = null,
         string? botId = null, string? menuName = null, string? background = null, string? actionMsg = null,
@@ -275,6 +309,7 @@ public sealed class MezonApi : IMezonApi
         await SendAsync(req, bearerToken, cancellationToken);
     }
 
+    /// <summary>List quick menu access entries.</summary>
     public async Task<ApiQuickMenuAccessList> ListQuickMenuAccessAsync(
         string bearerToken, string? botId = null, string? channelId = null, int? menuType = null,
         CancellationToken cancellationToken = default)
@@ -285,6 +320,7 @@ public sealed class MezonApi : IMezonApi
             ?? new ApiQuickMenuAccessList();
     }
 
+    /// <summary>Play media in a voice channel.</summary>
     public async Task PlayMediaAsync(
         string bearerToken, PlayMediaRequest body,
         CancellationToken cancellationToken = default)
@@ -295,6 +331,7 @@ public sealed class MezonApi : IMezonApi
     }
 
 
+    // ─── Internal Helpers ─────────────────────────────────────────────────────
     private async Task<HttpResponseMessage> SendAsync(
         HttpMethod method, string path, string bearerToken,
         HttpContent? content = null, CancellationToken cancellationToken = default)
@@ -311,6 +348,9 @@ public sealed class MezonApi : IMezonApi
         return await RateLimitFetchAsync(req, cancellationToken);
     }
 
+    /// <summary>
+    /// Retry on 429 with exponential backoff.
+    /// </summary>
     private async Task<HttpResponseMessage> RateLimitFetchAsync(
         HttpRequestMessage req, CancellationToken cancellationToken)
     {

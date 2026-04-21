@@ -3,6 +3,9 @@ using Mezon.Sdk.Enums;
 
 namespace Mezon.Sdk.Structures;
 
+/// <summary>
+/// High-level TextChannel structure for sending messages to a channel.
+/// </summary>
 public sealed class TextChannel
 {
     public string Id { get; }
@@ -22,6 +25,7 @@ public sealed class TextChannel
         _client = client;
     }
 
+    /// <summary>Send a message to this channel.</summary>
     public Task<ChannelMessageAck> SendAsync(
         ChannelMessageContent content,
         ApiMessageMention[]? mentions = null,
@@ -44,6 +48,7 @@ public sealed class TextChannel
             cancellationToken: cancellationToken);
     }
 
+    /// <summary>Send a simple text message to this channel.</summary>
     public Task<ChannelMessageAck> SendTextAsync(
         string text,
         bool mentionEveryone = false,
@@ -55,6 +60,7 @@ public sealed class TextChannel
             cancellationToken: cancellationToken);
     }
 
+    /// <summary>Send an ephemeral (auto-dismissing) message to a specific user.</summary>
     public async Task<ChannelMessageAck> SendEphemeralAsync(
         string receiverId,
         object content,
@@ -78,12 +84,14 @@ public sealed class TextChannel
             cancellationToken: cancellationToken);
     }
 
+    /// <summary>Delete an ephemeral message.</summary>
     public Task<ChannelMessageAck> DeleteEphemeralAsync(
         string receiverId,
         string messageId,
         string? topicId = null,
         CancellationToken cancellationToken = default)
     {
+        // Ephemeral deletion uses the DeleteEphemeralMsg type message
         return _client.Socket.WriteChatMessageAsync(
             ClanId, Id,
             TypeMessage.DeleteEphemeralMsg,

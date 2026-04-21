@@ -1,5 +1,8 @@
 namespace Mezon.Sdk.Enums;
 
+/// <summary>
+/// Message type constants used in the realtime protocol.
+/// </summary>
 public static class TypeMessage
 {
     public const int Chat = 0;
