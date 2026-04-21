@@ -10,8 +10,8 @@ namespace Mezon.Sdk.Realtime;
 /// </summary>
 public sealed class Envelope
 {
-
     // ─── oneof fields (stored as raw length-delimited bytes) ─────────────────
+
     public string? Cid { get; set; }
 
     // Each inner field stores its serialized bytes
@@ -67,8 +67,8 @@ public sealed class Envelope
     public byte[]? Error { get; set; }
     public byte[]? Rpc { get; set; }
 
-
     // ─── Wire encode / decode ──────────────────────────────────────────────
+
     public byte[] Encode()
     {
         var ms = new MemoryStream();
@@ -218,8 +218,8 @@ public sealed class Envelope
         }
     }
 
-
     // ─── Low-level wire helpers ─────────────────────────────────────────────
+
     private static void WriteField(BinaryWriter writer, int fieldNumber, byte[] data)
     {
         var tag = (fieldNumber << 3) | 2; // wire type 2 = LENGTH_DELIMITED
@@ -297,8 +297,8 @@ public sealed class Envelope
     }
 }
 
-
 // ─── Serialization helpers ────────────────────────────────────────────────────
+
 public static class RealtimeSerializer
 {
     public static byte[] Encode(Envelope envelope) => envelope.Encode();
@@ -306,8 +306,8 @@ public static class RealtimeSerializer
     public static Envelope Decode(byte[] bytes) => Envelope.Decode(bytes);
 }
 
-
 // ─── Ping / Pong (empty messages) ───────────────────────────────────────────
+
 public sealed class Ping
 {
     public static Ping Default { get; } = new();
@@ -319,8 +319,8 @@ public sealed class Pong
     public static Pong Default { get; } = new();
 }
 
-
 // ─── UserPresence ─────────────────────────────────────────────────────────────
+
 public sealed class UserPresence
 {
     public string UserId { get; set; } = "";
@@ -439,8 +439,8 @@ public sealed class UserPresence
     }
 }
 
-
 // ─── Channel ─────────────────────────────────────────────────────────────────
+
 public sealed class Channel
 {
     public string Id { get; set; } = "";
@@ -549,8 +549,8 @@ public sealed class Channel
     }
 }
 
-
 // ─── ClanJoin ────────────────────────────────────────────────────────────────
+
 public sealed class ClanJoin
 {
     public string ClanId { get; set; } = "";
@@ -589,8 +589,8 @@ public sealed class ClanJoin
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-
 // ─── ChannelJoin / ChannelLeave ─────────────────────────────────────────────
+
 public sealed class ChannelJoin
 {
     public string ClanId { get; set; } = "";
@@ -703,8 +703,8 @@ public sealed class ChannelLeave
     private static void WriteVarint(BinaryWriter writer, int value) { uint v = (uint)value; while (v > 0x7F) { writer.Write((byte)((v & 0x7F) | 0x80)); v >>= 7; } writer.Write((byte)(v & 0x7F)); }
 }
 
-
 // ─── ChannelMessageSend ──────────────────────────────────────────────────────
+
 public sealed class ChannelMessageSend
 {
     public string ClanId { get; set; } = "";
@@ -820,8 +820,8 @@ public sealed class ChannelMessageSend
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-
 // ─── MessageMention / MessageAttachment / MessageRef ────────────────────────────
+
 public sealed class MessageMention
 {
     public string Id { get; set; } = "";
@@ -832,6 +832,11 @@ public sealed class MessageMention
     public long CreateTimeSeconds { get; set; }
     public int S { get; set; }
     public int E { get; set; }
+    
+    // Additional fields for user display info
+    public string DisplayName { get; set; } = "";
+    public string ClanNick { get; set; } = "";
+    public string Avatar { get; set; } = "";
 
     public byte[] Encode()
     {
@@ -845,6 +850,9 @@ public sealed class MessageMention
         if (CreateTimeSeconds != 0) WriteFixed64(writer, 6, (ulong)CreateTimeSeconds);
         if (S != 0) WriteVarintField(writer, 7, S);
         if (E != 0) WriteVarintField(writer, 8, E);
+        WriteString(writer, 9, DisplayName);
+        WriteString(writer, 10, ClanNick);
+        WriteString(writer, 11, Avatar);
         return ms.ToArray();
     }
 
@@ -875,6 +883,9 @@ public sealed class MessageMention
                     case 3: m.Username = Encoding.UTF8.GetString(data); break;
                     case 4: m.RoleId = Encoding.UTF8.GetString(data); break;
                     case 5: m.RoleName = Encoding.UTF8.GetString(data); break;
+                    case 9: m.DisplayName = Encoding.UTF8.GetString(data); break;
+                    case 10: m.ClanNick = Encoding.UTF8.GetString(data); break;
+                    case 11: m.Avatar = Encoding.UTF8.GetString(data); break;
                 }
             }
             else if (wireType == 0)
@@ -1081,8 +1092,8 @@ public sealed class MessageRef
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-
 // ─── ChannelMessageAck ────────────────────────────────────────────────────────
+
 public sealed class RealtimeChannelMessageAck
 {
     public string ChannelId { get; set; } = "";
@@ -1186,8 +1197,8 @@ public sealed class RealtimeChannelMessageAck
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-
 // ─── ChannelMessageUpdate / ChannelMessageRemove ─────────────────────────────
+
 public sealed class ChannelMessageUpdate
 {
     public string ClanId { get; set; } = "";
@@ -1259,8 +1270,8 @@ public sealed class ChannelMessageRemove
     private static void WriteVarint(BinaryWriter writer, int value) { uint v = (uint)value; while (v > 0x7F) { writer.Write((byte)((v & 0x7F) | 0x80)); v >>= 7; } writer.Write((byte)(v & 0x7F)); }
 }
 
-
 // ─── ChannelMessage ──────────────────────────────────────────────────────────
+
 public sealed class RealtimeChannelMessage
 {
     public string ClanId { get; set; } = "";
@@ -1336,8 +1347,8 @@ public sealed class RealtimeChannelMessage
     private static void WriteVarint(BinaryWriter writer, int value) { uint v = (uint)value; while (v > 0x7F) { writer.Write((byte)((v & 0x7F) | 0x80)); v >>= 7; } writer.Write((byte)(v & 0x7F)); }
 }
 
-
 // ─── Status + presence ───────────────────────────────────────────────────────
+
 public sealed class Status
 {
     public RepeatedField<UserPresence> Presences { get; } = new();
@@ -1392,8 +1403,8 @@ public sealed class IncomingCallPush { }
 public sealed class Error { }
 public sealed class Rpc { }
 
-
 // ─── TokenSentEvent ───────────────────────────────────────────────────────────
+
 public sealed class TokenSentEvent
 {
     public string SenderId { get; set; } = "";

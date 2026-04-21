@@ -20,16 +20,16 @@ public interface IMezonClient : IDisposable
     /// <summary>Refresh the session token.</summary>
     Task RefreshSessionAsync(CancellationToken cancellationToken = default);
 
-
     // ─── Event Subscription ─────────────────────────────────────────────────
+
     /// <summary>Subscribe to a realtime event.</summary>
     void On(string eventType, EventHandler<MezonEventArgs> handler);
 
     /// <summary>Unsubscribe from a realtime event.</summary>
     void Remove(string eventType, EventHandler<MezonEventArgs> handler);
 
-
     // ─── Messaging ───────────────────────────────────────────────────────────
+
     /// <summary>Send a message to a channel.</summary>
     Task<ChannelMessageAck> SendMessageAsync(
         string clanId, string channelId, int mode, bool isPublic,
@@ -53,8 +53,8 @@ public interface IMezonClient : IDisposable
         ApiMessageRef[]? refs = null,
         CancellationToken cancellationToken = default);
 
-
     // ─── MMN Token Transfers ─────────────────────────────────────────────────
+
     /// <summary>Send tokens to another user via MMN.</summary>
     Task<SendTokenResult> SendTokenAsync(SendTokenData data, CancellationToken cancellationToken = default);
 
@@ -70,8 +70,8 @@ public interface IMezonClient : IDisposable
     /// <summary>Generate zero-knowledge proofs for MMN transfers.</summary>
     Task<ZkProofResponse> GetZkProofsAsync(ZkProofRequest request, CancellationToken cancellationToken = default);
 
-
     // ─── Channels ────────────────────────────────────────────────────────────
+
     /// <summary>Create a new channel description.</summary>
     Task<ApiChannelDescription> CreateChannelAsync(ApiCreateChannelDescRequest request, CancellationToken cancellationToken = default);
 
@@ -90,8 +90,8 @@ public interface IMezonClient : IDisposable
         int? limit = null, int? state = null, string? cursor = null,
         CancellationToken cancellationToken = default);
 
-
     // ─── High-level Structures ───────────────────────────────────────────────
+
     /// <summary>Get a high-level Clan object by ID.</summary>
     Task<Clan> GetClanAsync(string clanId, CancellationToken cancellationToken = default);
 

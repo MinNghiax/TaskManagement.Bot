@@ -18,8 +18,8 @@ public interface IMezonSocket : IDisposable
     /// <summary>Disconnect from the server.</summary>
     void Disconnect(bool fireDisconnectEvent = true);
 
-
     // ─── Chat Messaging ─────────────────────────────────────────────────────
+
     /// <summary>Join a clan chat room.</summary>
     Task<Domain.Channel> JoinClanChatAsync(string clanId, CancellationToken cancellationToken = default);
 
@@ -81,8 +81,8 @@ public interface IMezonSocket : IDisposable
         string messageId, string? topicId = null,
         CancellationToken cancellationToken = default);
 
-
     // ─── Reactions & Typing ─────────────────────────────────────────────────
+
     /// <summary>Add or remove a reaction on a message.</summary>
     Task<Domain.ApiMessageReaction> WriteMessageReactionAsync(
         string id, string clanId, string channelId, int mode, bool isPublic,
@@ -107,23 +107,23 @@ public interface IMezonSocket : IDisposable
         string messageId, long timestampSeconds, int operation,
         CancellationToken cancellationToken = default);
 
-
     // ─── Status & Presence ───────────────────────────────────────────────────
+
     /// <summary>Update the current user's custom status.</summary>
     Task WriteCustomStatusAsync(string clanId, string status, CancellationToken cancellationToken = default);
 
     /// <summary>Set the current user's presence status.</summary>
     Task UpdateStatusAsync(string? status = null, CancellationToken cancellationToken = default);
 
-
     // ─── Token Transfers (MMN) ───────────────────────────────────────────────
+
     /// <summary>Send tokens to another user.</summary>
     Task<Domain.TokenSentEvent> SendTokenAsync(
         string receiverId, int amount,
         CancellationToken cancellationToken = default);
 
-
     // ─── Utility ─────────────────────────────────────────────────────────────
+
     /// <summary>List clan emoji.</summary>
     Task<Domain.ClanEmoji[]> ListClanEmojiAsync(string clanId, CancellationToken cancellationToken = default);
 
@@ -139,8 +139,8 @@ public interface IMezonSocket : IDisposable
     /// <summary>Check if a clan name already exists.</summary>
     Task<bool> CheckDuplicateClanNameAsync(string clanName, CancellationToken cancellationToken = default);
 
-
     // ─── Notifications ───────────────────────────────────────────────────────
+
     /// <summary>Get notification settings for a channel.</summary>
     Task<Domain.NotificationChannelSettingEvent?> GetNotificationChannelSettingAsync(
         string channelId, CancellationToken cancellationToken = default);

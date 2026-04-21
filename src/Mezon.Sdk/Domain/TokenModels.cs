@@ -1,9 +1,9 @@
 namespace Mezon.Sdk.Domain;
 
-
 /// <summary>
 /// MMN (Mezon Money Network) token transfer models.
 /// </summary>
+
 /// <summary>
 /// Data required to send tokens to another user via MMN.
 /// </summary>

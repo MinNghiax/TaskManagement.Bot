@@ -83,8 +83,8 @@ public sealed class MezonClient
         Socket.OnQuickMenu += (_, e) => Fire(Enums.MezEvent.QuickMenu, e);
     }
 
-
     // ─── Auth ─────────────────────────────────────────────────────────────────
+
     public async Task<Session> LoginAsync(CancellationToken cancellationToken = default)
     {
         var session = await Api.AuthenticateAsync(_options.BotId, _options.Token, cancellationToken);
@@ -169,8 +169,8 @@ public sealed class MezonClient
         CurrentSession = session;
     }
 
-
     // ─── Event Subscription ─────────────────────────────────────────────────
+
     public void On(string eventType, EventHandler<MezonEventArgs> handler)
     {
         _eventHandlers.AddOrUpdate(
@@ -250,8 +250,8 @@ public sealed class MezonClient
         }
     }
 
-
     // ─── Messaging ───────────────────────────────────────────────────────────
+
     public Task<ChannelMessageAck> SendMessageAsync(
         string clanId, string channelId, int mode, bool isPublic,
         ChannelMessageContent content,
@@ -289,8 +289,8 @@ public sealed class MezonClient
             cancellationToken: cancellationToken);
     }
 
-
     // ─── MMN Token Transfers ─────────────────────────────────────────────────
+
     public Task<SendTokenResult> SendTokenAsync(SendTokenData data, CancellationToken cancellationToken = default)
     {
         return Socket.SendTokenAsync(data.ReceiverId, data.Amount, cancellationToken)
@@ -326,8 +326,8 @@ public sealed class MezonClient
         return Task.FromResult(new ZkProofResponse { ZkProof = "placeholder", ZkPub = "placeholder" });
     }
 
-
     // ─── Channels ────────────────────────────────────────────────────────────
+
     public async Task<Domain.ApiChannelDescription> CreateChannelAsync(ApiCreateChannelDescRequest request, CancellationToken cancellationToken = default)
     {
         if (CurrentSession == null) throw new InvalidOperationException("Not logged in");
@@ -369,8 +369,8 @@ public sealed class MezonClient
         return await Api.ListChannelVoiceUsersAsync(CurrentSession.Token, clanId, limit, cancellationToken);
     }
 
-
     // ─── High-level Structures ───────────────────────────────────────────────
+
     /// <summary>
     /// Get a clan from cache or fetch from API.
     /// Similar to TypeScript SDK's client.clans.get() and client.clans.fetch()
@@ -398,8 +398,8 @@ public sealed class MezonClient
         return Task.FromResult(new User(userId, this, Api, () => CurrentSession.Token));
     }
 
-
     // ─── Phase 2: Additional Helper Methods ──────────────────────────────────
+
     /// <summary>
     /// Send typing indicator to show user is typing
     /// </summary>

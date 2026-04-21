@@ -56,10 +56,10 @@ public sealed class MezonApi : IMezonApi
         ApiAuthenticateRequest body,
         CancellationToken cancellationToken = default)
     {
-        
         // Authorization: Basic {base64(apiKey:)} - note the colon at the end
         // Body: JSON with Content-Type: application/proto
         // Response: Protobuf binary
+        
         var credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{basicAuthPassword}:"));
         
         using var req = new HttpRequestMessage(HttpMethod.Post, "v2/apps/authenticate/token");
@@ -330,8 +330,8 @@ public sealed class MezonApi : IMezonApi
         resp.EnsureSuccessStatusCode();
     }
 
-
     // ─── Internal Helpers ─────────────────────────────────────────────────────
+
     private async Task<HttpResponseMessage> SendAsync(
         HttpMethod method, string path, string bearerToken,
         HttpContent? content = null, CancellationToken cancellationToken = default)
