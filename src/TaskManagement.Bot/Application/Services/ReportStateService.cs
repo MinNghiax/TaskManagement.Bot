@@ -3,9 +3,6 @@ using Mezon.Sdk.Domain;
 
 namespace TaskManagement.Bot.Application.Services;
 
-/// <summary>
-/// Service to manage temporary state for report flow (Project/Team selection)
-/// </summary>
 public class ReportStateService
 {
     private readonly ConcurrentDictionary<string, ReportState> _states = new();
@@ -16,18 +13,30 @@ public class ReportStateService
         var existingState = GetState(userId);
         _states[userId] = new ReportState
         {
+            OwnerUserId = userId,
             ProjectId = projectId,
             ProjectName = projectName,
             OriginalMessageId = originalMessageId,
             OriginalMessage = originalMessage ?? existingState?.OriginalMessage,
+            FormMessageId = existingState?.FormMessageId ?? string.Empty,  // ⭐ Preserve FormMessageId
             Timestamp = DateTime.UtcNow
         };
+    }
+    
+    public void SetFormMessageId(string userId, string formMessageId)
+    {
+        var state = GetState(userId);
+        if (state != null)
+        {
+            state.FormMessageId = formMessageId;
+        }
     }
 
     public void InitializeState(string userId, string originalMessageId, ChannelMessage? originalMessage = null)
     {
         _states[userId] = new ReportState
         {
+            OwnerUserId = userId,
             OriginalMessageId = originalMessageId,
             OriginalMessage = originalMessage,
             Timestamp = DateTime.UtcNow
@@ -70,10 +79,12 @@ public class ReportStateService
 
 public class ReportState
 {
+    public string OwnerUserId { get; set; } = string.Empty;
     public int ProjectId { get; set; }
     public string ProjectName { get; set; } = string.Empty;
     public int? TeamId { get; set; }
     public string OriginalMessageId { get; set; } = string.Empty;
     public ChannelMessage? OriginalMessage { get; set; }
+    public string FormMessageId { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
 }
