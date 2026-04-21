@@ -190,7 +190,7 @@ public class TeamComponentHandler : IComponentHandler
 
     private ComponentResponse HandleAddMember(ComponentContext context, string[] parts)
     {
-        var currentCount = parts.Length > 1 && int.TryParse(parts[1], out var c) ? c : 3;
+        var currentCount = parts.Length > 1 && int.TryParse(parts[1], out var c) ? c : 1;
 
         if (currentCount >= 6)
             return BuildTextResponse(context, "❌ Đã đạt giới hạn 6 thành viên");

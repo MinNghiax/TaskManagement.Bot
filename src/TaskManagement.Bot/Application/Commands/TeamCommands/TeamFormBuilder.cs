@@ -200,7 +200,7 @@ public static class TeamFormBuilder
             }
         }
 
-        if (members.Count < 3)
+        if (members.Count < 1)
             return (false, $"❌ Team phải có ít nhất 3 thành viên (hiện tại: {members.Count})", new List<string>());
 
         if (members.Count > 6)
