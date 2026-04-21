@@ -8,10 +8,6 @@ using System.Text.Json;
 
 namespace Mezon.Sdk.Socket;
 
-/// <summary>
-/// WebSocket client for the Mezon realtime protocol.
-/// Manages connection, heartbeat, message routing, and event dispatching.
-/// </summary>
 public sealed class MezonSocket : IMezonSocket
 {
     private readonly WebSocketAdapter _ws;
@@ -30,7 +26,7 @@ public sealed class MezonSocket : IMezonSocket
     public bool IsOpen => _ws.IsOpen;
 
     public event EventHandler<MezonEventArgs>? OnChannelMessage;
-#pragma warning disable CS0067 // Event is never used - these are public API events for SDK consumers
+#pragma warning disable CS0067 
     public event EventHandler<MezonEventArgs>? OnMessageReaction;
     public event EventHandler<MezonEventArgs>? OnUserChannelAdded;
     public event EventHandler<MezonEventArgs>? OnUserChannelRemoved;
@@ -64,23 +60,20 @@ public sealed class MezonSocket : IMezonSocket
         _ws = new WebSocketAdapter();
         _ws.OnMessage += HandleMessage;
         _ws.OnClose += (_, e) => OnDisconnected?.Invoke(this, EventArgs.Empty);
-        _ws.OnError += (_, e) => { /* log error */ };
+        _ws.OnError += (_, e) => {   };
     }
 
     public async Task<Session> ConnectAsync(Session session, bool createStatus = true, int? connectTimeoutMs = null, CancellationToken cancellationToken = default)
     {
         _session = session;
 
-        // Build WebSocket URL with token and format parameters
         var wsHost = session.WsUrl ?? "sock.mezon.ai";
 
-        // Add scheme if missing
         if (!wsHost.StartsWith("ws://") && !wsHost.StartsWith("wss://"))
         {
             wsHost = $"wss://{wsHost}";
         }
 
-        // Build full URL with query parameters
         var token = Uri.EscapeDataString(session.Token);
         var wsUrl = $"{wsHost}/ws?lang=en&status={createStatus.ToString().ToLower()}&token={token}&format=protobuf";
 
@@ -109,19 +102,15 @@ public sealed class MezonSocket : IMezonSocket
 
     public async Task<Domain.Channel> JoinClanChatAsync(string clanId, CancellationToken cancellationToken = default)
     {
-        // Use Proto.Envelope and Proto.ClanJoin (generated protobuf classes)
         var clanJoin = new Proto.ClanJoin { ClanId = long.Parse(clanId) };
         var env = new Proto.Envelope { ClanJoin = clanJoin };
 
         var bytes = env.ToByteArray();
         await _ws.SendAsync(new ArraySegment<byte>(bytes), cancellationToken);
 
-        // For now, return a simple channel object
-        // TODO: Wait for response and parse it properly
         return new Domain.Channel { Id = clanId };
     }
 
-    /// <summary>Alias for <see cref="JoinClanChatAsync"/>.</summary>
     public Task<Domain.Channel> JoinClanAsync(string clanId, CancellationToken cancellationToken = default)
         => JoinClanChatAsync(clanId, cancellationToken);
 
@@ -217,8 +206,6 @@ public sealed class MezonSocket : IMezonSocket
         var env = new Proto.Envelope { ChannelMessageSend = msg };
         await SendAsync(env, cancellationToken);
 
-        // Note: Working SDK doesn't wait for ACK, just sends and returns null
-        // We'll do the same for now
         return new ChannelMessageAck { ChannelId = channelId, MessageId = "" };
     }
 
@@ -424,7 +411,7 @@ public sealed class MezonSocket : IMezonSocket
             Mode = mode,
             IsPublic = isPublic,
             TimestampSeconds = (uint)timestampSeconds,
-            Operation = operation // 0 = pin, 1 = unpin
+            Operation = operation 
         };
 
         var env = new Proto.Envelope { LastPinMessageEvent = msg };
@@ -485,8 +472,6 @@ public sealed class MezonSocket : IMezonSocket
 
     public Task<bool> CheckDuplicateClanNameAsync(string clanName, CancellationToken cancellationToken = default)
     {
-        // TODO: Implement when proto supports request/response pattern for CheckNameExistedEvent
-        // Current proto only has event notification, not request/response
         return Task.FromResult(false);
     }
 
@@ -499,7 +484,6 @@ public sealed class MezonSocket : IMezonSocket
     public Task<NotificationClanSettingEvent?> GetNotificationClanSettingAsync(string clanId, CancellationToken cancellationToken = default)
         => Task.FromResult<NotificationClanSettingEvent?>(null);
 
-    // ─── Internal ───────────────────────────────────────────────────────────
 
     private string NextCid() => Interlocked.Increment(ref _cid).ToString();
 
@@ -542,7 +526,6 @@ public sealed class MezonSocket : IMezonSocket
     {
         try
         {
-            // Use Proto.Envelope (generated from protobuf) instead of custom Realtime.Envelope
             var env = Proto.Envelope.Parser.ParseFrom(data.Array!, data.Offset, data.Count);
             DispatchProto(env);
         }
@@ -554,18 +537,15 @@ public sealed class MezonSocket : IMezonSocket
 
     private void DispatchProto(Proto.Envelope env)
     {
-        // Check for errors
         if (env.Error != null)
         {
             Console.WriteLine($"[ERROR] Server error: Code={env.Error.Code}, Message={env.Error.Message}");
         }
 
-        // Decode and fire events with proper domain models
         if (env.ChannelMessage != null)
         {
             try
             {
-                // env.ChannelMessage is already a Proto.ChannelMessage object
                 var protoMsg = env.ChannelMessage;
 
                 var domainMsg = new Domain.ChannelMessage
@@ -577,7 +557,6 @@ public sealed class MezonSocket : IMezonSocket
                     ClanId = protoMsg.ClanId.ToString(),
                     SenderId = protoMsg.SenderId.ToString(),
                     Username = protoMsg.Username,
-                    //reponse Displayname and Clannick for client
                     DisplayName = protoMsg.DisplayName,
                     ClanNick = protoMsg.ClanNick,
                     Content = ParseChannelMessageContent(protoMsg.Content),

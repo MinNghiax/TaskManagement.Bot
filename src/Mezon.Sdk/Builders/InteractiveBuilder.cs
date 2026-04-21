@@ -2,10 +2,6 @@ using Mezon.Sdk.Domain;
 
 namespace Mezon.Sdk.Builders;
 
-/// <summary>
-/// Fluent builder for interactive embed messages.
-/// Matches the TypeScript <c>InteractiveBuilder</c> class.
-/// </summary>
 public sealed class InteractiveBuilder
 {
     private string? _color;
@@ -77,7 +73,6 @@ public sealed class InteractiveBuilder
         InputFieldOption? options = null,
         string? description = null)
     {
-        // Input fields are embedded in Components, not Fields
         return this;
     }
 

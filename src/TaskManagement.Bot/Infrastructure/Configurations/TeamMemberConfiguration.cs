@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -25,7 +25,6 @@ namespace TaskManagement.Bot.Infrastructure.Configurations
                 .IsRequired()
                 .HasMaxLength(20);
 
-            // Index để tránh duplicate user trong cùng team
             builder.HasIndex(tm => new { tm.Username, tm.TeamId })
                 .IsUnique();
         }

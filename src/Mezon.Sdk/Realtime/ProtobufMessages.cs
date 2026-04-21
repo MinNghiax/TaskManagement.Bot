@@ -3,18 +3,11 @@ using System.Text;
 
 namespace Mezon.Sdk.Realtime;
 
-/// <summary>
-/// Wire-format envelope for the Mezon realtime protocol.
-/// Uses a length-delimited binary encoding: each inner field is serialized as
-/// [varint(length)][payload bytes], matching protobuf wire semantics.
-/// </summary>
 public sealed class Envelope
 {
-    // ─── oneof fields (stored as raw length-delimited bytes) ─────────────────
 
     public string? Cid { get; set; }
 
-    // Each inner field stores its serialized bytes
     public byte[]? Channel { get; set; }
     public byte[]? ClanJoin { get; set; }
     public byte[]? ChannelJoinMsg { get; set; }
@@ -67,7 +60,6 @@ public sealed class Envelope
     public byte[]? Error { get; set; }
     public byte[]? Rpc { get; set; }
 
-    // ─── Wire encode / decode ──────────────────────────────────────────────
 
     public byte[] Encode()
     {
@@ -208,7 +200,6 @@ public sealed class Envelope
                 case 51: env.Error = ReadLengthDelimitedBytes(reader); break;
                 case 52: env.Rpc = ReadLengthDelimitedBytes(reader); break;
                 default:
-                    // Unknown field — skip
                     if (wireType == 0) ReadVarint64(reader);
                     else if (wireType == 2) { var len = ReadVarint32(reader); reader.BaseStream.Position += len; }
                     else if (wireType == 1) reader.BaseStream.Position += 8;
@@ -218,11 +209,10 @@ public sealed class Envelope
         }
     }
 
-    // ─── Low-level wire helpers ─────────────────────────────────────────────
 
     private static void WriteField(BinaryWriter writer, int fieldNumber, byte[] data)
     {
-        var tag = (fieldNumber << 3) | 2; // wire type 2 = LENGTH_DELIMITED
+        var tag = (fieldNumber << 3) | 2; 
         WriteVarint(writer, tag);
         WriteVarint(writer, data.Length);
         writer.Write(data);
@@ -297,7 +287,6 @@ public sealed class Envelope
     }
 }
 
-// ─── Serialization helpers ────────────────────────────────────────────────────
 
 public static class RealtimeSerializer
 {
@@ -306,7 +295,6 @@ public static class RealtimeSerializer
     public static Envelope Decode(byte[] bytes) => Envelope.Decode(bytes);
 }
 
-// ─── Ping / Pong (empty messages) ───────────────────────────────────────────
 
 public sealed class Ping
 {
@@ -319,7 +307,6 @@ public sealed class Pong
     public static Pong Default { get; } = new();
 }
 
-// ─── UserPresence ─────────────────────────────────────────────────────────────
 
 public sealed class UserPresence
 {
@@ -439,7 +426,6 @@ public sealed class UserPresence
     }
 }
 
-// ─── Channel ─────────────────────────────────────────────────────────────────
 
 public sealed class Channel
 {
@@ -549,7 +535,6 @@ public sealed class Channel
     }
 }
 
-// ─── ClanJoin ────────────────────────────────────────────────────────────────
 
 public sealed class ClanJoin
 {
@@ -589,7 +574,6 @@ public sealed class ClanJoin
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-// ─── ChannelJoin / ChannelLeave ─────────────────────────────────────────────
 
 public sealed class ChannelJoin
 {
@@ -703,7 +687,6 @@ public sealed class ChannelLeave
     private static void WriteVarint(BinaryWriter writer, int value) { uint v = (uint)value; while (v > 0x7F) { writer.Write((byte)((v & 0x7F) | 0x80)); v >>= 7; } writer.Write((byte)(v & 0x7F)); }
 }
 
-// ─── ChannelMessageSend ──────────────────────────────────────────────────────
 
 public sealed class ChannelMessageSend
 {
@@ -820,7 +803,6 @@ public sealed class ChannelMessageSend
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-// ─── MessageMention / MessageAttachment / MessageRef ────────────────────────────
 
 public sealed class MessageMention
 {
@@ -1081,7 +1063,6 @@ public sealed class MessageRef
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-// ─── ChannelMessageAck ────────────────────────────────────────────────────────
 
 public sealed class RealtimeChannelMessageAck
 {
@@ -1186,7 +1167,6 @@ public sealed class RealtimeChannelMessageAck
     private static int ReadVarint32(BinaryReader reader) { int result = 0, shift = 0; while (true) { var b = reader.ReadByte(); result |= (b & 0x7F) << shift; if ((b & 0x80) == 0) break; shift += 7; } return result; }
 }
 
-// ─── ChannelMessageUpdate / ChannelMessageRemove ─────────────────────────────
 
 public sealed class ChannelMessageUpdate
 {
@@ -1259,7 +1239,6 @@ public sealed class ChannelMessageRemove
     private static void WriteVarint(BinaryWriter writer, int value) { uint v = (uint)value; while (v > 0x7F) { writer.Write((byte)((v & 0x7F) | 0x80)); v >>= 7; } writer.Write((byte)(v & 0x7F)); }
 }
 
-// ─── ChannelMessage ──────────────────────────────────────────────────────────
 
 public sealed class RealtimeChannelMessage
 {
@@ -1336,7 +1315,6 @@ public sealed class RealtimeChannelMessage
     private static void WriteVarint(BinaryWriter writer, int value) { uint v = (uint)value; while (v > 0x7F) { writer.Write((byte)((v & 0x7F) | 0x80)); v >>= 7; } writer.Write((byte)(v & 0x7F)); }
 }
 
-// ─── Status + presence ───────────────────────────────────────────────────────
 
 public sealed class Status
 {
@@ -1392,7 +1370,6 @@ public sealed class IncomingCallPush { }
 public sealed class Error { }
 public sealed class Rpc { }
 
-// ─── TokenSentEvent ───────────────────────────────────────────────────────────
 
 public sealed class TokenSentEvent
 {

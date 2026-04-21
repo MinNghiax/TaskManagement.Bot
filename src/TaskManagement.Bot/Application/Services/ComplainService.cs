@@ -1,4 +1,4 @@
-﻿using TaskManagement.Bot.Application.DTOs;
+using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Domain.Interfaces;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
@@ -37,7 +37,6 @@ public class ComplainService : IComplainService
         if (string.IsNullOrWhiteSpace(dto.Reason))
             return (null, "Reason cannot be empty.");
 
-        // Validate duration for Extend
         if (dto.Type == EComplainType.RequestExtend)
         {
             if (dto.NewDueDate == null) return (null, "Must select extension duration.");
@@ -70,7 +69,6 @@ public class ComplainService : IComplainService
         var task = await _tasks.GetByIdAsync(complain.TaskItemId, ct);
         if (task == null) return (false, "Task does not exist.");
 
-        // Only PM (task creator) can review
         if (task.CreatedBy != dto.ApprovedBy)
             return (false, "Only the task creator (PM) can review this complaint.");
 
@@ -83,12 +81,11 @@ public class ComplainService : IComplainService
 
             if (complain.Type == EComplainType.RequestExtend)
             {
-                // Update deadline; Late → Doing
                 await _tasks.UpdateDueDateAsync(task.Id, complain.NewDueDate!.Value, ct);
                 if (task.Status == ETaskStatus.Late)
                     await _tasks.ChangeStatusAsync(task.Id, ETaskStatus.Doing, ct);
             }
-            else // RequestCancel
+            else 
             {
                 await _tasks.ChangeStatusAsync(task.Id, ETaskStatus.Cancelled, ct);
             }
@@ -99,7 +96,6 @@ public class ComplainService : IComplainService
                 return (false, "Must provide rejection reason.");
             complain.Status = EComplainStatus.Rejected;
             complain.RejectReason = dto.RejectReason;
-            // Task status unchanged
         }
 
         await _repo.SaveAsync(ct);

@@ -1,4 +1,4 @@
-﻿using Mezon.Sdk.Domain;
+using Mezon.Sdk.Domain;
 using System.Text.Json;
 using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Application.Services;
@@ -6,9 +6,6 @@ using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.Commands.Complain;
 
-/// <summary>
-/// Handles button clicks and dropdown selections for complaint workflow.
-/// </summary>
 public class ComplainComponentHandler : IComponentHandler
 {
     private readonly IComplainService _complainService;
@@ -110,28 +107,24 @@ public class ComplainComponentHandler : IComponentHandler
         var reason = ParseExtraData(extraData, "complain_reason");
         var durationStr = ParseExtraData(extraData, "extend_duration");
 
-        // Validate task selection
         if (!int.TryParse(taskIdStr, out var taskId))
         {
             return ComponentResponse
                 .FromText(clanId, channelId, "❌ Please select a task.", mode, isPublic, messageId, null);
         }
 
-        // Validate complaint type
         if (string.IsNullOrEmpty(complainType))
         {
             return ComponentResponse
                 .FromText(clanId, channelId, "❌ Please select a complaint type.", mode, isPublic, messageId, null);
         }
 
-        // Validate reason
         if (string.IsNullOrWhiteSpace(reason))
         {
             return ComponentResponse
                 .FromText(clanId, channelId, "❌ Please enter a reason.", mode, isPublic, messageId, null);
         }
 
-        // Get task
         var task = await _taskService.GetByIdAsync(taskId, ct);
         if (task == null)
         {
@@ -139,17 +132,14 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, "❌ Task does not exist.", mode, isPublic, messageId, null);
         }
 
-        // Handle RequestExtend
         if (complainType == "RequestExtend")
         {
-            // Validate duration
             if (string.IsNullOrEmpty(durationStr) || !int.TryParse(durationStr, out var hours) || hours <= 0)
             {
                 return ComponentResponse
                     .FromText(clanId, channelId, "❌ Invalid duration selected. Please choose a valid extension time.", mode, isPublic, messageId, null);
             }
 
-            // Validate hours range (max 72 hours)
             if (hours > 72)
             {
                 return ComponentResponse
@@ -158,7 +148,6 @@ public class ComplainComponentHandler : IComponentHandler
 
             var newDue = (task.DueDate ?? DateTime.UtcNow).AddHours(hours);
 
-            // Additional validation: new deadline must be after current deadline
             if (task.DueDate.HasValue && newDue <= task.DueDate)
             {
                 return ComponentResponse
@@ -185,9 +174,8 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromContent(clanId, channelId, BuildExtendSuccessMessage(result!, task, userName, reason, newDue, hours), mode, isPublic, messageId, null)
                 .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
         }
-        else // RequestCancel
+        else 
         {
-            // Additional validation for cancelled tasks
             if (task.Status == ETaskStatus.Completed)
             {
                 return ComponentResponse

@@ -2,9 +2,6 @@ namespace TaskManagement.Bot.Domain.Interfaces;
 
 using TaskManagement.Bot.Infrastructure.Entities;
 
-/// <summary>
-/// Reminder-specific repository interface
-/// </summary>
 public interface IReminderRepository : IRepository<Reminder>
 {
     Task<IEnumerable<Reminder>> GetByTaskIdAsync(int taskId);

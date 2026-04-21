@@ -1,4 +1,4 @@
-﻿using Mezon.Sdk;
+using Mezon.Sdk;
 using Mezon.Sdk.Domain;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -86,7 +86,6 @@ public class TaskComponentHandler : IComponentHandler
         var teamIdStr = ReadValue(context.Payload, "task_team");
         var reminderState = ReadReminderState(context.Payload);
 
-        // Validate
         var (isValid, message) = TaskFormBuilder.ValidateTaskForm(title, deadlineStr, assignee);
         if (!isValid)
             return BuildTextResponse(context, message);
@@ -107,12 +106,10 @@ public class TaskComponentHandler : IComponentHandler
         }
 
 
-        //  Validate team thuộc project 
         var teams = await _teamService.GetTeamsByProjectAsync(projectId);
         if (!teams.Any(t => t.Id == teamId))
             return BuildTextResponse(context, "❌ Team không thuộc project đã chọn");
 
-        //  Validate member thuộc team
         var members = await _teamService.GetMembers(teamId);
         if (!members.Contains(assignee))
             return BuildTextResponse(context, "❌ Người được giao phải thuộc team");
@@ -121,7 +118,6 @@ public class TaskComponentHandler : IComponentHandler
         if (!reminderValidation.IsValid)
             return BuildTextResponse(context, reminderValidation.Message);
 
-        //  Parse data
         var priority = priorityStr switch
         {
             "High" => EPriorityLevel.High,
@@ -145,12 +141,10 @@ public class TaskComponentHandler : IComponentHandler
             ReminderRules = reminderValidation.Rules.ToList()
         };
 
-        //  Save
         var task = await _taskService.CreateAsync(dto, ct);
         if (task == null)
             return BuildTextResponse(context, "❌ Không thể tạo task");
 
-        //  Close form + show result
         return BuildSuccessResponse(context, TaskFormBuilder.BuildTaskResult(task));
     }
 
@@ -166,7 +160,6 @@ public class TaskComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người dùng");
 
-        // Check if user is PM or assignee
         var isPM = task.TeamId.HasValue && await _teamService.IsPM(context.CurrentUserId, task.TeamId.Value);
         var isAssignee = task.AssignedTo == context.CurrentUserId;
 
@@ -180,7 +173,6 @@ public class TaskComponentHandler : IComponentHandler
                 TaskFormBuilder.BuildUpdateFormForMentor(task, members), context.Mode, context.IsPublic, context.MessageId!, null);
         }
 
-        // Member can only update status
         return ComponentResponse.FromContent(context.ClanId!, context.ChannelId!,
             TaskFormBuilder.BuildUpdateFormForMember(task), context.Mode, context.IsPublic, context.MessageId!, null);
     }
@@ -194,7 +186,6 @@ public class TaskComponentHandler : IComponentHandler
         if (task == null)
             return BuildTextResponse(context, "❌ Không tìm thấy task");
 
-        // Check PM permission
         if (task.TeamId.HasValue && !await _teamService.IsPM(context.CurrentUserId!, task.TeamId.Value))
             return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền cập nhật đầy đủ");
 
@@ -241,7 +232,6 @@ public class TaskComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định user");
 
-        //  chỉ cho update task của mình
         if (task.AssignedTo != context.CurrentUserId)
             return BuildTextResponse(context, "❌ Bạn chỉ có thể cập nhật task của mình");
 
@@ -255,14 +245,11 @@ public class TaskComponentHandler : IComponentHandler
 
         var newStatus = newStatusEnum.Value.ToString();
 
-        //  chỉ cho Doing + Review
         if (newStatusEnum != ETaskStatus.Doing && newStatusEnum != ETaskStatus.Review)
             return BuildTextResponse(context, "❌ Bạn chỉ được chuyển sang Doing hoặc Review");
 
-        // update
         await _taskService.ChangeStatusAsync(taskId, newStatusEnum.Value, ct);
 
-        //  chỉ notify khi status thay đổi
         if (oldStatus != newStatus)
         {
             await NotifyMentorAsync(
@@ -289,7 +276,6 @@ public class TaskComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người dùng");
 
-        // Check PM permission
         if (task.TeamId.HasValue && !await _teamService.IsPM(context.CurrentUserId!, task.TeamId.Value))
             return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền xóa task");
 
@@ -309,7 +295,6 @@ public class TaskComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người dùng");
 
-        // CHECK QUYỀN 
         var isMentor = task.TeamId.HasValue &&
                        await _teamService.IsPM(context.CurrentUserId, task.TeamId.Value);
 
@@ -326,7 +311,6 @@ public class TaskComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người dùng");
 
-        // Get user's teams
         var teams = await _teamService.GetTeamsByMemberAsync(context.CurrentUserId);
         if (teams.Count == 0)
             return BuildTextResponse(context, "❌ Bạn chưa tham gia team nào");
@@ -362,7 +346,6 @@ public class TaskComponentHandler : IComponentHandler
 
         var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId, ct);
 
-        // ví dụ filter: Doing + Review
         var filtered = tasks
             .Where(t => t.Status == ETaskStatus.Doing || t.Status == ETaskStatus.Review)
             .ToList();
@@ -378,7 +361,6 @@ public class TaskComponentHandler : IComponentHandler
 
         var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId, ct);
 
-        // filter chính user hiện tại
         var filtered = tasks
             .Where(t => t.AssignedTo == context.CurrentUserId)
             .ToList();
@@ -396,7 +378,6 @@ public class TaskComponentHandler : IComponentHandler
 
         var now = DateTime.Now;
 
-        // task sắp hết hạn (<= 3 ngày)
         var filtered = tasks
             .Where(t => t.DueDate.HasValue &&
                         t.DueDate.Value <= now.AddDays(3))
@@ -697,7 +678,6 @@ public class TaskComponentHandler : IComponentHandler
     {
         var response = new ComponentResponse();
 
-        // delete form
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -711,7 +691,6 @@ public class TaskComponentHandler : IComponentHandler
             });
         }
 
-        // send result
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,

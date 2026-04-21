@@ -1,13 +1,9 @@
-﻿using Mezon.Sdk.Domain;
+using Mezon.Sdk.Domain;
 
 namespace TaskManagement.Bot.Application.Commands.Complain;
 
-/// <summary>
-/// Builds interactive forms for complain workflow.
-/// </summary>
 public static class ComplainFormBuilder
 {
-    // Duration options for extending deadline
     private static readonly object[] DurationOptions = new object[]
     {
         new { label = "1 hour",  value = "1"  },
@@ -22,16 +18,12 @@ public static class ComplainFormBuilder
         new { label = "72 hours", value = "72" },
     };
 
-    // Complain type options
     private static readonly object[] TypeOptions = new object[]
     {
         new { label = "📅 Request deadline extension", value = "RequestExtend" },
         new { label = "❌ Request task cancellation", value = "RequestCancel" }
     };
 
-    /// <summary>
-    /// Single form: Select task, complain type, reason and duration (if extend).
-    /// </summary>
     public static ChannelMessageContent BuildComplainForm(object[] taskOptions)
     {
         var fields = new List<object>
@@ -128,9 +120,6 @@ public static class ComplainFormBuilder
         };
     }
 
-    /// <summary>
-    /// PM review form: select complaint to approve/reject.
-    /// </summary>
     public static ChannelMessageContent BuildApproveForm(object[] complainOptions)
     {
         var fields = new List<object>
@@ -189,8 +178,6 @@ public static class ComplainFormBuilder
                     type = 1,
                     components = new object[]
                     {
-                        //new { type = 1, id = "approve_submit", component = new { label = "✅ Approve", style = 3 } },
-                        //new { type = 1, id = "reject_submit", component = new { label = "❌ Reject", style = 4 } },
                         new { type = 1, id = "complain_approve_submit", component = new { label = "✅ Approve", style = 3 } },
                         new { type = 1, id = "complain_reject_submit",  component = new { label = "❌ Reject",  style = 4 } },
                         new { type = 1, id = "approve_cancel", component = new { label = "Cancel", style = 2 } }
@@ -200,9 +187,6 @@ public static class ComplainFormBuilder
         };
     }
 
-    /// <summary>
-    /// PM review form: approve or reject a specific complaint.
-    /// </summary>
     public static ChannelMessageContent BuildReviewForm(int complainId, string taskTitle, string type, string reason, string requestedBy)
     {
         var embed = new

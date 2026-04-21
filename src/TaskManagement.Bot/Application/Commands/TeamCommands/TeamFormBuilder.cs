@@ -1,4 +1,4 @@
-﻿using Mezon.Sdk.Domain;
+using Mezon.Sdk.Domain;
 
 namespace TaskManagement.Bot.Application.Commands.TeamCommands;
 
@@ -48,7 +48,6 @@ public static class TeamFormBuilder
             }
         };
 
-        // Add member fields
         for (var i = 1; i <= memberCount; i++)
         {
             fields.Add(new

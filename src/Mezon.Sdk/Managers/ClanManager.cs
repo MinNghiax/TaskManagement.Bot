@@ -6,9 +6,6 @@ using Mezon.Sdk.Structures;
 
 namespace Mezon.Sdk.Managers;
 
-/// <summary>
-/// Manages clan cache and operations, similar to TypeScript SDK's client.clans
-/// </summary>
 public sealed class ClanManager
 {
     private readonly MezonClient _client;
@@ -16,9 +13,6 @@ public sealed class ClanManager
     private readonly MezonSocket _socket;
     private readonly Func<string> _getSessionToken;
 
-    /// <summary>
-    /// Cache of all clans the bot is a member of
-    /// </summary>
     public ConcurrentDictionary<string, Clan> Cache { get; } = new();
 
     public ClanManager(MezonClient client, MezonRestApi api, MezonSocket socket, Func<string> getSessionToken)
@@ -29,17 +23,11 @@ public sealed class ClanManager
         _getSessionToken = getSessionToken;
     }
 
-    /// <summary>
-    /// Get a clan from cache by ID
-    /// </summary>
     public Clan? Get(string clanId)
     {
         return Cache.TryGetValue(clanId, out var clan) ? clan : null;
     }
 
-    /// <summary>
-    /// Fetch a clan from API and add to cache
-    /// </summary>
     public async Task<Clan?> FetchAsync(string clanId, CancellationToken cancellationToken = default)
     {
         try
@@ -72,9 +60,6 @@ public sealed class ClanManager
         }
     }
 
-    /// <summary>
-    /// Load all clans the bot is a member of into cache
-    /// </summary>
     public async Task<List<Clan>> FetchAllAsync(CancellationToken cancellationToken = default)
     {
         var clans = new List<Clan>();
@@ -103,31 +88,21 @@ public sealed class ClanManager
         }
         catch
         {
-            // Ignore errors
         }
 
         return clans;
     }
 
-    /// <summary>
-    /// Remove a clan from cache
-    /// </summary>
     public bool Remove(string clanId)
     {
         return Cache.TryRemove(clanId, out _);
     }
 
-    /// <summary>
-    /// Clear all clans from cache
-    /// </summary>
     public void Clear()
     {
         Cache.Clear();
     }
 
-    /// <summary>
-    /// Get all clans as a list
-    /// </summary>
     public List<Clan> GetAll()
     {
         return Cache.Values.ToList();

@@ -6,10 +6,6 @@ using Mezon.Sdk.Socket;
 
 namespace Mezon.Sdk.Structures;
 
-/// <summary>
-/// High-level Clan structure, providing clan-level operations.
-/// Similar to TypeScript SDK's Clan class with cache support.
-/// </summary>
 public sealed class Clan
 {
     public string Id { get; }
@@ -23,14 +19,8 @@ public sealed class Clan
     private bool _channelsLoaded;
     private Task? _loadingTask;
 
-    /// <summary>
-    /// Channel manager with cache, similar to TypeScript SDK's clan.channels
-    /// </summary>
     public ChannelManager Channels { get; }
 
-    /// <summary>
-    /// User manager with cache, similar to TypeScript SDK's clan.users
-    /// </summary>
     public UserManager Users { get; }
 
     public Clan(
@@ -50,21 +40,14 @@ public sealed class Clan
         _socket = socket;
         _getSessionToken = getSessionToken;
 
-        // Initialize managers
         Channels = new ChannelManager(clanId, api, getSessionToken);
         Users = new UserManager(clanId, client, api, getSessionToken);
     }
 
-    /// <summary>Get the client instance</summary>
     public MezonClient GetClient() => _client;
 
-    /// <summary>Get the bot's client ID</summary>
     public string GetClientId() => _client.ClientId;
 
-    /// <summary>
-    /// Load all channels in this clan and populate cache.
-    /// Similar to TypeScript SDK's clan.loadChannels()
-    /// </summary>
     public async Task LoadChannelsAsync(CancellationToken cancellationToken = default)
     {
         if (_channelsLoaded) return;
@@ -79,10 +62,9 @@ public sealed class Clan
             await Channels.FetchAllAsync(ct);
             _channelsLoaded = true;
         }
-        catch { /* ignore */ }
+        catch {   }
     }
 
-    /// <summary>List voice channel users.</summary>
     public async Task<ApiVoiceChannelUserList> ListChannelVoiceUsersAsync(int? limit = null, CancellationToken cancellationToken = default)
     {
         var sessionToken = _getSessionToken();

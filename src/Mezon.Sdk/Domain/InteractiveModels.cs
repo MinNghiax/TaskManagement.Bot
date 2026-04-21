@@ -1,8 +1,5 @@
 namespace Mezon.Sdk.Domain;
 
-/// <summary>
-/// Properties for a rich interactive (embed) message, matching the TypeScript IInteractiveMessageProps.
-/// </summary>
 public sealed record IInteractiveMessageProps
 {
     public string? Color { get; init; }
@@ -49,9 +46,6 @@ public sealed record InteractiveFooter
     public string? IconUrl { get; init; }
 }
 
-/// <summary>
-/// Options for an input field in an interactive message.
-/// </summary>
 public sealed record InputFieldOption
 {
     public object? DefaultValue { get; init; }
@@ -60,18 +54,12 @@ public sealed record InputFieldOption
     public bool? Disabled { get; init; }
 }
 
-/// <summary>
-/// An option in a select menu.
-/// </summary>
 public sealed record SelectFieldOption
 {
     public required string Label { get; init; }
     public required string Value { get; init; }
 }
 
-/// <summary>
-/// An option in a radio button group.
-/// </summary>
 public sealed record RadioFieldOption
 {
     public required string Label { get; init; }
@@ -82,9 +70,6 @@ public sealed record RadioFieldOption
     public bool? Disabled { get; init; }
 }
 
-/// <summary>
-/// Configuration for an animation component.
-/// </summary>
 public sealed record AnimationConfig
 {
     public required string UrlImage { get; init; }
@@ -94,9 +79,6 @@ public sealed record AnimationConfig
     public int? Duration { get; init; }
 }
 
-/// <summary>
-/// Base interface for message components.
-/// </summary>
 public sealed record IMessageComponent
 {
     public required int Type { get; init; }
@@ -104,9 +86,6 @@ public sealed record IMessageComponent
     public object? Component { get; init; }
 }
 
-/// <summary>
-/// A button message component.
-/// </summary>
 public sealed record IButtonMessage
 {
     public required string Label { get; init; }
@@ -115,9 +94,6 @@ public sealed record IButtonMessage
     public string? Url { get; init; }
 }
 
-/// <summary>
-/// A message action row containing up to 5 components.
-/// </summary>
 public sealed record IMessageActionRow
 {
     public required IMessageComponent[] Components { get; init; }

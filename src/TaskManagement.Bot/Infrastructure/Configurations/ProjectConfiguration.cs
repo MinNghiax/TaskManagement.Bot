@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,7 +26,6 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.CreatedAt)
             .HasDefaultValueSql("GETUTCDATE()");
 
-        // 1 Project - nhiều Team
         builder.HasMany(p => p.Teams)
             .WithOne(t => t.Project)
             .HasForeignKey(t => t.ProjectId)

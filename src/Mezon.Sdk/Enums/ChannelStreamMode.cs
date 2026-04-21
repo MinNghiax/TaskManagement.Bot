@@ -1,8 +1,5 @@
 namespace Mezon.Sdk.Enums;
 
-/// <summary>
-/// Stream mode constants used in WebSocket message routing.
-/// </summary>
 public static class ChannelStreamMode
 {
     public const int Channel = 2;

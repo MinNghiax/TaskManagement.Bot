@@ -1,4 +1,3 @@
-﻿// TaskManagement.Bot.Application.DTOs.ComplainDto.cs
 using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.DTOs;
@@ -26,13 +25,13 @@ public class CreateComplainDto
     public string UserId { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
     public EComplainType Type { get; set; }
-    public DateTime? NewDueDate { get; set; } // Chỉ dùng cho RequestExtend
+    public DateTime? NewDueDate { get; set; } 
 }
 
 public class ApproveComplainDto
 {
     public int ComplainId { get; set; }
     public string ApprovedBy { get; set; } = string.Empty;
-    public string? RejectReason { get; set; } // Chỉ dùng khi reject
+    public string? RejectReason { get; set; } 
     public bool IsApproved { get; set; }
 }

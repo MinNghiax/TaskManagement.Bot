@@ -4,9 +4,6 @@ using Mezon.Sdk.Enums;
 
 namespace Mezon.Sdk.Structures;
 
-/// <summary>
-/// Represents a user in Mezon, similar to TypeScript SDK's User class
-/// </summary>
 public sealed class User
 {
     public string Id { get; }
@@ -45,9 +42,6 @@ public sealed class User
         _getSessionToken = getSessionToken;
     }
 
-    /// <summary>
-    /// Create DM channel with this user (similar to TypeScript SDK's _createDmChannel)
-    /// </summary>
     public async Task<ApiChannelDescription?> CreateDmChannelAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -68,9 +62,6 @@ public sealed class User
         }
     }
 
-    /// <summary>
-    /// Send direct message to this user (similar to TypeScript SDK's sendDM)
-    /// </summary>
     public async Task<ChannelMessageAck> SendDMAsync(
         string message,
         CancellationToken cancellationToken = default)
@@ -82,9 +73,6 @@ public sealed class User
         );
     }
 
-    /// <summary>
-    /// Send direct message to this user with rich content
-    /// </summary>
     public async Task<ChannelMessageAck> SendDMAsync(
         ChannelMessageContent content,
         ApiMessageAttachment[]? attachments = null,
@@ -104,9 +92,6 @@ public sealed class User
             cancellationToken: cancellationToken);
     }
 
-    /// <summary>
-    /// Ensure DM channel exists, create if needed
-    /// </summary>
     private async Task<string> EnsureDmChannelAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(DmChannelId))

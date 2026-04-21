@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,9 +10,8 @@ namespace TaskManagement.Bot.Infrastructure.Entities
     {
         public string Name { get; set; } = null!;
 
-        public string CreatedBy { get; set; } = null!; // PM
+        public string CreatedBy { get; set; } = null!; 
 
-        // 1 Project có nhiều Team
         public ICollection<Team> Teams { get; set; } = new List<Team>();
     }
 }

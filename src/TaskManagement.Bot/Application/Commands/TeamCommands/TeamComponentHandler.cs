@@ -61,7 +61,6 @@ public class TeamComponentHandler : IComponentHandler
         var projectName = ReadValue(context.Payload, "project_name");
         var teamName = ReadValue(context.Payload, "team_name");
 
-        // Collect members
         var formValues = new Dictionary<string, string>();
         for (var i = 1; i <= 6; i++)
         {
@@ -70,7 +69,6 @@ public class TeamComponentHandler : IComponentHandler
                 formValues[$"member_{i}"] = value;
         }
 
-        // Validate
         var (isValid, message, members) = TeamFormBuilder.ValidateForm(projectName, teamName, formValues);
         if (!isValid)
         {
@@ -78,14 +76,12 @@ public class TeamComponentHandler : IComponentHandler
                 TeamFormBuilder.BuildTeamFormWithError(message));
         }
 
-        // Check duplicates
         if (await _projectService.ExistsByNameAsync(projectName, ct))
             return BuildTextResponse(context, $"❌ Project `{projectName}` đã tồn tại");
 
         if (await _teamService.ExistsByNameAsync(teamName, ct))
             return BuildTextResponse(context, $"❌ Team `{teamName}` đã tồn tại");
 
-        // Validate members exist
         var resolvedMembers = await ResolveMembersAsync(context.ClanId!, members, ct);
         if (resolvedMembers.InvalidTokens.Count > 0)
             return BuildTextResponse(context, $"❌ Không tìm thấy user: {string.Join(", ", resolvedMembers.InvalidTokens)}");
@@ -93,7 +89,6 @@ public class TeamComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người tạo");
 
-        // Create request
         var result = await _workflowService.CreateRequestAsync(new CreateTeamRequestInput
         {
             ProjectName = projectName,
@@ -105,7 +100,6 @@ public class TeamComponentHandler : IComponentHandler
         if (!result.Success || string.IsNullOrWhiteSpace(result.RequestId))
             return BuildTextResponse(context, result.Message);
 
-        // Send confirmations to members
         foreach (var member in result.Members)
         {
             try
@@ -125,10 +119,8 @@ public class TeamComponentHandler : IComponentHandler
             }
         }
 
-        // Tạo response với cả message thông báo và xóa form
         var response = new ComponentResponse();
 
-        // Xóa form hiện tại
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -142,7 +134,6 @@ public class TeamComponentHandler : IComponentHandler
             });
         }
 
-        // Gửi message thông báo kết quả
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -160,7 +151,6 @@ public class TeamComponentHandler : IComponentHandler
     {
         var response = new ComponentResponse();
 
-        //  Xóa form cũ
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -174,7 +164,6 @@ public class TeamComponentHandler : IComponentHandler
             });
         }
 
-        //  Gửi form mới (có error)
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -197,7 +186,6 @@ public class TeamComponentHandler : IComponentHandler
 
         var response = new ComponentResponse();
 
-        // Delete old form
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -211,7 +199,6 @@ public class TeamComponentHandler : IComponentHandler
             });
         }
 
-        // Send new form with +1 member
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -372,11 +359,9 @@ public class TeamComponentHandler : IComponentHandler
         {
             var el = element.Value;
 
-            // dạng string trực tiếp
             if (el.ValueKind == JsonValueKind.String)
                 return el.GetString() ?? string.Empty;
 
-            // dạng object { value: "xxx" }
             if (el.ValueKind == JsonValueKind.Object &&
                 el.TryGetProperty("value", out var valueProp))
             {

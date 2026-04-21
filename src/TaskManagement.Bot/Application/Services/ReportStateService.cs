@@ -3,9 +3,6 @@ using Mezon.Sdk.Domain;
 
 namespace TaskManagement.Bot.Application.Services;
 
-/// <summary>
-/// Service to manage temporary state for report flow (Project/Team selection)
-/// </summary>
 public class ReportStateService
 {
     private readonly ConcurrentDictionary<string, ReportState> _states = new();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using TaskManagement.Bot.Application.Sessions;
 
@@ -6,7 +6,6 @@ namespace TaskManagement.Bot.Application.Services
 {
     public class SessionService
     {
-        // 🔥 dùng SenderId thay vì Username
         private static Dictionary<long, UserSession> _sessions = new();
 
         public UserSession? Get(long userId)

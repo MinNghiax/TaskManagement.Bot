@@ -1,4 +1,3 @@
-﻿// TaskManagement.Bot.Infrastructure.Enums.EComplainType.cs
 namespace TaskManagement.Bot.Infrastructure.Enums;
 
 public enum EComplainType

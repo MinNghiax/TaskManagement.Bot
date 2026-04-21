@@ -5,10 +5,6 @@ using TaskManagement.Bot.Infrastructure.Enums;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 namespace TaskManagement.Bot.Application.Services;
 
-/// <summary>
-/// In-memory task service for testing without database.
-/// All tasks are stored in RAM and lost when application restarts.
-/// </summary>
 public class InMemoryTaskService : ITaskService
 {
     private readonly ILogger<InMemoryTaskService> _logger;
@@ -30,7 +26,7 @@ public class InMemoryTaskService : ITaskService
                 Description = dto.Description ?? "",
                 AssignedTo = dto.AssignedTo ?? "unknown",
                 CreatedBy = dto.CreatedBy ?? "unknown",
-                Status = ETaskStatus.ToDo,  // Changed from Pending to ToDo
+                Status = ETaskStatus.ToDo,  
                 DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 ClanIds = dto.ClanIds,
@@ -155,7 +151,6 @@ public class InMemoryTaskService : ITaskService
 
     public Task UpdateAsync(int taskId, UpdateTaskDto updateDto, CancellationToken ct = default)
     {
-        // Implement cho InMemory
         var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
         if (task == null) throw new Exception("Task not found");
 

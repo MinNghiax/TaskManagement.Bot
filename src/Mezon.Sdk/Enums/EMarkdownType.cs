@@ -1,8 +1,5 @@
 namespace Mezon.Sdk.Enums;
 
-/// <summary>
-/// Markdown type markers embedded in message content.
-/// </summary>
 public static class EMarkdownType
 {
     public const string Triple = "t";

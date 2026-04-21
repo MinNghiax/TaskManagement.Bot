@@ -1,4 +1,4 @@
-﻿using Mezon.Sdk.Domain;
+using Mezon.Sdk.Domain;
 using System.Text.Json;
 using TaskManagement.Bot.Application.Commands.TaskCommands;
 using TaskManagement.Bot.Application.DTOs;
@@ -64,25 +64,21 @@ public class TaskCommandHandler : ICommandHandler
         if (string.IsNullOrWhiteSpace(userId))
             return new CommandResponse("❌ Không xác định người dùng");
 
-        // Lấy tất cả task
         var allTasks = await _taskService.GetAllAsync(ct);
 
         if (allTasks.Count == 0)
             return new CommandResponse("📭 Không có task nào");
 
-        // Check role (mentor hay member)
         var isMentor = await _teamService.IsUserPMInAnyTeam(userId);
 
         List<TaskDto> tasks;
 
         if (isMentor)
         {
-            // Mentor thấy tất cả
             tasks = allTasks;
         }
         else
         {
-            // Member chỉ thấy task của mình
             tasks = allTasks
                 .Where(t => t.AssignedTo == userId)
                 .ToList();
@@ -108,7 +104,6 @@ public class TaskCommandHandler : ICommandHandler
         if (task == null)
             return new CommandResponse("❌ Không tìm thấy task");
 
-        // Check quyền
         var isMentor = task.TeamId.HasValue &&
                        await _teamService.IsPM(userId, task.TeamId.Value);
 
@@ -117,7 +112,6 @@ public class TaskCommandHandler : ICommandHandler
         if (!isMentor && !isAssignee)
             return new CommandResponse("❌ Bạn không có quyền sửa task này");
 
-        // Mentor → full form
         if (isMentor)
         {
             var members = task.TeamId.HasValue
@@ -129,7 +123,6 @@ public class TaskCommandHandler : ICommandHandler
             );
         }
 
-        // Member → chỉ update status
         return new CommandResponse(
             TaskFormBuilder.BuildUpdateFormForMember(task)
         );
@@ -147,7 +140,6 @@ public class TaskCommandHandler : ICommandHandler
         if (task == null)
             return new CommandResponse("❌ Không tìm thấy task");
 
-        //  CHECK ROLE NGAY TỪ COMMAND
         var isMentor = task.TeamId.HasValue &&
                        await _teamService.IsPM(userId, task.TeamId.Value);
 

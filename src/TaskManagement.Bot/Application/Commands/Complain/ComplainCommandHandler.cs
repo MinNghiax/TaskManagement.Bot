@@ -1,4 +1,4 @@
-﻿using Mezon.Sdk.Domain;
+using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.Services;
 
 namespace TaskManagement.Bot.Application.Commands.Complain;
@@ -19,8 +19,8 @@ public class ComplainCommandHandler : ICommandHandler
         var trimmed = command.Trim();
         return trimmed.Equals("!complain", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("!complain ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("!approve", StringComparison.OrdinalIgnoreCase)  // THÊM
-            || trimmed.StartsWith("!approve ", StringComparison.OrdinalIgnoreCase);  // THÊM
+            || trimmed.Equals("!approve", StringComparison.OrdinalIgnoreCase)  
+            || trimmed.StartsWith("!approve ", StringComparison.OrdinalIgnoreCase);  
     }
 
     public async Task<CommandResponse> HandleAsync(ChannelMessage message, CancellationToken cancellationToken)
@@ -29,13 +29,11 @@ public class ComplainCommandHandler : ICommandHandler
         var userId = message.SenderId!;
         var clanId = message.ClanId!;
 
-        // Handle !approve command
         if (command.Equals("!approve", StringComparison.OrdinalIgnoreCase))
         {
             return await HandleApproveCommand(userId, clanId, cancellationToken);
         }
 
-        // Handle !complain command
         return await HandleComplainCommand(userId, cancellationToken);
     }
 

@@ -11,11 +11,6 @@ using Mezon.Sdk.Proto;
 using Mezon.Sdk.Domain;
 using MezonSession = Mezon.Sdk.Domain.Session;
 
-/// <summary>
-/// Mezon API client. All non-auth calls use POST with protobuf binary body/response
-/// to /mezon.api.Mezon/MethodName. Auth uses /v2/apps/authenticate/token with JSON
-/// body but protobuf binary response.
-/// </summary>
 public class MezonRestApi
 {
     private readonly HttpClient _http;
@@ -34,10 +29,6 @@ public class MezonRestApi
         _http = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
     }
 
-    // -------------------------------------------------------------------------
-    // Auth — POST /v2/apps/authenticate/token
-    // Body: JSON  |  Response: protobuf binary (Proto.Session)
-    // -------------------------------------------------------------------------
     public async Task<MezonSession> AuthenticateAsync(string botId, string apiKey, CancellationToken ct = default)
     {
         var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiKey}:"));
@@ -45,7 +36,6 @@ public class MezonRestApi
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-protobuf"));
         var body = new { account = new { appid = botId, token = apiKey } };
-        // TS SDK sends JSON body with Content-Type: application/proto
         var jsonBody = JsonSerializer.Serialize(body);
         request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/proto");
 
@@ -63,9 +53,6 @@ public class MezonRestApi
         });
     }
 
-    // -------------------------------------------------------------------------
-    // List clans — POST /mezon.api.Mezon/ListClanDescs
-    // -------------------------------------------------------------------------
     public async Task<IReadOnlyList<ClanDesc>> ListClansAsync(string token, CancellationToken ct = default)
     {
         var body = new ListClanDescRequest { Limit = 100 }.ToByteArray();
@@ -74,9 +61,6 @@ public class MezonRestApi
         return result.Clandesc;
     }
 
-    // -------------------------------------------------------------------------
-    // List channels — POST /mezon.api.Mezon/ListChannelDescs
-    // -------------------------------------------------------------------------
     public async Task<IReadOnlyList<ChannelDescription>> ListChannelsAsync(
         string token, string? clanId = null, int? channelType = null, int limit = 100, CancellationToken ct = default)
     {
@@ -87,9 +71,6 @@ public class MezonRestApi
         return ChannelDescList.Parser.ParseFrom(resp).Channeldesc;
     }
 
-    // -------------------------------------------------------------------------
-    // Create DM channel — POST /mezon.api.Mezon/CreateChannelDesc
-    // -------------------------------------------------------------------------
     public async Task<ChannelDescription?> CreateDmChannelAsync(string token, string userId, CancellationToken ct = default)
     {
         if (!long.TryParse(userId, out var uid)) return null;
@@ -103,9 +84,6 @@ public class MezonRestApi
         catch { return null; }
     }
 
-    // -------------------------------------------------------------------------
-    // Get channel detail — POST /mezon.api.Mezon/ListChannelDetail
-    // -------------------------------------------------------------------------
     public async Task<ChannelDescription?> GetChannelAsync(string token, string channelId, CancellationToken ct = default)
     {
         if (!long.TryParse(channelId, out var cid)) return null;
@@ -118,9 +96,6 @@ public class MezonRestApi
         catch { return null; }
     }
 
-    // -------------------------------------------------------------------------
-    // Create channel — POST /mezon.api.Mezon/CreateChannelDesc
-    // -------------------------------------------------------------------------
     public async Task<Domain.ApiChannelDescription> CreateChannelDescAsync(
         string token, Domain.ApiCreateChannelDescRequest body, CancellationToken ct = default)
     {
@@ -147,9 +122,6 @@ public class MezonRestApi
         };
     }
 
-    // -------------------------------------------------------------------------
-    // List channels — POST /mezon.api.Mezon/ListChannelDescs (returns domain model)
-    // -------------------------------------------------------------------------
     public async Task<Domain.ApiChannelDescList> ListChannelDescsAsync(
         string token, int? channelType = null, string? clanId = null,
         int? limit = null, int? state = null, string? cursor = null,
@@ -168,22 +140,15 @@ public class MezonRestApi
         };
     }
 
-    // -------------------------------------------------------------------------
-    // List voice channel users — POST /mezon.api.Mezon/ListChannelVoiceUsers
-    // -------------------------------------------------------------------------
     public Task<Domain.ApiVoiceChannelUserList> ListChannelVoiceUsersAsync(
         string token, string? clanId = null, int? limit = null, CancellationToken ct = default)
     {
-        // Voice users endpoint not in proto — return empty for now
         return Task.FromResult(new Domain.ApiVoiceChannelUserList
         {
             VoiceChannelUsers = Array.Empty<Domain.ApiVoiceChannelUser>()
         });
     }
 
-    // -------------------------------------------------------------------------
-    // List clan users — POST /mezon.api.Mezon/ListClanUsers
-    // -------------------------------------------------------------------------
     public async Task<Domain.ApiClanUserList> ListClanUsersAsync(
         string token, string clanId, int? limit = null, CancellationToken ct = default)
     {
@@ -234,9 +199,6 @@ public class MezonRestApi
         }
     }
 
-    // -------------------------------------------------------------------------
-    // List role users — POST /mezon.api.Mezon/ListRoleUsers
-    // -------------------------------------------------------------------------
     public async Task<ApiRoleUserList> ListRoleUsersAsync(
         string token, string roleId, int? limit = null, string? cursor = null,
         CancellationToken ct = default)
@@ -288,9 +250,6 @@ public class MezonRestApi
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Update role — POST /mezon.api.Mezon/UpdateRole
-    // -------------------------------------------------------------------------
     public async Task<bool> UpdateRoleAsync(
         string token, string roleId, MezonUpdateRoleBody body, CancellationToken ct = default)
     {
@@ -339,9 +298,6 @@ public class MezonRestApi
         }
     }
 
-    // -------------------------------------------------------------------------
-    // List roles — POST /mezon.api.Mezon/ListRoles
-    // -------------------------------------------------------------------------
     public async Task<ApiRoleListEventResponse> ListRolesAsync(
         string token, string? clanId = null, int? limit = null, int? state = null, 
         string? cursor = null, CancellationToken ct = default)
@@ -393,33 +349,20 @@ public class MezonRestApi
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Add quick menu access — POST /mezon.api.Mezon/AddQuickMenuAccess
-    // Note: Proto definition exists but implementation needs verification
-    // -------------------------------------------------------------------------
     public Task<bool> AddQuickMenuAccessAsync(
         string token, ApiQuickMenuAccessRequest body, CancellationToken ct = default)
     {
-        // TODO: Implement when AddQuickMenuAccessRequest proto mapping is verified
         return Task.FromResult(false);
     }
 
-    // -------------------------------------------------------------------------
-    // Delete quick menu access — POST /mezon.api.Mezon/DeleteQuickMenuAccess
-    // Note: Proto definition exists but implementation needs verification
-    // -------------------------------------------------------------------------
     public Task<bool> DeleteQuickMenuAccessAsync(
         string token, string? id = null, string? clanId = null, string? botId = null,
         string? menuName = null, string? background = null, string? actionMsg = null,
         CancellationToken ct = default)
     {
-        // TODO: Implement when DeleteQuickMenuAccessRequest proto mapping is verified
         return Task.FromResult(false);
     }
 
-    // -------------------------------------------------------------------------
-    // List quick menu access — POST /mezon.api.Mezon/ListQuickMenuAccess
-    // -------------------------------------------------------------------------
     public async Task<ApiQuickMenuAccessList> ListQuickMenuAccessAsync(
         string token, string? botId = null, string? channelId = null, int? menuType = null,
         CancellationToken ct = default)
@@ -458,19 +401,13 @@ public class MezonRestApi
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Play media — POST /mezon.api.Mezon/PlayMedia
-    // Note: Proto definition not available yet, method stubbed for future implementation
-    // -------------------------------------------------------------------------
     public Task<bool> PlayMediaAsync(
         string token, string roomName, string participantIdentity, string participantName,
         string url, string name, CancellationToken ct = default)
     {
-        // TODO: Implement when PlayMediaRequest proto is available
         return Task.FromResult(false);
     }
 
-    // -------------------------------------------------------------------------
     private async Task<byte[]> CallAsync(
         string bearerToken,
         string method,
@@ -486,8 +423,6 @@ public class MezonRestApi
         
         var response = await _http.SendAsync(request, ct);
         
-        // Mirror TS SDK behavior: on non-success, return empty bytes so proto parsers
-        // return empty/default messages (e.g., empty channel list) instead of throwing.
         if (!response.IsSuccessStatusCode)
         {
             if (throwOnNonSuccess)

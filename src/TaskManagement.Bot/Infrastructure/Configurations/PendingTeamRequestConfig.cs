@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TaskManagement.Bot.Infrastructure.Entities;
 
@@ -29,7 +29,6 @@ namespace TaskManagement.Bot.Infrastructure.Data.Configurations
             builder.Property(x => x.CreatedAt)
                 .IsRequired();
 
-            // ⚠️ List<string> cần convert
             builder.Property(x => x.MemberUserIds)
                 .HasConversion(
                     v => string.Join(',', v),
