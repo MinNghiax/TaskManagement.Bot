@@ -91,9 +91,6 @@ public sealed class TaskReminderFieldState
         if (errors.Count > 0)
             return TaskReminderValidationResult.Failure(string.Join(Environment.NewLine, errors));
 
-        if (rules.Count == 0)
-            return TaskReminderValidationResult.Failure("Khi bat reminder, can cau hinh it nhat 1 loai thong bao hop le.");
-
         return TaskReminderValidationResult.Success(rules);
     }
 

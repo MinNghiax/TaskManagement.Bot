@@ -35,7 +35,7 @@ public class TaskReminderFieldStateTests
     }
 
     [Fact]
-    public void Validate_EnabledWithoutAnyRule_ReturnsInvalid()
+    public void Validate_EnabledWithoutAnyRule_ReturnsValidWithoutCustomRules()
     {
         var result = new TaskReminderFieldState
         {
@@ -48,7 +48,8 @@ public class TaskReminderFieldStateTests
             RepeatUnit = null
         }.Validate();
 
-        Assert.False(result.IsValid);
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Rules);
     }
 
     [Fact]
