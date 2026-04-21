@@ -1,9 +1,11 @@
 ﻿using Mezon.Sdk;
 using Mezon.Sdk.Domain;
 using Microsoft.Extensions.Logging;
+using System.IO;
 using System.Text.Json;
 using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Application.Services;
+using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.Commands.TaskCommands;
@@ -30,20 +32,12 @@ public class TaskComponentHandler : IComponentHandler
         _client = client;
     }
 
-    public bool CanHandle(string customId) =>
-        customId.StartsWith("SUBMIT_TASK", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("CANCEL_TASK", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("UPDATE_TASK", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("UPDATE_STATUS", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("EDIT_TASK", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("DELETE_TASK", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("CONFIRM_DELETE", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("CANCEL", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("LIST_TASKS", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("CLOSE_LIST", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("FILTER", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("SELECT_TEAM", StringComparison.OrdinalIgnoreCase) ||
-        customId.StartsWith("SELECT_PROJECT", StringComparison.OrdinalIgnoreCase);
+    public bool CanHandle(string customId)
+    {
+        var prefixes = new[] { "NEXT_STEP_1", "NEXT_STEP_2", "VIEW_STEP_1", "VIEW_SUBMIT", "UPDATE_STEP_1", "UPDATE_STEP_2", "UPDATE_SELECT_TASK", "UPDATE_SUBMIT",
+            "SUBMIT", "UPDATE", "UPDATE_STATUS", "CONFIRM_DELETE", "CANCEL", "CLOSE", "FILTER_STATUS", "FILTER_USER", "SELECT_PROJECT", "SELECT_TEAM" };
+        return prefixes.Any(p => customId.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+    }
 
     public async Task<ComponentResponse> HandleAsync(ComponentContext context, CancellationToken ct)
     {
@@ -51,73 +45,290 @@ public class TaskComponentHandler : IComponentHandler
             return new ComponentResponse();
 
         var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        if (parts.Length == 0)
-            return new ComponentResponse();
+        if (parts.Length == 0) return new ComponentResponse();
 
         return parts[0].ToUpperInvariant() switch
         {
-            "SUBMIT_TASK" => await HandleSubmitAsync(context, parts, ct),
-            "CANCEL_TASK" or "CANCEL_UPDATE" or "CANCEL_DELETE" => HandleCancel(context),
-            "EDIT_TASK" => await HandleEditFormAsync(context, parts, ct),
-            "UPDATE_TASK" => await HandleUpdateAsync(context, parts, ct),
+            "NEXT_STEP_1" => await HandleNextStep1Async(context, parts, ct),
+            "NEXT_STEP_2" => await HandleNextStep2Async(context, parts, ct),
+            "VIEW_STEP_1" => await HandleViewStep1(context, parts, ct),
+            "VIEW_SUBMIT" => await HandleViewSubmit(context, parts, ct),
+            "UPDATE_STEP_1" => await HandleUpdateStep1(context, parts, ct),
+            "UPDATE_STEP_2" => await HandleUpdateStep2(context, parts, ct),
+            "UPDATE_SELECT_TASK" => await HandleUpdateSelectTask(context, parts, ct),
+            "UPDATE_SUBMIT" => await HandleUpdateSubmit(context, parts, ct),
+            "SUBMIT" => await HandleSubmitAsync(context, parts, ct),
+            "UPDATE" => await HandleUpdateAsync(context, parts, ct),
             "UPDATE_STATUS" => await HandleUpdateStatusAsync(context, parts, ct),
-            "DELETE_TASK" => await HandleDeletePromptAsync(context, parts, ct),
             "CONFIRM_DELETE" => await HandleConfirmDeleteAsync(context, parts, ct),
-            "LIST_TASKS" => await HandleListAsync(context, ct),
-            "CLOSE_LIST" => HandleCancel(context),
-            "FILTER_STATUS" => await HandleFilterStatusAsync(context, ct),
-            "FILTER_USER" => await HandleFilterUserAsync(context, ct),
-            "FILTER_DEADLINE" => await HandleFilterDeadlineAsync(context, ct),
-            "SELECT_TEAM" => await HandleSelectTeamAsync(context, parts, ct),
-            "SELECT_PROJECT" => await HandleSelectProjectAsync(context, ct),
+            "CANCEL" => HandleCancel(context),
+            "CLOSE" => HandleCancel(context),
+            //"FILTER_STATUS" => await HandleFilterStatusAsync(context, ct),
+            //"FILTER_USER" => await HandleFilterUserAsync(context, ct),
+            "SELECT_PROJECT" => await HandleSelectProjectAutoAsync(context, ct),
+            "SELECT_TEAM" => await HandleSelectTeamAutoAsync(context, ct),
             _ => new ComponentResponse()
         };
     }
 
-    private async Task<ComponentResponse> HandleSubmitAsync(ComponentContext context, string[] parts, CancellationToken ct)
+    private async Task<ComponentResponse> HandleNextStep1Async(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        var title = ReadValue(context.Payload, "task_title");
-        var description = ReadValue(context.Payload, "task_description");
-        var priorityStr = ReadValue(context.Payload, "task_priority");
-        var deadlineStr = ReadValue(context.Payload, "task_deadline");
-        var assignee = ReadValue(context.Payload, "task_assignee");
+        _logger.LogInformation($"PAYLOAD: {context.Payload}");
+        _logger.LogInformation($"VALUES: {ComponentPayloadHelper.GetValues(context.Payload)}");
+        var projectIdStr = GetSelectedValue(context.Payload, "project");
+        if (!int.TryParse(projectIdStr, out var projectId))
+            return BuildTextResponse(context, "❌ Vui lòng chọn Project");
 
-        var projectIdStr = ReadValue(context.Payload, "task_project");
-        var teamIdStr = ReadValue(context.Payload, "task_team");
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+        if (teams.Count == 0)
+            return BuildTextResponse(context, "❌ Project này chưa có Team nào");
 
-        // Validate
-        var (isValid, message) = TaskFormBuilder.ValidateTaskForm(title, deadlineStr, assignee);
-        if (!isValid)
-            return BuildTextResponse(context, message);
+        var originalMessageId = parts.Length >= 2 ? parts[1] : null;
 
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định được người tạo");
+        return ReplaceForm(context, TaskFormBuilder.BuildSelectTeam(projectId, teams, originalMessageId));
+    }
+
+    private async Task<ComponentResponse> HandleNextStep2Async(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        if (parts.Length < 2 || !int.TryParse(parts[1], out var projectId))
+            return BuildTextResponse(context, "❌ Dữ liệu không hợp lệ");
+
+        var teamIdStr = GetSelectedValue(context.Payload, "team");
+        if (!int.TryParse(teamIdStr, out var teamId))
+            return BuildTextResponse(context, "❌ Vui lòng chọn Team");
+
+        var rawMembers = await _teamService.GetMembers(teamId);
+
+        //var clanUsers = _client.Clans.Get(context.ClanId!)?.Users.GetAll();
+        //_logger.LogInformation($"Total users: {clanUsers?.Count()}");
+        //var members = rawMembers
+        //    .Select(userId =>
+        //    {
+        //        var user = clanUsers?.FirstOrDefault(u => u.Id == userId);
+
+        //        var name = user?.DisplayName
+        //                   ?? user?.ClanNick
+        //                   ?? user?.Username
+        //                   ?? GetDisplayName(userId, context.ClanId!); 
+
+        //        return (Id: userId, Name: name);
+        //    })
+        //    .ToList();
+
+        var members = rawMembers
+            .Select(userId =>
+            {
+                var user = _client.Clans.Get(context.ClanId!)?.Users.Get(userId);
+
+                var name = user?.DisplayName
+                           ?? user?.ClanNick
+                           ?? user?.Username
+                           ?? $"User-{userId.Substring(0, 4)}";
+
+                return (Id: userId, Name: name);
+            })
+            .ToList();
+        if (members.Count == 0)
+            return BuildTextResponse(context, "❌ Team này chưa có thành viên nào");
+
+        //  lấy ProjectName
+        var projects = await _projectService.GetAllProjectsAsync();
+        var projectName = projects.FirstOrDefault(p => p.Id == projectId)?.Name ?? $"#{projectId}";
+
+        //  lấy TeamName
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+        var teamName = teams.FirstOrDefault(t => t.Id == teamId)?.Name ?? $"#{teamId}";
+
+        //  lấy PM ID
+        var pmId = await _teamService.GetPMIdAsync(teamId);
+
+        //  convert sang DisplayName
+        var pmName = !string.IsNullOrWhiteSpace(pmId)
+            ? GetDisplayName(pmId, context.ClanId!)
+            : "Unknown";
+
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildEnterDetails(
+                projectName,
+                teamName,
+                pmName,
+                projectId,
+                teamId,
+                members,
+                originalMessageId
+            ));
+    }
+
+    private async Task<ComponentResponse> HandleViewStep1(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var projectIdStr = GetSelectedValue(context.Payload, "project");
 
         if (!int.TryParse(projectIdStr, out var projectId))
-            return BuildTextResponse(context, "❌ Vui lòng chọn project");
+            return BuildTextResponse(context, "❌ Chọn project");
+
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+
+        if (teams.Count == 0)
+            return BuildTextResponse(context, "❌ Project chưa có team");
+
+        var originalMessageId = parts.Length >= 2 ? parts[1] : null;
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildViewSelectTeam(projectId, teams, originalMessageId));
+    }
+
+    private async Task<ComponentResponse> HandleViewSubmit(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var projectId = int.Parse(parts[1]);
+        var teamIdStr = GetSelectedValue(context.Payload, "team");
 
         if (!int.TryParse(teamIdStr, out var teamId))
-            return BuildTextResponse(context, "❌ Vui lòng chọn team");
+            return BuildTextResponse(context, "❌ Chọn team");
 
+        //  reuse logic cũ của bạn
+        var tasks = await _taskService.GetTasksByTeamAsync(teamId, ct);
 
-        //  Validate team thuộc project 
         var teams = await _teamService.GetTeamsByProjectAsync(projectId);
-        if (!teams.Any(t => t.Id == teamId))
-            return BuildTextResponse(context, "❌ Team không thuộc project đã chọn");
 
-        //  Validate member thuộc team
-        var members = await _teamService.GetMembers(teamId);
-        if (!members.Contains(assignee))
-            return BuildTextResponse(context, "❌ Người được giao phải thuộc team");
+        var content = TaskFormBuilder.BuildTaskList(tasks, context.CurrentUserId!, teams);
 
-        //  Parse data
-        var priority = priorityStr switch
-        {
-            "High" => EPriorityLevel.High,
-            "Low" => EPriorityLevel.Low,
-            _ => EPriorityLevel.Medium
-        };
+        return ReplaceForm(context, content);
+    }
 
+    private async Task<ComponentResponse> HandleUpdateStep1(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var projectIdStr = GetSelectedValue(context.Payload, "project");
+
+        if (!int.TryParse(projectIdStr, out var projectId))
+            return BuildTextResponse(context, "❌ Chọn project");
+
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+
+        //return ReplaceForm(context,
+        //    TaskFormBuilder.BuildUpdateSelectTeam(projectId, teams, parts[1]));
+        var projects = await _projectService.GetAllProjectsAsync();
+        var projectName = projects.FirstOrDefault(p => p.Id == projectId)?.Name ?? $"#{projectId}";
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildUpdateSelectTeam(projectName, projectId, teams, parts[1]));
+    }
+
+    private async Task<ComponentResponse> HandleUpdateStep2(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        // lấy projectId từ parts
+        if (parts.Length < 3 || !int.TryParse(parts[1], out var projectId))
+            return BuildTextResponse(context, "❌ Dữ liệu project không hợp lệ");
+        var teamIdStr = GetSelectedValue(context.Payload, "team");
+
+        if (!int.TryParse(teamIdStr, out var teamId))
+            return BuildTextResponse(context, "❌ Chọn team");
+
+        var tasks = await _taskService.GetTasksByTeamAsync(teamId, ct);
+
+        var projects = await _projectService.GetAllProjectsAsync();
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+
+        // lấy name
+        var projectName = projects.FirstOrDefault(p => p.Id == projectId)?.Name ?? $"#{projectId}";
+        var team = teams.FirstOrDefault(t => t.Id == teamId);
+        var teamName = team?.Name ?? $"#{teamId}";
+
+        // lấy PM
+        var pmId = await _teamService.GetPMIdAsync(teamId);
+        var pmName = !string.IsNullOrWhiteSpace(pmId)
+            ? GetDisplayName(pmId, context.ClanId!)
+            : "Unknown";
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildUpdateSelectTask(
+                projectName,
+                teamName,
+                pmName,
+                teamId,
+                tasks,
+                parts[2]
+            ));
+    }
+
+    private async Task<ComponentResponse> HandleUpdateSelectTask(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var taskIdStr = GetSelectedValue(context.Payload, "task");
+
+        if (!int.TryParse(taskIdStr, out var taskId))
+            return BuildTextResponse(context, "❌ Chọn task");
+
+        //  reuse logic cũ
+        var task = await _taskService.GetByIdAsync(taskId, ct);
+        if (task == null)
+            return BuildTextResponse(context, "❌ Không tìm thấy task");
+
+        // check role
+        var isMentor = await _teamService.IsPM(context.CurrentUserId!, task.TeamId!.Value);
+
+        // lấy member (để hiển thị dropdown)
+        var members = await _teamService.GetMembersWithDisplay(task.TeamId.Value, context.ClanId!);
+
+        //  HIỂN THỊ FORM
+        var content = isMentor
+            ? TaskFormBuilder.BuildUpdateFormForMentor(task, members)
+            : TaskFormBuilder.BuildUpdateFormForMember(task);
+
+        return ReplaceForm(context, content);
+    }
+
+    private async Task<ComponentResponse> HandleUpdateSubmit(
+    ComponentContext context,
+    string[] parts,
+    CancellationToken ct)
+    {
+        // ⚠️ DEBUG payload
+        _logger.LogInformation($"[UPDATE_SUBMIT] Payload: {context.Payload}");
+
+        var taskIdStr = GetSelectedValue(context.Payload, "task");
+
+        if (string.IsNullOrWhiteSpace(taskIdStr))
+            return BuildTextResponse(context, "❌ Bạn chưa chọn task");
+
+        if (!int.TryParse(taskIdStr, out var taskId))
+            return BuildTextResponse(context, "❌ Task không hợp lệ");
+
+        var task = await _taskService.GetByIdAsync(taskId, ct);
+        if (task == null)
+            return BuildTextResponse(context, "❌ Không tìm thấy task");
+
+        var isMentor = await _teamService.IsPM(context.CurrentUserId!, task.TeamId!.Value);
+
+        var members = await _teamService.GetMembersWithDisplay(task.TeamId.Value, context.ClanId!);
+
+        var content = isMentor
+            ? TaskFormBuilder.BuildUpdateFormForMentor(task, members)
+            : TaskFormBuilder.BuildUpdateFormForMember(task);
+
+        return ReplaceForm(context, content);
+    }
+
+    private async Task<ComponentResponse> HandleSubmitAsync(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var originalMessageId = parts.Length >= 4 ? parts[3] : null;
+        if (parts.Length < 3 || !int.TryParse(parts[1], out var projectId) || !int.TryParse(parts[2], out var teamId))
+            return BuildTextResponse(context, "❌ Dữ liệu không hợp lệ");
+
+        var title = ReadValue(context.Payload, "title");
+        var description = ReadValue(context.Payload, "description");
+        var priorityStr = ReadValue(context.Payload, "priority");
+        var deadlineStr = ReadValue(context.Payload, "deadline");
+        var assignee = ReadValue(context.Payload, "assignee");
+
+        var (isValid, message) = TaskFormBuilder.ValidateTaskForm(title, deadlineStr, assignee);
+        if (!isValid) return BuildTextResponse(context, message);
+
+        var members = await _teamService.GetMembersWithDisplay(teamId, context.ClanId!);
+        if (!members.Any(x => x.Id == assignee))
+            return BuildTextResponse(context, "❌ Người được giao phải thuộc Team");
+
+        var priority = priorityStr switch { "High" => EPriorityLevel.High, "Low" => EPriorityLevel.Low, _ => EPriorityLevel.Medium };
         DateTime.TryParse(deadlineStr, out var deadline);
 
         var dto = new CreateTaskDto
@@ -125,7 +336,7 @@ public class TaskComponentHandler : IComponentHandler
             Title = title,
             Description = description,
             AssignedTo = assignee,
-            CreatedBy = context.CurrentUserId,
+            CreatedBy = context.CurrentUserId!,
             DueDate = deadline,
             Priority = priority,
             TeamId = teamId,
@@ -133,44 +344,12 @@ public class TaskComponentHandler : IComponentHandler
             ChannelIds = new List<string> { context.ChannelId! }
         };
 
-        //  Save
         var task = await _taskService.CreateAsync(dto, ct);
-        if (task == null)
-            return BuildTextResponse(context, "❌ Không thể tạo task");
+        if (task == null) return BuildTextResponse(context, "❌ Không thể tạo task");
 
-        //  Close form + show result
-        return BuildSuccessResponse(context, TaskFormBuilder.BuildTaskResult(task));
-    }
+        var result = MapToDisplayTask(task, context.ClanId!);
 
-    private async Task<ComponentResponse> HandleEditFormAsync(ComponentContext context, string[] parts, CancellationToken ct)
-    {
-        if (parts.Length < 2 || !int.TryParse(parts[1], out var taskId))
-            return BuildTextResponse(context, "❌ Task ID không hợp lệ");
-
-        var task = await _taskService.GetByIdAsync(taskId, ct);
-        if (task == null)
-            return BuildTextResponse(context, "❌ Không tìm thấy task");
-
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định được người dùng");
-
-        // Check if user is PM or assignee
-        var isPM = task.TeamId.HasValue && await _teamService.IsPM(context.CurrentUserId, task.TeamId.Value);
-        var isAssignee = task.AssignedTo == context.CurrentUserId;
-
-        if (!isPM && !isAssignee)
-            return BuildTextResponse(context, "❌ Bạn không có quyền sửa task này");
-
-        if (isPM)
-        {
-            var members = task.TeamId.HasValue ? await _teamService.GetMembers(task.TeamId.Value) : new List<string>();
-            return ComponentResponse.FromContent(context.ClanId!, context.ChannelId!,
-                TaskFormBuilder.BuildUpdateFormForMentor(task, members), context.Mode, context.IsPublic, context.MessageId!, null);
-        }
-
-        // Member can only update status
-        return ComponentResponse.FromContent(context.ClanId!, context.ChannelId!,
-            TaskFormBuilder.BuildUpdateFormForMember(task), context.Mode, context.IsPublic, context.MessageId!, null);
+        return BuildSuccessResponse(context, TaskFormBuilder.BuildTaskResult(result), originalMessageId);
     }
 
     private async Task<ComponentResponse> HandleUpdateAsync(ComponentContext context, string[] parts, CancellationToken ct)
@@ -179,32 +358,36 @@ public class TaskComponentHandler : IComponentHandler
             return BuildTextResponse(context, "❌ Task ID không hợp lệ");
 
         var task = await _taskService.GetByIdAsync(taskId, ct);
-        if (task == null)
-            return BuildTextResponse(context, "❌ Không tìm thấy task");
+        if (task == null) return BuildTextResponse(context, "❌ Không tìm thấy task");
 
-        // Check PM permission
-        if (task.TeamId.HasValue && !await _teamService.IsPM(context.CurrentUserId!, task.TeamId.Value))
-            return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền cập nhật đầy đủ");
+        if (!await _teamService.IsPM(context.CurrentUserId!, task.TeamId!.Value))
+            return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền cập nhật");
 
-        var title = ReadValue(context.Payload, "task_title");
-        var description = ReadValue(context.Payload, "task_description");
-        var priorityStr = ReadValue(context.Payload, "task_priority");
-        var statusStr = ReadValue(context.Payload, "task_status");
-        var deadlineStr = ReadValue(context.Payload, "task_deadline");
-        var assignee = ReadValue(context.Payload, "task_assignee");
+        var title = ReadValue(context.Payload, "title");
+        var description = ReadValue(context.Payload, "description");
+        var priorityStr = ReadValue(context.Payload, "priority");
+        var statusStr = ReadValue(context.Payload, "status");
+        var deadlineStr = ReadValue(context.Payload, "deadline");
+        var assignee = ReadValue(context.Payload, "assignee");
+
+        var newStatus = ParseStatus(statusStr);
+
+        if (newStatus != null && !IsValidMentorTransition(task.Status, newStatus.Value))
+        {
+            return BuildTextResponse(context, $"❌ Không thể chuyển từ {task.Status} → {newStatus}");
+        }
 
         var updateDto = new UpdateTaskDto
         {
             Title = string.IsNullOrWhiteSpace(title) ? null : title,
             Description = description,
             Priority = ParsePriority(priorityStr),
-            Status = ParseStatus(statusStr),
+            Status = newStatus,
             DueDate = DateTime.TryParse(deadlineStr, out var d) ? d : null,
             AssignedTo = string.IsNullOrWhiteSpace(assignee) ? null : assignee
         };
 
         await _taskService.UpdateAsync(taskId, updateDto, ct);
-
         return HandleCancel(context, $"✅ Đã cập nhật task #{taskId}");
     }
 
@@ -214,66 +397,19 @@ public class TaskComponentHandler : IComponentHandler
             return BuildTextResponse(context, "❌ Task ID không hợp lệ");
 
         var task = await _taskService.GetByIdAsync(taskId, ct);
-        if (task == null)
-            return BuildTextResponse(context, "❌ Không tìm thấy task");
+        if (task == null) return BuildTextResponse(context, "❌ Không tìm thấy task");
+        if (task.AssignedTo != context.CurrentUserId) return BuildTextResponse(context, "❌ Chỉ được cập nhật task của mình");
 
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định user");
-
-        //  chỉ cho update task của mình
-        if (task.AssignedTo != context.CurrentUserId)
-            return BuildTextResponse(context, "❌ Bạn chỉ có thể cập nhật task của mình");
-
-        var oldStatus = task.Status.ToString();
-
-        var statusStr = ReadValue(context.Payload, "task_status");
-        var newStatusEnum = ParseStatus(statusStr);
-
-        if (newStatusEnum == null)
+        var statusStr = ReadValue(context.Payload, "status");
+        var newStatus = ParseStatus(statusStr);
+        if (newStatus == null)
             return BuildTextResponse(context, "❌ Trạng thái không hợp lệ");
 
-        var newStatus = newStatusEnum.Value.ToString();
+        if (!IsValidMemberTransition(task.Status, newStatus.Value))
+            return BuildTextResponse(context, $"❌ Không thể chuyển từ {task.Status} → {newStatus}");
 
-        //  chỉ cho Doing + Review
-        if (newStatusEnum != ETaskStatus.Doing && newStatusEnum != ETaskStatus.Review)
-            return BuildTextResponse(context, "❌ Bạn chỉ được chuyển sang Doing hoặc Review");
-
-        // update
-        await _taskService.ChangeStatusAsync(taskId, newStatusEnum.Value, ct);
-
-        //  chỉ notify khi status thay đổi
-        if (oldStatus != newStatus)
-        {
-            await NotifyMentorAsync(
-                task,
-                oldStatus,
-                newStatus,
-                context.CurrentUserId,
-                context,
-                ct);
-        }
-
+        await _taskService.ChangeStatusAsync(taskId, newStatus.Value, ct);
         return HandleCancel(context, $"✅ Đã cập nhật trạng thái task #{taskId}");
-    }
-
-    private async Task<ComponentResponse> HandleDeletePromptAsync(ComponentContext context, string[] parts, CancellationToken ct)
-    {
-        if (parts.Length < 2 || !int.TryParse(parts[1], out var taskId))
-            return BuildTextResponse(context, "❌ Task ID không hợp lệ");
-
-        var task = await _taskService.GetByIdAsync(taskId, ct);
-        if (task == null)
-            return BuildTextResponse(context, "❌ Không tìm thấy task");
-
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định được người dùng");
-
-        // Check PM permission
-        if (task.TeamId.HasValue && !await _teamService.IsPM(context.CurrentUserId!, task.TeamId.Value))
-            return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền xóa task");
-
-        return ComponentResponse.FromContent(context.ClanId!, context.ChannelId!,
-            TaskFormBuilder.BuildDeleteConfirm(task), context.Mode, context.IsPublic, context.MessageId!, null);
     }
 
     private async Task<ComponentResponse> HandleConfirmDeleteAsync(ComponentContext context, string[] parts, CancellationToken ct)
@@ -282,171 +418,91 @@ public class TaskComponentHandler : IComponentHandler
             return BuildTextResponse(context, "❌ Task ID không hợp lệ");
 
         var task = await _taskService.GetByIdAsync(taskId, ct);
-        if (task == null)
-            return BuildTextResponse(context, "❌ Không tìm thấy task");
+        if (task == null) return BuildTextResponse(context, "❌ Không tìm thấy task");
 
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định được người dùng");
-
-        // CHECK QUYỀN 
-        var isMentor = task.TeamId.HasValue &&
-                       await _teamService.IsPM(context.CurrentUserId, task.TeamId.Value);
-
-        if (!isMentor)
-            return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền xóa task");
+        if (!await _teamService.IsPM(context.CurrentUserId!, task.TeamId!.Value))
+            return BuildTextResponse(context, "❌ Chỉ Mentor mới có quyền xóa");
 
         await _taskService.DeleteAsync(taskId, ct);
-
         return HandleCancel(context, $"✅ Đã xóa task #{taskId}");
     }
 
-    private async Task<ComponentResponse> HandleListAsync(ComponentContext context, CancellationToken ct)
+    //private async Task<ComponentResponse> HandleFilterStatusAsync(ComponentContext context, CancellationToken ct)
+    //{
+    //    var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId!, ct);
+    //    var filtered = tasks.Where(t => t.Status == ETaskStatus.Doing || t.Status == ETaskStatus.Review).ToList();
+    //    return ReplaceForm(context, TaskFormBuilder.BuildTaskList(filtered, isMentor));
+    //}
+
+    private async Task<ComponentResponse> HandleSelectProjectAutoAsync(ComponentContext context, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định được người dùng");
+        var projectIdStr = GetSelectedValue(context.Payload, "project");
 
-        // Get user's teams
-        var teams = await _teamService.GetTeamsByMemberAsync(context.CurrentUserId);
-        if (teams.Count == 0)
-            return BuildTextResponse(context, "❌ Bạn chưa tham gia team nào");
-
-        var allTasks = new List<TaskDto>();
-        var isMentor = false;
-
-        foreach (var team in teams)
-        {
-            if (await _teamService.IsPM(context.CurrentUserId, team.Id))
-            {
-                isMentor = true;
-                var teamTasks = await _taskService.GetTasksByTeamAsync(team.Id, ct);
-                allTasks.AddRange(teamTasks);
-            }
-            else
-            {
-                var myTasks = await _taskService.GetByAssigneeAsync(context.CurrentUserId, null, ct);
-                allTasks.AddRange(myTasks.Where(t => t.TeamId == team.Id));
-            }
-        }
-
-        var distinctTasks = allTasks.DistinctBy(t => t.Id).ToList();
-
-        return ComponentResponse.FromContent(context.ClanId!, context.ChannelId!,
-            TaskFormBuilder.BuildTaskList(distinctTasks, isMentor), context.Mode, context.IsPublic, context.MessageId!, null);
-    }
-
-    private async Task<ComponentResponse> HandleFilterStatusAsync(ComponentContext context, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định user");
-
-        var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId, ct);
-
-        // ví dụ filter: Doing + Review
-        var filtered = tasks
-            .Where(t => t.Status == ETaskStatus.Doing || t.Status == ETaskStatus.Review)
-            .ToList();
-
-        return ReplaceForm(context,
-            TaskFormBuilder.BuildTaskList(filtered, isMentor, "status"));
-    }
-
-    private async Task<ComponentResponse> HandleFilterUserAsync(ComponentContext context, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định user");
-
-        var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId, ct);
-
-        // filter chính user hiện tại
-        var filtered = tasks
-            .Where(t => t.AssignedTo == context.CurrentUserId)
-            .ToList();
-
-        return ReplaceForm(context,
-            TaskFormBuilder.BuildTaskList(filtered, isMentor, "user"));
-    }
-
-    private async Task<ComponentResponse> HandleFilterDeadlineAsync(ComponentContext context, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(context.CurrentUserId))
-            return BuildTextResponse(context, "❌ Không xác định user");
-
-        var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId, ct);
-
-        var now = DateTime.Now;
-
-        // task sắp hết hạn (<= 3 ngày)
-        var filtered = tasks
-            .Where(t => t.DueDate.HasValue &&
-                        t.DueDate.Value <= now.AddDays(3))
-            .OrderBy(t => t.DueDate)
-            .ToList();
-
-        return ReplaceForm(context,
-            TaskFormBuilder.BuildTaskList(filtered, isMentor, "deadline"));
-    }
-
-    private async Task<(List<TaskDto> Tasks, bool IsMentor)> GetUserTasksAsync(string userId, CancellationToken ct)
-    {
-        var teams = await _teamService.GetTeamsByMemberAsync(userId);
-        var allTasks = new List<TaskDto>();
-        var isMentor = false;
-
-        foreach (var team in teams)
-        {
-            if (await _teamService.IsPM(userId, team.Id))
-            {
-                isMentor = true;
-                var teamTasks = await _taskService.GetTasksByTeamAsync(team.Id, ct);
-                allTasks.AddRange(teamTasks);
-            }
-            else
-            {
-                var myTasks = await _taskService.GetByAssigneeAsync(userId, null, ct);
-                allTasks.AddRange(myTasks.Where(t => t.TeamId == team.Id));
-            }
-        }
-
-        return (allTasks.DistinctBy(t => t.Id).ToList(), isMentor);
-    }
-
-    private async Task<ComponentResponse> HandleSelectTeamAsync(ComponentContext context, string[] parts, CancellationToken ct)
-    {
-        if (parts.Length < 2 || !int.TryParse(parts[1], out var projectId))
-            return BuildTextResponse(context, "❌ Project ID không hợp lệ");
-
-        var teamIdStr = ReadValue(context.Payload, "task_team");
-        if (!int.TryParse(teamIdStr, out var teamId))
-            return BuildTextResponse(context, "❌ Vui lòng chọn team");
-
-        var members = await _teamService.GetMembers(teamId);
-        if (members.Count == 0)
-            return BuildTextResponse(context, "❌ Team không có thành viên");
-
-        return ReplaceForm(context,
-            TaskFormBuilder.BuildCreateFormWithMembers(projectId, teamId, members));
-    }
-
-    private async Task<ComponentResponse> HandleSelectProjectAsync(ComponentContext context, CancellationToken ct)
-    {
-        var projectIdStr = ReadValue(context.Payload, "task_project");
+        _logger.LogInformation($"[AUTO] Project selected = {projectIdStr}");
 
         if (!int.TryParse(projectIdStr, out var projectId))
-            return BuildTextResponse(context, "❌ Vui lòng chọn project");
+            return new ComponentResponse(); // không spam lỗi
 
+        var projects = await _projectService.GetAllProjectsAsync();
         var teams = await _teamService.GetTeamsByProjectAsync(projectId);
 
         if (teams.Count == 0)
             return BuildTextResponse(context, "❌ Project chưa có team");
 
+        // load ALL member của project
+        var members = new List<(string Id, string Name)>();
+        foreach (var t in teams)
+        {
+            var m = await _teamService.GetMembersWithDisplay(t.Id, context.ClanId!);
+            members.AddRange(m);
+        }
+
+        members = members.Distinct().ToList();
+
         return ReplaceForm(context,
-            TaskFormBuilder.BuildCreateFormWithTeams(projectId, teams));
+            TaskFormBuilder.BuildCreateFormWithSelectedProject(
+                projects,
+                projectId,
+                teams,
+                members
+            ));
     }
+
+    private async Task<ComponentResponse> HandleSelectTeamAutoAsync(ComponentContext context, CancellationToken ct)
+    {
+        var projectIdStr = GetSelectedValue(context.Payload, "project");
+        var teamIdStr = GetSelectedValue(context.Payload, "team");
+
+        if (!int.TryParse(projectIdStr, out var projectId))
+            return new ComponentResponse();
+
+        if (!int.TryParse(teamIdStr, out var teamId))
+            return new ComponentResponse();
+
+        var projects = await _projectService.GetAllProjectsAsync();
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+        var members = await _teamService.GetMembersWithDisplay(teamId, context.ClanId!);
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildCreateFormWithSelectedProject(
+                projects,
+                projectId,
+                teams,
+                members,
+                teamId
+            ));
+    }
+
+    //private async Task<ComponentResponse> HandleFilterUserAsync(ComponentContext context, CancellationToken ct)
+    //{
+    //    var (tasks, isMentor) = await GetUserTasksAsync(context.CurrentUserId!, ct);
+    //    var filtered = tasks.Where(t => t.AssignedTo == context.CurrentUserId).ToList();
+    //    return ReplaceForm(context, TaskFormBuilder.BuildTaskList(filtered, isMentor));
+    //}
 
     private static ComponentResponse ReplaceForm(ComponentContext context, ChannelMessageContent content)
     {
         var response = new ComponentResponse();
-
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -456,9 +512,13 @@ public class TaskComponentHandler : IComponentHandler
                 MessageId = context.MessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = null
             });
         }
+
+        //  LẤY originalMessageId từ customId
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        var originalMessageId = parts.Length >= 2 ? parts[^1] : null;
 
         response.Messages.Add(new ComponentMessage
         {
@@ -467,16 +527,25 @@ public class TaskComponentHandler : IComponentHandler
             Content = content,
             Mode = context.Mode,
             IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
 
+            //  reply vào message gốc
+            ReplyToMessageId = originalMessageId,
+
+            OriginalMessage = new ChannelMessage
+            {
+                Id = originalMessageId,
+                ChannelId = context.ChannelId!,
+                ClanId = context.ClanId!,
+                SenderId = context.CurrentUserId,
+                ChannelLabel = ""
+            }
+        });
         return response;
     }
 
     private static ComponentResponse HandleCancel(ComponentContext context, string? message = null)
     {
         var response = new ComponentResponse();
-
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -486,9 +555,12 @@ public class TaskComponentHandler : IComponentHandler
                 MessageId = context.MessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = null
             });
         }
+
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        var originalMessageId = context.MessageId;
 
         if (!string.IsNullOrWhiteSpace(message))
         {
@@ -499,61 +571,59 @@ public class TaskComponentHandler : IComponentHandler
                 Text = message,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = originalMessageId,
+                OriginalMessage = new ChannelMessage
+                {
+                    Id = originalMessageId,
+                    ChannelId = context.ChannelId!,
+                    ClanId = context.ClanId!,
+                    SenderId = context.CurrentUserId,
+                    ChannelLabel = ""
+                }
             });
         }
-
         return response;
     }
 
-    private static ComponentResponse BuildTextResponse(ComponentContext context, string text) =>
-        ComponentResponse.FromText(context.ClanId!, context.ChannelId!, text, context.Mode, context.IsPublic, context.MessageId!, null);
-
-    private static EPriorityLevel? ParsePriority(string? value) => value switch
+    private static ComponentResponse BuildTextResponse(ComponentContext context, string text)
     {
-        "High" => EPriorityLevel.High,
-        "Medium" => EPriorityLevel.Medium,
-        "Low" => EPriorityLevel.Low,
-        _ => null
-    };
+        //  LẤY originalMessageId từ customId
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        var originalMessageId = parts.Length >= 2 ? parts[^1] : null;
 
-    private static ETaskStatus? ParseStatus(string? value) => value switch
-    {
-        "ToDo" => ETaskStatus.ToDo,
-        "Doing" => ETaskStatus.Doing,
-        "Review" => ETaskStatus.Review,
-        "Completed" => ETaskStatus.Completed,
-        "Cancelled" => ETaskStatus.Cancelled,
-        _ => null
-    };
+        return ComponentResponse.FromText(
+            context.ClanId!,
+            context.ChannelId!,
+            text,
+            context.Mode,
+            context.IsPublic,
 
-    private static string ReadValue(JsonElement payload, string key)
-    {
-        var valuesNode = ComponentPayloadHelper.GetValues(payload);
-        var value = ComponentPayloadHelper.GetPropertyIgnoreCase(valuesNode, key)?.GetString();
-        if (!string.IsNullOrWhiteSpace(value))
-            return value;
+            //  reply vào message gốc
+            originalMessageId,
 
-        var extraData = ComponentPayloadHelper.GetExtraData(payload);
-        if (string.IsNullOrWhiteSpace(extraData) || !extraData.TrimStart().StartsWith("{"))
-            return string.Empty;
+            new ChannelMessage
+            {
+                Id = originalMessageId,
+                ChannelId = context.ChannelId!,
+                ClanId = context.ClanId!,
+                SenderId = context.CurrentUserId,
+                Username = context.CurrentUserId,
+                DisplayName = context.CurrentUserId,
+                Content = new ChannelMessageContent
+                {
+                    Text = "" 
+                },
 
-        try
-        {
-            using var json = JsonDocument.Parse(extraData);
-            return ComponentPayloadHelper.GetPropertyIgnoreCase(json.RootElement, key)?.GetString() ?? string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
+                ChannelLabel = ""
+            }
+        );
     }
 
-    private static ComponentResponse BuildSuccessResponse(ComponentContext context, ChannelMessageContent content)
+    private static ComponentResponse BuildSuccessResponse(ComponentContext context, ChannelMessageContent content, string? originalMessageId)
     {
         var response = new ComponentResponse();
 
-        // delete form
+        // CHỈ delete khi submit xong
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -563,11 +633,11 @@ public class TaskComponentHandler : IComponentHandler
                 MessageId = context.MessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = null
             });
         }
 
-        // send result
+        // gửi result (KHÔNG reply vào message đã bị xóa)
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -575,39 +645,132 @@ public class TaskComponentHandler : IComponentHandler
             Content = content,
             Mode = context.Mode,
             IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
+            ReplyToMessageId = originalMessageId,
+            OriginalMessage = new ChannelMessage
+            {
+                Id = originalMessageId,
+                ChannelId = context.ChannelId!, 
+                ClanId = context.ClanId!,
+                SenderId = context.CurrentUserId,
+                Username = "",
+                DisplayName = "",
+                ChannelLabel = "" 
+            }
         });
-
         return response;
     }
 
-    private async Task NotifyMentorAsync(
-        TaskDto task,
-        string oldStatus,
-        string newStatus,
-        string updatedBy,
-        ComponentContext context,
-        CancellationToken ct)
+    private TaskDto MapToDisplayTask(TaskDto task, string clanId)
     {
-        if (!task.TeamId.HasValue) return;
-
-        var mentorId = await _teamService.GetPMIdAsync(task.TeamId.Value);
-        if (string.IsNullOrWhiteSpace(mentorId)) return;
-
-        var message = $"""
-            📢 **Task #{task.Id} thay đổi trạng thái**
-
-            👤 Member: <@{updatedBy}>
-            🔄 {oldStatus} → {newStatus}
-            """;
-
-        await _client.SendEphemeralMessageAsync(
-            receiverId: mentorId,
-            clanId: context.ClanId!,
-            channelId: context.ChannelId!,
-            mode: context.Mode,
-            isPublic: context.IsPublic,
-            content: new ChannelMessageContent { Text = message },
-            cancellationToken: ct);
+        return new TaskDto
+        {
+            Id = task.Id,
+            Title = task.Title,
+            AssignedTo = GetDisplayName(task.AssignedTo, clanId), 
+            CreatedBy = GetDisplayName(task.CreatedBy, clanId),
+            Status = task.Status,
+            Priority = task.Priority,
+            DueDate = task.DueDate,
+            CreatedAt = task.CreatedAt
+        };
     }
+
+    private string GetDisplayName(string userId, string clanId)
+    {
+        var user = _client.Clans.Get(clanId)?.Users.Get(userId);
+
+        if (user == null)
+            return $"User-{userId.Substring(0, 4)}";
+
+        return user.DisplayName
+            ?? user.ClanNick
+            ?? user.Username
+            ?? $"User-{userId.Substring(0, 4)}";
+    }
+
+    private static string? GetSelectedValue(JsonElement payload, string key)
+    {
+        //  Ưu tiên đọc từ ExtraData 
+        var extra = ComponentPayloadHelper.GetExtraData(payload);
+
+        if (!string.IsNullOrWhiteSpace(extra) && extra.TrimStart().StartsWith("{"))
+        {
+            try
+            {
+                using var json = JsonDocument.Parse(extra);
+                var val = ComponentPayloadHelper
+                    .GetPropertyIgnoreCase(json.RootElement, key);
+
+                if (val.HasValue)
+                    return val.Value.GetString();
+            }
+            catch { }
+        }
+
+        //  fallback: đọc từ Values 
+        var values = ComponentPayloadHelper.GetValues(payload);
+
+        if (values.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var node = ComponentPayloadHelper.GetPropertyIgnoreCase(values, key);
+
+        if (!node.HasValue)
+            return null;
+
+        var el = node.Value;
+
+        if (el.ValueKind == JsonValueKind.Object &&
+            el.TryGetProperty("values", out var arr) &&
+            arr.ValueKind == JsonValueKind.Array &&
+            arr.GetArrayLength() > 0)
+        {
+            return arr[0].GetString();
+        }
+
+        if (el.ValueKind == JsonValueKind.String)
+            return el.GetString();
+
+        return null;
+    }
+
+    private static string ReadValue(JsonElement payload, string key)
+    {
+        var valuesNode = ComponentPayloadHelper.GetValues(payload);
+        var value = ComponentPayloadHelper.GetPropertyIgnoreCase(valuesNode, key)?.GetString();
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+        var extraData = ComponentPayloadHelper.GetExtraData(payload);
+        if (string.IsNullOrWhiteSpace(extraData) || !extraData.TrimStart().StartsWith("{")) return string.Empty;
+        try
+        {
+            using var json = JsonDocument.Parse(extraData);
+            return ComponentPayloadHelper.GetPropertyIgnoreCase(json.RootElement, key)?.GetString() ?? string.Empty;
+        }
+        catch { return string.Empty; }
+    }
+
+    private static bool IsValidMemberTransition(ETaskStatus current, ETaskStatus next)
+    {
+        return (current, next) switch
+        {
+            (ETaskStatus.ToDo, ETaskStatus.Doing) => true,
+            (ETaskStatus.Doing, ETaskStatus.Review) => true,
+            _ => false
+        };
+    }
+
+    private static bool IsValidMentorTransition(ETaskStatus current, ETaskStatus next)
+    {
+        return (current, next) switch
+        {
+            (ETaskStatus.ToDo, ETaskStatus.Doing) => true,
+            (ETaskStatus.Doing, ETaskStatus.Review) => true,
+            (ETaskStatus.Review, ETaskStatus.Completed) => true,
+            _ => false
+        };
+    }
+
+    private static EPriorityLevel? ParsePriority(string? value) => value switch { "High" => EPriorityLevel.High, "Medium" => EPriorityLevel.Medium, "Low" => EPriorityLevel.Low, _ => null };
+    private static ETaskStatus? ParseStatus(string? value) => value switch { "ToDo" => ETaskStatus.ToDo, "Doing" => ETaskStatus.Doing, "Review" => ETaskStatus.Review, "Completed" => ETaskStatus.Completed, "Cancelled" => ETaskStatus.Cancelled, _ => null };
+
 }

@@ -42,8 +42,25 @@ internal static class ComponentPayloadHelper
         ?? GetNestedScalarString(payload, "MessageButtonClicked", "ExtraData")
         ?? GetNestedScalarString(payload, "messageButtonClicked", "extraData");
 
-    public static JsonElement GetValues(JsonElement payload) =>
-        GetNestedProperty(payload, "Data", "Values");
+    public static JsonElement GetValues(JsonElement payload)
+    {
+        //  Data.Values 
+        var dataValues = GetNestedProperty(payload, "Data", "Values");
+        if (dataValues.ValueKind == JsonValueKind.Object)
+            return dataValues;
+
+        //  payload.Values 
+        var rootValues = GetNestedProperty(payload, "Values");
+        if (rootValues.ValueKind == JsonValueKind.Object)
+            return rootValues;
+
+        //  values (lowercase)
+        var lowerValues = GetNestedProperty(payload, "values");
+        if (lowerValues.ValueKind == JsonValueKind.Object)
+            return lowerValues;
+
+        return default;
+    }
 
     public static JsonElement GetNestedProperty(JsonElement element, params string[] propertyNames)
     {

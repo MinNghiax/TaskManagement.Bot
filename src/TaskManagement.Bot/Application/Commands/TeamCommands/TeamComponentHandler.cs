@@ -190,7 +190,7 @@ public class TeamComponentHandler : IComponentHandler
 
     private ComponentResponse HandleAddMember(ComponentContext context, string[] parts)
     {
-        var currentCount = parts.Length > 1 && int.TryParse(parts[1], out var c) ? c : 3;
+        var currentCount = parts.Length > 1 && int.TryParse(parts[1], out var c) ? c : 1;
 
         if (currentCount >= 6)
             return BuildTextResponse(context, "❌ Đã đạt giới hạn 6 thành viên");
@@ -227,48 +227,63 @@ public class TeamComponentHandler : IComponentHandler
 
     private async Task<ComponentResponse> HandleAcceptAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(context.CurrentUserId))
+        if (parts.Length < 1 || string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Yêu cầu không hợp lệ");
 
         var result = await _workflowService.AcceptAsync(parts[1], parts[2], context.CurrentUserId, ct);
-        return BuildTextResponse(context, result.Message);
+        return HandleCancel(context, result.Message);
     }
 
     private async Task<ComponentResponse> HandleRejectAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(context.CurrentUserId))
+        if (parts.Length < 1 || string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Yêu cầu không hợp lệ");
 
         var result = await _workflowService.RejectAsync(parts[1], parts[2], context.CurrentUserId, ct);
-        return BuildTextResponse(context, result.Message);
+        return HandleCancel(context, result.Message);
     }
 
-    private static ComponentResponse HandleCancel(ComponentContext context, string message)
+    private static ComponentResponse HandleCancel(ComponentContext context, string? message = null)
     {
         var response = new ComponentResponse();
 
-        if (!string.IsNullOrWhiteSpace(context.MessageId))
+        // lấy đúng message chứa form
+        var formMessageId = context.MessageId;
+
+        if (!string.IsNullOrWhiteSpace(formMessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
             {
                 ClanId = context.ClanId!,
                 ChannelId = context.ChannelId!,
-                MessageId = context.MessageId,
+                MessageId = formMessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = formMessageId
             });
         }
 
-        response.Messages.Add(new ComponentMessage
+        // reply (optional)
+        if (!string.IsNullOrWhiteSpace(message))
         {
-            ClanId = context.ClanId!,
-            ChannelId = context.ChannelId!,
-            Text = message,
-            Mode = context.Mode,
-            IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
+            response.Messages.Add(new ComponentMessage
+            {
+                ClanId = context.ClanId!,
+                ChannelId = context.ChannelId!,
+                Text = message,
+                Mode = context.Mode,
+                IsPublic = context.IsPublic,
+                ReplyToMessageId = formMessageId,
+                OriginalMessage = new ChannelMessage
+                {
+                    Id = formMessageId,
+                    ChannelId = context.ChannelId!,
+                    ClanId = context.ClanId!,
+                    SenderId = context.CurrentUserId,
+                    ChannelLabel = ""
+                }
+            });
+        }
 
         return response;
     }

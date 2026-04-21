@@ -1,34 +1,46 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Mezon.Sdk;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
-using TaskManagement.Bot.Application.DTOs;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 namespace TaskManagement.Bot.Application.Services;
 
 public class TaskService : ITaskService
 {
     private readonly TaskManagementDbContext _context;
+    private readonly MezonClient _client;
 
-    public TaskService(TaskManagementDbContext context)
+    public TaskService(TaskManagementDbContext context, MezonClient client)
     {
         _context = context;
+        _client = client;
     }
 
     // 🔁 Convert Entity → DTO
-    private static TaskDto MapToDto(TaskItem task)
+    private TaskDto MapToDto(TaskItem task)
     {
         // Lấy Clan đầu tiên (thường 1 task chỉ thuộc 1 clan/channel tại 1 thời điểm)
         var clanInfo = task.Clans.FirstOrDefault();
+        var clanId = clanInfo?.ClanId;
 
         return new TaskDto
         {
             Id = task.Id,
             Title = task.Title,
             Description = task.Description,
-            AssignedTo = task.AssignedTo,
-            CreatedBy = task.CreatedBy,
+            //AssignedTo = task.AssignedTo,
+            //CreatedBy = task.CreatedBy,
+            AssignedTo = clanId != null
+                ? GetDisplayName(task.AssignedTo, clanId)
+                : task.AssignedTo,
+
+                    CreatedBy = clanId != null
+                ? GetDisplayName(task.CreatedBy, clanId)
+                : task.CreatedBy,
+
             DueDate = task.DueDate,
             Status = task.Status,
             Priority = task.Priority,
@@ -60,7 +72,7 @@ public class TaskService : ITaskService
         _context.TaskItems.Add(task);
         await _context.SaveChangesAsync(ct);
 
-        // 🔥 CLANS
+        //  CLANS
         if (dto.ClanIds != null)
         {
             _context.TaskClans.AddRange(
@@ -72,7 +84,7 @@ public class TaskService : ITaskService
             );
         }
 
-        // 🔥 CHANNELS (bạn đang thiếu cái này)
+        //  CHANNELS 
         if (dto.ChannelIds != null)
         {
             _context.TaskChannels.AddRange(
@@ -231,5 +243,26 @@ public class TaskService : ITaskService
             .ToListAsync(ct);
 
         return tasks.Select(MapToDto).ToList();
+    }
+
+    public async Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
+    {
+        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == taskId && !t.IsDeleted, cancellationToken);
+        if (task == null || task.IsDeleted) return;
+
+        task.DueDate = newDueDate;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private string GetDisplayName(string userId, string clanId)
+    {
+        var user = _client.Clans.Get(clanId)?.Users.Get(userId);
+
+        return user?.DisplayName
+            ?? user?.ClanNick
+            ?? user?.Username
+            ?? $"User-{userId.Substring(0, 4)}";
     }
 }
