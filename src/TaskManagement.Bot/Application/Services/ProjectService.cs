@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,6 +15,7 @@ namespace TaskManagement.Bot.Application.Services
         Task<bool> ExistsByNameAsync(string name, CancellationToken cancellationToken = default);
         Task<List<Project>> GetAllProjectsAsync();
         Task<Project?> GetProjectByIdAsync(int id);
+        Task<List<Project>> GetProjectsByUserAsync(string userId);
     }
 
     public class ProjectService : IProjectService
@@ -49,6 +50,7 @@ namespace TaskManagement.Bot.Application.Services
             return _context.Projects.AnyAsync(x => !x.IsDeleted && x.Name.ToLower() == normalized, cancellationToken);
         }
 
+        //  Lấy danh sách project
         public async Task<List<Project>> GetAllProjectsAsync()
         {
             return await _context.Projects
@@ -56,12 +58,20 @@ namespace TaskManagement.Bot.Application.Services
                 .ToListAsync();
         }
 
+        //  Lấy chi tiết project
         public async Task<Project?> GetProjectByIdAsync(int id)
         {
             return await _context.Projects
                 .Include(p => p.Teams)
                     .ThenInclude(t => t.Members)
                 .FirstOrDefaultAsync(p => p.Id == id);
+        }
+
+        public async Task<List<Project>> GetProjectsByUserAsync(string userId)
+        {
+            return await _context.Projects
+                .Where(p => p.CreatedBy == userId && !p.IsDeleted)
+                .ToListAsync();
         }
     }
 }

@@ -61,6 +61,7 @@ public class TeamComponentHandler : IComponentHandler
         var projectName = ReadValue(context.Payload, "project_name");
         var teamName = ReadValue(context.Payload, "team_name");
 
+        // Collect members
         var formValues = new Dictionary<string, string>();
         for (var i = 1; i <= 6; i++)
         {
@@ -69,6 +70,7 @@ public class TeamComponentHandler : IComponentHandler
                 formValues[$"member_{i}"] = value;
         }
 
+        // Validate
         var (isValid, message, members) = TeamFormBuilder.ValidateForm(projectName, teamName, formValues);
         if (!isValid)
         {
@@ -76,12 +78,14 @@ public class TeamComponentHandler : IComponentHandler
                 TeamFormBuilder.BuildTeamFormWithError(message));
         }
 
+        // Check duplicates
         if (await _projectService.ExistsByNameAsync(projectName, ct))
             return BuildTextResponse(context, $"❌ Project `{projectName}` đã tồn tại");
 
         if (await _teamService.ExistsByNameAsync(teamName, ct))
             return BuildTextResponse(context, $"❌ Team `{teamName}` đã tồn tại");
 
+        // Validate members exist
         var resolvedMembers = await ResolveMembersAsync(context.ClanId!, members, ct);
         if (resolvedMembers.InvalidTokens.Count > 0)
             return BuildTextResponse(context, $"❌ Không tìm thấy user: {string.Join(", ", resolvedMembers.InvalidTokens)}");
@@ -89,6 +93,7 @@ public class TeamComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người tạo");
 
+        // Create request
         var result = await _workflowService.CreateRequestAsync(new CreateTeamRequestInput
         {
             ProjectName = projectName,
@@ -100,6 +105,7 @@ public class TeamComponentHandler : IComponentHandler
         if (!result.Success || string.IsNullOrWhiteSpace(result.RequestId))
             return BuildTextResponse(context, result.Message);
 
+        // Send confirmations to members
         foreach (var member in result.Members)
         {
             try
@@ -119,8 +125,10 @@ public class TeamComponentHandler : IComponentHandler
             }
         }
 
+        // Tạo response với cả message thông báo và xóa form
         var response = new ComponentResponse();
 
+        // Xóa form hiện tại
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -134,6 +142,7 @@ public class TeamComponentHandler : IComponentHandler
             });
         }
 
+        // Gửi message thông báo kết quả
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -151,6 +160,7 @@ public class TeamComponentHandler : IComponentHandler
     {
         var response = new ComponentResponse();
 
+        //  Xóa form cũ
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -164,6 +174,7 @@ public class TeamComponentHandler : IComponentHandler
             });
         }
 
+        //  Gửi form mới (có error)
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -179,13 +190,14 @@ public class TeamComponentHandler : IComponentHandler
 
     private ComponentResponse HandleAddMember(ComponentContext context, string[] parts)
     {
-        var currentCount = parts.Length > 1 && int.TryParse(parts[1], out var c) ? c : 3;
+        var currentCount = parts.Length > 1 && int.TryParse(parts[1], out var c) ? c : 1;
 
         if (currentCount >= 6)
             return BuildTextResponse(context, "❌ Đã đạt giới hạn 6 thành viên");
 
         var response = new ComponentResponse();
 
+        // Delete old form
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -199,6 +211,7 @@ public class TeamComponentHandler : IComponentHandler
             });
         }
 
+        // Send new form with +1 member
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -214,48 +227,63 @@ public class TeamComponentHandler : IComponentHandler
 
     private async Task<ComponentResponse> HandleAcceptAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(context.CurrentUserId))
+        if (parts.Length < 1 || string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Yêu cầu không hợp lệ");
 
         var result = await _workflowService.AcceptAsync(parts[1], parts[2], context.CurrentUserId, ct);
-        return BuildTextResponse(context, result.Message);
+        return HandleCancel(context, result.Message);
     }
 
     private async Task<ComponentResponse> HandleRejectAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(context.CurrentUserId))
+        if (parts.Length < 1 || string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Yêu cầu không hợp lệ");
 
         var result = await _workflowService.RejectAsync(parts[1], parts[2], context.CurrentUserId, ct);
-        return BuildTextResponse(context, result.Message);
+        return HandleCancel(context, result.Message);
     }
 
-    private static ComponentResponse HandleCancel(ComponentContext context, string message)
+    private static ComponentResponse HandleCancel(ComponentContext context, string? message = null)
     {
         var response = new ComponentResponse();
 
-        if (!string.IsNullOrWhiteSpace(context.MessageId))
+        // lấy đúng message chứa form
+        var formMessageId = context.MessageId;
+
+        if (!string.IsNullOrWhiteSpace(formMessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
             {
                 ClanId = context.ClanId!,
                 ChannelId = context.ChannelId!,
-                MessageId = context.MessageId,
+                MessageId = formMessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = formMessageId
             });
         }
 
-        response.Messages.Add(new ComponentMessage
+        // reply (optional)
+        if (!string.IsNullOrWhiteSpace(message))
         {
-            ClanId = context.ClanId!,
-            ChannelId = context.ChannelId!,
-            Text = message,
-            Mode = context.Mode,
-            IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
+            response.Messages.Add(new ComponentMessage
+            {
+                ClanId = context.ClanId!,
+                ChannelId = context.ChannelId!,
+                Text = message,
+                Mode = context.Mode,
+                IsPublic = context.IsPublic,
+                ReplyToMessageId = formMessageId,
+                OriginalMessage = new ChannelMessage
+                {
+                    Id = formMessageId,
+                    ChannelId = context.ChannelId!,
+                    ClanId = context.ClanId!,
+                    SenderId = context.CurrentUserId,
+                    ChannelLabel = ""
+                }
+            });
+        }
 
         return response;
     }
@@ -359,9 +387,11 @@ public class TeamComponentHandler : IComponentHandler
         {
             var el = element.Value;
 
+            // dạng string trực tiếp
             if (el.ValueKind == JsonValueKind.String)
                 return el.GetString() ?? string.Empty;
 
+            // dạng object { value: "xxx" }
             if (el.ValueKind == JsonValueKind.Object &&
                 el.TryGetProperty("value", out var valueProp))
             {

@@ -1,4 +1,4 @@
-using Mezon.Sdk.Domain;
+﻿using Mezon.Sdk.Domain;
 
 namespace TaskManagement.Bot.Application.Commands.TeamCommands;
 
@@ -48,6 +48,7 @@ public static class TeamFormBuilder
             }
         };
 
+        // Add member fields
         for (var i = 1; i <= memberCount; i++)
         {
             fields.Add(new
@@ -127,7 +128,7 @@ public static class TeamFormBuilder
                 title = "📋 Tạo Project và Team",
                 description = $"❌ {error}\n\nVui lòng điền lại thông tin:",
                 color = "#ED4245",
-                fields = ((dynamic)form.Embed[0]).fields,
+                fields = ((dynamic)form.Embed![0]).fields,
                 footer = new { text = "Team cần tối thiểu 3, tối đa 6 thành viên" }
             }
         },
@@ -199,7 +200,7 @@ public static class TeamFormBuilder
             }
         }
 
-        if (members.Count < 3)
+        if (members.Count < 1)
             return (false, $"❌ Team phải có ít nhất 3 thành viên (hiện tại: {members.Count})", new List<string>());
 
         if (members.Count > 6)
