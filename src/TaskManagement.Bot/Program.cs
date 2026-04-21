@@ -5,11 +5,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Application.Commands;
+using TaskManagement.Bot.Application.Commands.Complain;
 using TaskManagement.Bot.Application.Commands.Report;
 using TaskManagement.Bot.Application.Commands.TaskCommands;
 using TaskManagement.Bot.Application.Commands.TeamCommands;
 using TaskManagement.Bot.Application.Services;
+using TaskManagement.Bot.Domain.Interfaces;
 using TaskManagement.Bot.Infrastructure.Data;
+using TaskManagement.Bot.Infrastructure.Repositories;
 
 var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
 var services = new ServiceCollection();
@@ -48,6 +51,8 @@ services.AddScoped<IProjectService, ProjectService>();
 services.AddScoped<ITeamWorkflowService, TeamWorkflowService>();
 services.AddScoped<IPendingTeamRequestService, PendingTeamRequestService>();
 services.AddScoped<SessionService>();
+services.AddSingleton<ReportStateService>();
+services.AddSingleton<IMezonUserService, MezonUserService>();
 
 services.AddScoped<IBotService, BotService>();
 services.AddScoped<ICommandHandler, TaskCommandHandler>();
@@ -55,7 +60,15 @@ services.AddScoped<ICommandHandler, TeamCommandHandler>();
 services.AddScoped<IComponentHandler, TeamComponentHandler>();
 services.AddScoped<IReportService, ReportService>();
 services.AddScoped<ICommandHandler, ReportCommandHandler>();
+services.AddScoped<IComponentHandler, ReportComponentHandler>();
 services.AddScoped<IComponentHandler, TaskComponentHandler>();
+
+// Complain 
+services.AddScoped<IComplainRepository, ComplainRepository>();
+services.AddScoped<IComplainService, ComplainService>();
+services.AddScoped<ComplainCommandHandler>();
+services.AddScoped<IComponentHandler, ComplainComponentHandler>();
+services.AddScoped<ICommandHandler, ComplainCommandHandler>();
 
 var serviceProvider = services.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();

@@ -1,9 +1,8 @@
-﻿namespace TaskManagement.Bot.Infrastructure.Enums;
+﻿// TaskManagement.Bot.Infrastructure.Enums.EComplainType.cs
+namespace TaskManagement.Bot.Infrastructure.Enums;
 
 public enum EComplainType
 {
-    Paused,
-    Extend,
-    Cancel
+    RequestExtend = 1,
+    RequestCancel = 2
 }
-

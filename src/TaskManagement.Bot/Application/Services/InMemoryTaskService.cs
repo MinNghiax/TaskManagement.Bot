@@ -174,4 +174,17 @@ public class InMemoryTaskService : ITaskService
         var tasks = _store.Values.Where(t => t.TeamId == teamId).ToList();
         return Task.FromResult(tasks);
     }
+
+    //Them phan Complain
+    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
+    {
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task != null)
+        {
+            task.DueDate = newDueDate;
+            task.UpdatedAt = DateTime.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
 }
