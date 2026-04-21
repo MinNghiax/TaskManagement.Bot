@@ -1,5 +1,6 @@
 using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.Services;
+using TaskManagement.Bot.Infrastructure.Enums;  // ✅ THÊM: using cho ETaskStatus
 
 namespace TaskManagement.Bot.Application.Commands.Complain;
 
@@ -19,8 +20,8 @@ public class ComplainCommandHandler : ICommandHandler
         var trimmed = command.Trim();
         return trimmed.Equals("!complain", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("!complain ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("!approve", StringComparison.OrdinalIgnoreCase)  
-            || trimmed.StartsWith("!approve ", StringComparison.OrdinalIgnoreCase);  
+            || trimmed.Equals("!approve", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("!approve ", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<CommandResponse> HandleAsync(ChannelMessage message, CancellationToken cancellationToken)
@@ -46,7 +47,15 @@ public class ComplainCommandHandler : ICommandHandler
             return new CommandResponse("❌ You have no tasks to complain about.");
         }
 
-        var options = tasks
+        // ✅ THÊM: Lọc thêm task Review ở đây (double-check)
+        var validTasks = tasks.Where(t => t.Status != ETaskStatus.Review).ToList();
+
+        if (!validTasks.Any())
+        {
+            return new CommandResponse("❌ You have no tasks to complain about. (Tasks in Review status cannot be complained about)");
+        }
+
+        var options = validTasks
             .Select(t => (object)new { label = $"#{t.Id} {t.Title} [{t.Status}]", value = t.Id.ToString() })
             .ToArray();
 

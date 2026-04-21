@@ -22,6 +22,10 @@ public class ComplainService : IComplainService
         var task = await _tasks.GetByIdAsync(dto.TaskItemId, ct);
         if (task == null) return (null, "Task does not exist.");
 
+        // ✅ THÊM: Chặn complaint nếu task đang ở trạng thái Review
+        if (task.Status == ETaskStatus.Review)
+            return (null, "❌ Cannot complain about a task that is in Review status. Please wait for the review to complete.");
+
         if (task.Status is ETaskStatus.Completed or ETaskStatus.Cancelled)
             return (null, "Cannot complain about completed or cancelled tasks.");
 
@@ -114,7 +118,9 @@ public class ComplainService : IComplainService
         var result = new List<TaskDto>();
         foreach (var t in myTasks)
         {
-            if (t.Status is ETaskStatus.Completed or ETaskStatus.Cancelled) continue;
+            // ✅ THÊM: Loại trừ task Review
+            if (t.Status is ETaskStatus.Completed or ETaskStatus.Cancelled or ETaskStatus.Review)
+                continue;
             var pending = await _repo.GetPendingByTaskAsync(t.Id, ct);
             if (pending == null) result.Add(t);
         }
