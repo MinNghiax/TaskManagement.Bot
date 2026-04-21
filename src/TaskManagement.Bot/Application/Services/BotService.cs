@@ -93,6 +93,8 @@ public class BotService : IBotService
             _logger.LogWarning(ex, "[DM CACHE] Failed to cache DM channel ids");
         }
 
+
+        //  PRELOAD ALL CLAN MEMBERS using new MezonUserService
         _logger.LogInformation("[USER_PRELOAD] Starting user preload from all clans...");
         try
         {
@@ -290,6 +292,7 @@ public class BotService : IBotService
                 _channelClanMap[message.ChannelId] = message.ClanId;
             }
 
+            //  Cache user from message (real-time updates)
             // 📨 Cache user from message (real-time updates)
             if (!string.IsNullOrWhiteSpace(message.SenderId))
             {

@@ -20,7 +20,7 @@ public class TeamCommandHandler : ICommandHandler
 
         return parts[1].ToLowerInvariant() switch
         {
-            "init" => Task.FromResult(new CommandResponse(TeamFormBuilder.BuildTeamForm(3))),
+            "init" => Task.FromResult(new CommandResponse(TeamFormBuilder.BuildTeamForm(1))),
             _ => Task.FromResult(new CommandResponse(GetHelpText()))
         };
     }
