@@ -11,9 +11,14 @@ public static class MessageBuilder
     private const string NoneValue = "None";
     private const string UnknownUserValue = "Unknown User";
 
-    public static ChannelMessageContent BuildReminderNotification(Reminder reminder, string? assigneeUsername)
+    public static ChannelMessageContent BuildReminderNotification(
+        Reminder reminder,
+        string? assigneeUsername,
+        TimeZoneInfo? timeZone = null)
     {
         ArgumentNullException.ThrowIfNull(reminder);
+
+        timeZone ??= TimeZoneInfo.Utc;
 
         var task = reminder.Task;
         var rule = reminder.ReminderRule;
@@ -30,7 +35,7 @@ public static class MessageBuilder
             BuildField("📊 Trạng thái", GetStatusText(task?.Status), inline: true),
             BuildField("⚡ Độ ưu tiên", GetPriorityText(task?.Priority), inline: true),
             BuildField("🔔 Loại reminder", FormatRule(rule), inline: false),
-            BuildField("🕒 Thời điểm nhắc", FormatDateTime(reminder.NextTriggerAt ?? reminder.TriggerAt), inline: true)
+            BuildField("🕒 Thời điểm nhắc", FormatDateTime(reminder.NextTriggerAt ?? reminder.TriggerAt, timeZone), inline: true)
         };
 
         if (!string.IsNullOrWhiteSpace(task?.Description))
@@ -46,7 +51,7 @@ public static class MessageBuilder
             fields = fields.ToArray(),
             footer = new
             {
-                text = $"Được tạo vào {FormatVNTime()}"
+                text = $"Được tạo vào {FormatCurrentTime(timeZone)}"
             }
         };
 
@@ -60,30 +65,40 @@ public static class MessageBuilder
     private static object BuildField(string name, string value, bool inline) =>
         new { name, value, inline };
 
-    private static string FormatVNTime()
+    private static string FormatCurrentTime(TimeZoneInfo timeZone)
     {
-        return $"{GetVietnamTime():dd-MM-yyyy HH:mm:ss} (GMT+7)";
-    }
-
-    private static DateTime GetVietnamTime()
-    {
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
-            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return DateTime.UtcNow.AddHours(7);
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return DateTime.UtcNow.AddHours(7);
-        }
+        var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone);
+        return $"{localTime:dd-MM-yyyy HH:mm:ss} ({FormatOffset(localTime.Offset)})";
     }
 
     private static string FormatDateTime(DateTime? value) =>
         value?.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture) ?? NoneValue;
+
+    private static string FormatDateTime(DateTime? value, TimeZoneInfo timeZone)
+    {
+        if (!value.HasValue)
+        {
+            return NoneValue;
+        }
+
+        var localDateTime = TimeZoneInfo.ConvertTimeFromUtc(ToUtcDateTime(value.Value), timeZone);
+        return localDateTime.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    private static DateTime ToUtcDateTime(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Local => value.ToUniversalTime(),
+            DateTimeKind.Utc => value,
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+    private static string FormatOffset(TimeSpan offset)
+    {
+        var sign = offset < TimeSpan.Zero ? "-" : "+";
+        var absoluteOffset = offset.Duration();
+        return $"UTC{sign}{absoluteOffset.Hours:00}:{absoluteOffset.Minutes:00}";
+    }
 
     private static string Normalize(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();

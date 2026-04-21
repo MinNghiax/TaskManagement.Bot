@@ -1,4 +1,5 @@
 using Mezon.Sdk;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Infrastructure.Entities;
 
@@ -6,37 +7,70 @@ namespace TaskManagement.Bot.Application.Services.Reminders;
 
 public class MezonReminderNotificationSender : IReminderNotificationSender
 {
-    private static readonly TimeSpan UserLookupRetryDelay = TimeSpan.FromMinutes(1);
-
     private readonly MezonClient _client;
     private readonly IMezonUserService _userService;
     private readonly ILogger<MezonReminderNotificationSender> _logger;
+    private readonly TimeZoneInfo _timeZone;
 
     public MezonReminderNotificationSender(
         MezonClient client,
         IMezonUserService userService,
-        ILogger<MezonReminderNotificationSender> logger)
+        ILogger<MezonReminderNotificationSender> logger,
+        IConfiguration configuration)
     {
         _client = client;
         _userService = userService;
         _logger = logger;
+        _timeZone = ReminderSchedulerConfiguration.CreateTimeZone(configuration);
     }
 
     public async Task SendAsync(Reminder reminder, CancellationToken cancellationToken)
     {
         var assigneeUsername = await ResolveAssigneeUsernameAsync(reminder, cancellationToken);
-        var message = MessageBuilder.BuildReminderNotification(reminder, assigneeUsername);
+        var message = MessageBuilder.BuildReminderNotification(reminder, assigneeUsername, _timeZone);
 
-        var user = await _client.GetUserAsync(reminder.TargetUserId, cancellationToken);
-        await user.SendDMAsync(message, cancellationToken: cancellationToken);
+        try
+        {
+            _logger.LogInformation(
+                "Sending reminder {ReminderId} for task {TaskId} to user {TargetUserId}",
+                reminder.Id,
+                reminder.TaskId,
+                reminder.TargetUserId);
+
+            var user = await _client.GetUserAsync(reminder.TargetUserId, cancellationToken);
+            var ack = await user.SendDMAsync(message, cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Sent reminder {ReminderId} for task {TaskId} to user {TargetUserId}. DmChannelId={DmChannelId}, AckChannelId={AckChannelId}, AckMessageId={AckMessageId}",
+                reminder.Id,
+                reminder.TaskId,
+                reminder.TargetUserId,
+                user.DmChannelId,
+                ack.ChannelId,
+                ack.MessageId);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to send reminder {ReminderId} for task {TaskId} to user {TargetUserId}",
+                reminder.Id,
+                reminder.TaskId,
+                reminder.TargetUserId);
+
+            throw;
+        }
     }
 
     private async Task<string> ResolveAssigneeUsernameAsync(Reminder reminder, CancellationToken cancellationToken)
     {
-        var attempt = 0;
         var clanId = GetClanId(reminder);
 
-        while (true)
+        for (var attempt = 0; attempt < 2; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -51,12 +85,6 @@ public class MezonReminderNotificationSender : IReminderNotificationSender
                 {
                     return username;
                 }
-
-                _logger.LogWarning(
-                    "Could not resolve user {UserId} for reminder {ReminderId}. Retrying in {DelayMinutes} minute(s).",
-                    reminder.TargetUserId,
-                    reminder.Id,
-                    UserLookupRetryDelay.TotalMinutes);
             }
             catch (OperationCanceledException)
             {
@@ -66,15 +94,18 @@ public class MezonReminderNotificationSender : IReminderNotificationSender
             {
                 _logger.LogWarning(
                     ex,
-                    "Failed to resolve user {UserId} for reminder {ReminderId}. Retrying in {DelayMinutes} minute(s).",
+                    "Failed to resolve display name for user {UserId} on reminder {ReminderId}",
                     reminder.TargetUserId,
-                    reminder.Id,
-                    UserLookupRetryDelay.TotalMinutes);
+                    reminder.Id);
             }
-
-            attempt++;
-            await Task.Delay(UserLookupRetryDelay, cancellationToken);
         }
+
+        _logger.LogWarning(
+            "Could not resolve display name for user {UserId} on reminder {ReminderId}. Using user id fallback.",
+            reminder.TargetUserId,
+            reminder.Id);
+
+        return reminder.TargetUserId;
     }
 
     private static string? GetClanId(Reminder reminder) =>

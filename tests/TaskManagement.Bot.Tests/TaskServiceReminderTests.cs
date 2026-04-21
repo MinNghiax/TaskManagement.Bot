@@ -78,7 +78,8 @@ public class TaskServiceReminderTests
         });
         Assert.NotNull(created);
         Assert.Equal(2, created.ReminderRules.Count);
-        var task = await context.TaskItems
+
+        var task = await context.TaskItems
             .Include(t => t.Reminders).ThenInclude(r => r.ReminderRule)
             .SingleAsync(t => t.Id == created.Id);
         Assert.Equal(3, task.Reminders.Count);
@@ -233,11 +234,39 @@ public class TaskServiceReminderTests
         Assert.Equal(EReminderStatus.Pending, onDeadlineReminder.Status);
         Assert.Null(onDeadlineReminder.NextTriggerAt);
     }
-    private static TaskManagementDbContext CreateContext()
+
+    [Fact]
+    public async Task ChangeStatusAsync_TracksReviewStartedAtForReviewAutoComplete()
+    {
+        await using var context = CreateContext();
+        var service = new TaskService(context);
+        var created = await service.CreateAsync(new CreateTaskDto
+        {
+            Title = "Review lifecycle task",
+            AssignedTo = "123",
+            CreatedBy = "456",
+            DueDate = new DateTime(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc),
+            ReminderRules = []
+        });
+        Assert.NotNull(created);
+
+        await service.ChangeStatusAsync(created.Id, ETaskStatus.Review);
+
+        var task = await context.TaskItems.SingleAsync(t => t.Id == created.Id);
+        Assert.Equal(ETaskStatus.Review, task.Status);
+        Assert.NotNull(task.ReviewStartedAt);
+
+        await service.ChangeStatusAsync(created.Id, ETaskStatus.Doing);
+
+        Assert.Equal(ETaskStatus.Doing, task.Status);
+        Assert.Null(task.ReviewStartedAt);
+    }
+
+    private static TaskManagementDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<TaskManagementDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         return new TaskManagementDbContext(options);
     }
-}
+}

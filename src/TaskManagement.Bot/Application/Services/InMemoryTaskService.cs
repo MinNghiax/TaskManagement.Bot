@@ -27,6 +27,7 @@ public class InMemoryTaskService : ITaskService
                 AssignedTo = dto.AssignedTo ?? "unknown",
                 CreatedBy = dto.CreatedBy ?? "unknown",
                 Status = ETaskStatus.ToDo,  
+                ReviewStartedAt = null,
                 DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 ClanIds = dto.ClanIds,
@@ -106,8 +107,14 @@ public class InMemoryTaskService : ITaskService
         var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
         if (task != null)
         {
+            var previousStatus = task.Status;
             task.Status = newStatus;
             task.UpdatedAt = DateTime.UtcNow;
+            task.ReviewStartedAt = newStatus == ETaskStatus.Review
+                ? task.ReviewStartedAt ?? task.UpdatedAt
+                : previousStatus == ETaskStatus.Review
+                    ? null
+                    : task.ReviewStartedAt;
         }
 
         return Task.CompletedTask;
@@ -164,7 +171,15 @@ public class InMemoryTaskService : ITaskService
             task.Priority = updateDto.Priority.Value;
 
         if (updateDto.Status.HasValue)
+        {
+            var previousStatus = task.Status;
             task.Status = updateDto.Status.Value;
+            task.ReviewStartedAt = updateDto.Status.Value == ETaskStatus.Review
+                ? task.ReviewStartedAt ?? DateTime.UtcNow
+                : previousStatus == ETaskStatus.Review
+                    ? null
+                    : task.ReviewStartedAt;
+        }
 
         if (updateDto.DueDate.HasValue)
             task.DueDate = updateDto.DueDate.Value;

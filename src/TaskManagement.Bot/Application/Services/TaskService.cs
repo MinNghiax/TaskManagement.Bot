@@ -3,6 +3,7 @@ using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
 using TaskManagement.Bot.Application.DTOs;
+using TaskManagement.Bot.Application.Services.Reminders;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 namespace TaskManagement.Bot.Application.Services;
 public class TaskService : ITaskService
@@ -24,6 +25,7 @@ public class TaskService : ITaskService
             CreatedBy = task.CreatedBy,
             DueDate = task.DueDate,
             Status = task.Status,
+            ReviewStartedAt = task.ReviewStartedAt,
             Priority = task.Priority,
             TeamId = task.TeamId,
             ClanIds = task.Clans.Select(c => c.ClanId).ToList(),
@@ -87,7 +89,7 @@ public class TaskService : ITaskService
                 })
             );
         }
-        var reminders = BuildTaskReminderEntities(task, dto.ReminderRules);
+        var reminders = ReminderScheduleBuilder.BuildTaskReminderEntities(task, dto.ReminderRules);
         if (reminders.Count > 0)
             _context.Reminders.AddRange(reminders);
         await _context.SaveChangesAsync(ct);
@@ -156,9 +158,14 @@ public class TaskService : ITaskService
             .FirstOrDefaultAsync(t => t.Id == id, ct);
         if (task == null || task.IsDeleted) return;
 
-        task.Status = newStatus;
-        task.UpdatedAt = DateTime.UtcNow;
-        SyncOnDeadlineReminder(task, resetSchedule: false);
+        var now = DateTime.UtcNow;
+        ApplyStatusTransition(task, newStatus, now);
+        task.UpdatedAt = now;
+        ReminderScheduleBuilder.SyncOnDeadlineReminder(
+            task,
+            reminder => _context.Reminders.Add(reminder),
+            resetSchedule: false,
+            now);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -171,9 +178,14 @@ public class TaskService : ITaskService
         if (task == null) return;
 
         var dueDateChanged = task.DueDate != newDueDate;
+        var now = DateTime.UtcNow;
         task.DueDate = newDueDate;
-        task.UpdatedAt = DateTime.UtcNow;
-        SyncOnDeadlineReminder(task, resetSchedule: dueDateChanged);
+        task.UpdatedAt = now;
+        ReminderScheduleBuilder.SyncOnDeadlineReminder(
+            task,
+            reminder => _context.Reminders.Add(reminder),
+            resetSchedule: dueDateChanged,
+            now);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -211,8 +223,10 @@ public class TaskService : ITaskService
         var assigneeChanged = !string.IsNullOrWhiteSpace(updateDto.AssignedTo) && task.AssignedTo != updateDto.AssignedTo;
         var statusChanged = updateDto.Status.HasValue && task.Status != updateDto.Status.Value;
 
+        var now = DateTime.UtcNow;
+
         if (updateDto.Status.HasValue)
-            task.Status = updateDto.Status.Value;
+            ApplyStatusTransition(task, updateDto.Status.Value, now);
 
         if (updateDto.DueDate.HasValue)
             task.DueDate = updateDto.DueDate.Value;
@@ -221,9 +235,13 @@ public class TaskService : ITaskService
         if (updateDto.ReminderRules is not null)
             await ReplaceTaskRemindersAsync(task, updateDto.ReminderRules, ct);
 
-        task.UpdatedAt = DateTime.UtcNow;
+        task.UpdatedAt = now;
         if (dueDateChanged || assigneeChanged || statusChanged || updateDto.ReminderRules is not null)
-            SyncOnDeadlineReminder(task, resetSchedule: dueDateChanged);
+            ReminderScheduleBuilder.SyncOnDeadlineReminder(
+                task,
+                reminder => _context.Reminders.Add(reminder),
+                resetSchedule: dueDateChanged,
+                now);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -273,172 +291,25 @@ public class TaskService : ITaskService
             }
         }
 
-        var newReminders = BuildCustomReminderEntities(task, reminderRules);
+        var newReminders = ReminderScheduleBuilder.BuildCustomReminderEntities(task, reminderRules);
         if (newReminders.Count > 0)
             _context.Reminders.AddRange(newReminders);
     }
 
-    private static List<Reminder> BuildTaskReminderEntities(
-        TaskItem task,
-        IEnumerable<CreateReminderRuleDto> reminderRules)
+    private static void ApplyStatusTransition(TaskItem task, ETaskStatus newStatus, DateTime changedAtUtc)
     {
-        var reminders = new List<Reminder>();
+        var previousStatus = task.Status;
+        task.Status = newStatus;
 
-        if (task.DueDate.HasValue && IsTaskActive(task))
-            reminders.Add(CreateOnDeadlineReminder(task));
-
-        reminders.AddRange(BuildCustomReminderEntities(task, reminderRules));
-
-        return reminders;
-    }
-
-    private static List<Reminder> BuildCustomReminderEntities(
-        TaskItem task,
-        IEnumerable<CreateReminderRuleDto> reminderRules)
-    {
-        var validRules = reminderRules
-            .Where(rule => rule.TriggerType != EReminderTriggerType.OnDeadline)
-            .Where(IsValidReminderRule)
-            .ToList();
-
-        if (validRules.Count == 0)
-            return [];
-        if (!task.DueDate.HasValue)
-            throw new InvalidOperationException("Cannot create task reminders without a due date.");
-        return validRules.Select(ruleDto =>
+        if (newStatus == ETaskStatus.Review)
         {
-            var triggerAt = CalculateTriggerAt(task.DueDate.Value, ruleDto);
-            return new Reminder
-            {
-                TaskId = task.Id,
-                TriggerAt = triggerAt,
-                TargetUserId = task.AssignedTo,
-                Status = EReminderStatus.Pending,
-                NextTriggerAt = ruleDto.IsRepeat ? triggerAt : null,
-                StateSnapshot = task.Status,
-                ReminderRule = new ReminderRule
-                {
-                    TriggerType = ruleDto.TriggerType,
-                    IntervalUnit = ruleDto.IntervalUnit,
-                    Value = ruleDto.Value,
-                    TaskStatus = task.Status,
-                    IsRepeat = ruleDto.IsRepeat
-                }
-            };
-        }).ToList();
-    }
+            if (previousStatus != ETaskStatus.Review || !task.ReviewStartedAt.HasValue)
+                task.ReviewStartedAt = changedAtUtc;
 
-    private static Reminder CreateOnDeadlineReminder(TaskItem task)
-    {
-        if (!task.DueDate.HasValue)
-            throw new InvalidOperationException("Cannot create an on-deadline reminder without a due date.");
-
-        return new Reminder
-        {
-            TaskId = task.Id,
-            TriggerAt = task.DueDate.Value,
-            TargetUserId = task.AssignedTo,
-            Status = EReminderStatus.Pending,
-            NextTriggerAt = null,
-            StateSnapshot = task.Status,
-            ReminderRule = new ReminderRule
-            {
-                TriggerType = EReminderTriggerType.OnDeadline,
-                IntervalUnit = null,
-                Value = 0,
-                TaskStatus = task.Status,
-                IsRepeat = false
-            }
-        };
-    }
-
-    private void SyncOnDeadlineReminder(TaskItem task, bool resetSchedule)
-    {
-        var now = DateTime.UtcNow;
-        var reminder = task.Reminders.FirstOrDefault(r =>
-            r.ReminderRule?.TriggerType == EReminderTriggerType.OnDeadline);
-
-        if (!task.DueDate.HasValue)
-        {
-            CancelPendingReminder(reminder, now);
             return;
         }
 
-        if (!IsTaskActive(task))
-        {
-            CancelPendingReminder(reminder, now);
-            return;
-        }
-
-        if (reminder is null)
-        {
-            _context.Reminders.Add(CreateOnDeadlineReminder(task));
-            return;
-        }
-
-        if (resetSchedule || reminder.Status == EReminderStatus.Cancelled)
-        {
-            reminder.TriggerAt = task.DueDate.Value;
-            reminder.NextTriggerAt = null;
-            reminder.Status = EReminderStatus.Pending;
-        }
-        else if (reminder.Status == EReminderStatus.Pending)
-        {
-            reminder.TriggerAt = task.DueDate.Value;
-            reminder.NextTriggerAt = null;
-        }
-
-        if (reminder.Status == EReminderStatus.Pending)
-            reminder.TargetUserId = task.AssignedTo;
-
-        reminder.StateSnapshot = task.Status;
-        reminder.UpdatedAt = now;
-
-        if (reminder.ReminderRule is not null)
-        {
-            reminder.ReminderRule.TaskStatus = task.Status;
-            reminder.ReminderRule.UpdatedAt = now;
-        }
+        if (previousStatus == ETaskStatus.Review)
+            task.ReviewStartedAt = null;
     }
-
-    private static void CancelPendingReminder(Reminder? reminder, DateTime now)
-    {
-        if (reminder?.Status != EReminderStatus.Pending)
-            return;
-
-        reminder.Status = EReminderStatus.Cancelled;
-        reminder.NextTriggerAt = null;
-        reminder.UpdatedAt = now;
-    }
-
-    private static bool IsTaskActive(TaskItem task) =>
-        task.Status is not (ETaskStatus.Completed or ETaskStatus.Cancelled);
-    private static bool IsValidReminderRule(CreateReminderRuleDto rule)
-    {
-        return rule.Value > 0 &&
-               Enum.IsDefined(typeof(ETimeUnit), rule.IntervalUnit) &&
-               Enum.IsDefined(typeof(EReminderTriggerType), rule.TriggerType);
-    }
-    private static DateTime CalculateTriggerAt(DateTime dueDate, CreateReminderRuleDto rule)
-    {
-        var interval = ToTimeSpan(rule.Value, rule.IntervalUnit);
-        return rule.TriggerType switch
-        {
-            EReminderTriggerType.BeforeDeadline => dueDate.Subtract(interval),
-            EReminderTriggerType.AfterDeadline => dueDate.Add(interval),
-            EReminderTriggerType.Repeat => DateTime.UtcNow.Add(interval),
-            _ => dueDate
-        };
-    }
-    private static TimeSpan ToTimeSpan(double value, ETimeUnit unit)
-    {
-        return unit switch
-        {
-            ETimeUnit.Minutes => TimeSpan.FromMinutes(value),
-            ETimeUnit.Hours => TimeSpan.FromHours(value),
-            ETimeUnit.Days => TimeSpan.FromDays(value),
-            ETimeUnit.Weeks => TimeSpan.FromDays(value * 7),
-            _ => TimeSpan.Zero
-        };
-    }
-}
+}

@@ -20,7 +20,9 @@ public static class TaskManagementDbContextConfiguration
 
     public static void Configure(DbContextOptionsBuilder optionsBuilder, IConfiguration configuration)
     {
-        optionsBuilder.UseSqlServer(GetRequiredConnectionString(configuration));
+        optionsBuilder.UseSqlServer(
+            GetRequiredConnectionString(configuration),
+            sqlOptions => sqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
     }
 
     public static string GetRequiredConnectionString(IConfiguration configuration)

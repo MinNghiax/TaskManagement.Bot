@@ -14,10 +14,10 @@ public class ReminderMessageBuilderTests
             CreateReminder(EReminderTriggerType.BeforeDeadline),
             "alice");
 
-        Assert.Equal("Reminder Task #42", content.Text);
+        Assert.Equal("Reminder Ship reminder refactor", content.Text);
 
         var embed = Assert.Single(content.Embed!);
-        Assert.Contains("Task #42", GetProperty<string>(embed, "title"));
+        Assert.Contains("Ship reminder refactor", GetProperty<string>(embed, "title"));
         Assert.Equal("#FEE75C", GetProperty<string>(embed, "color"));
 
         var fields = GetProperty<object[]>(embed, "fields");
@@ -29,6 +29,24 @@ public class ReminderMessageBuilderTests
         AssertFieldValueContains(fields, "ToDo");
         AssertFieldValueContains(fields, "Cao");
         AssertFieldValueContains(fields, "30");
+    }
+
+    [Fact]
+    public void BuildReminderNotification_FormatsReminderTimeWithConfiguredTimeZone()
+    {
+        var timeZone = TimeZoneInfo.CreateCustomTimeZone(
+            "UTC+07",
+            TimeSpan.FromHours(7),
+            "UTC+07",
+            "UTC+07");
+
+        var content = MessageBuilder.BuildReminderNotification(
+            CreateReminder(EReminderTriggerType.BeforeDeadline),
+            "alice",
+            timeZone);
+
+        var fields = GetProperty<object[]>(Assert.Single(content.Embed!), "fields");
+        AssertFieldValue(fields, "21/04/2026 18:30");
     }
 
     [Fact]

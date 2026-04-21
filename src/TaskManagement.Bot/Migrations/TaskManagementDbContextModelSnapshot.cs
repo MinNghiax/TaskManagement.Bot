@@ -364,6 +364,9 @@ namespace TaskManagement.Bot.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
+                    b.Property<DateTime?>("ReviewStartedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -385,6 +388,8 @@ namespace TaskManagement.Bot.Migrations
                     b.HasIndex("AssignedTo");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ReviewStartedAt");
 
                     b.HasIndex("Status");
 

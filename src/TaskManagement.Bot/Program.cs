@@ -17,7 +17,8 @@ using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Repositories;
 
 var configuration = TaskManagementDbContextConfiguration.BuildConfiguration();
-var services = new ServiceCollection();
+var hostBuilder = Host.CreateApplicationBuilder(args);
+var services = hostBuilder.Services;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 services.AddSingleton<MezonClient>(sp =>
 {
@@ -53,7 +54,9 @@ services.AddScoped<ITeamService, TeamService>();
 services.AddScoped<IProjectService, ProjectService>();
 services.AddScoped<ITeamWorkflowService, TeamWorkflowService>();
 services.AddScoped<IPendingTeamRequestService, PendingTeamRequestService>();
-services.AddScoped<IReminderProcessor, ReminderProcessor>();
+services.AddScoped<IReminderRepository, ReminderRepository>();
+services.AddScoped<ReminderService>();
+services.AddScoped<IReminderProcessor>(sp => sp.GetRequiredService<ReminderService>());
 services.AddSingleton<IReminderNotificationSender, MezonReminderNotificationSender>();
 services.AddScoped<IComplainRepository, ComplainRepository>();
 services.AddScoped<IComplainService, ComplainService>();
@@ -73,7 +76,8 @@ services.AddScoped<ComplainCommandHandler>();
 services.AddScoped<ICommandHandler, ComplainCommandHandler>();
 services.AddScoped<IComponentHandler, ComplainComponentHandler>();
 
-await using var serviceProvider = services.BuildServiceProvider();
+using var host = hostBuilder.Build();
+var serviceProvider = host.Services;
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
 using var cancellationSource = new CancellationTokenSource();
 

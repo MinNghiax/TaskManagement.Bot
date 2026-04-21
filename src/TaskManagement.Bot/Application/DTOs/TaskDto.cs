@@ -11,6 +11,7 @@ public class TaskDto
     public string? CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
     public ETaskStatus Status { get; set; }
+    public DateTime? ReviewStartedAt { get; set; }
     public EPriorityLevel Priority { get; set; }
 
     public int? TeamId { get; set; }
