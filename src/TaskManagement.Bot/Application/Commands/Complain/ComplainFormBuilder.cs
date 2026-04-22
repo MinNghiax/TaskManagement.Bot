@@ -120,8 +120,6 @@ public static class ComplainFormBuilder
                     type = 1,
                     components = new object[]
                     {
-                        //new { type = 1, id = "complain_submit", component = new { label = "✅ Submit", style = 3 } },
-                        //new { type = 1, id = "complain_cancel", component = new { label = "❌ Cancel", style = 4 } }
                         new { type = 1, id = $"complain_submit|{ownerId}", component = new { label = "✅ Submit", style = 3 } },
                         new { type = 1, id = $"complain_cancel|{ownerId}", component = new { label = "❌ Cancel", style = 4 } }
                     }
@@ -191,63 +189,9 @@ public static class ComplainFormBuilder
                     type = 1,
                     components = new object[]
                     {
-                        //new { type = 1, id = "approve_submit", component = new { label = "✅ Approve", style = 3 } },
-                        //new { type = 1, id = "reject_submit", component = new { label = "❌ Reject", style = 4 } },
                         new { type = 1, id = $"complain_approve_submit|{ownerId}", component = new { label = "✅ Approve", style = 3 } },
 new { type = 1, id = $"complain_reject_submit|{ownerId}",  component = new { label = "❌ Reject",  style = 4 } },
 new { type = 1, id = $"approve_cancel|{ownerId}", component = new { label = "Cancel", style = 2 } }
-                    }
-                }
-            }
-        };
-    }
-
-    /// <summary>
-    /// PM review form: approve or reject a specific complaint.
-    /// </summary>
-    public static ChannelMessageContent BuildReviewForm(int complainId, string taskTitle, string type, string reason, string requestedBy)
-    {
-        var embed = new
-        {
-            title = $"🔍 Review Complaint: {taskTitle}",
-            description = $"**From:** {requestedBy}\n**Type:** {type}\n**Reason:** {reason}",
-            color = "#5865F2",
-            fields = new object[]
-            {
-                new
-                {
-                    name = "📝 Rejection reason (if rejected)",
-                    value = string.Empty,
-                    inputs = new
-                    {
-                        id = "reject_reason",
-                        type = 3,
-                        component = new
-                        {
-                            id = $"reject_reason_{complainId}",
-                            placeholder = "Enter rejection reason...",
-                            defaultValue = "",
-                            type = "text",
-                            textarea = false
-                        }
-                    }
-                }
-            }
-        };
-
-        return new ChannelMessageContent
-        {
-            Text = "Please review this complaint:",
-            Embed = new object[] { embed },
-            Components = new object[]
-            {
-                new
-                {
-                    type = 1,
-                    components = new object[]
-                    {
-                        new { type = 1, id = $"complain_approve_{complainId}", component = new { label = "✅ Approve", style = 3 } },
-                        new { type = 1, id = $"complain_reject_{complainId}", component = new { label = "❌ Reject", style = 4 } }
                     }
                 }
             }
