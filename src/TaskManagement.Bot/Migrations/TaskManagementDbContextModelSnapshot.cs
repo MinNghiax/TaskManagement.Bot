@@ -184,8 +184,10 @@ namespace TaskManagement.Bot.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<int>("TargetUserId")
-                        .HasColumnType("int");
+                    b.Property<string>("TargetUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("TaskId")
                         .HasColumnType("int");
@@ -227,25 +229,15 @@ namespace TaskManagement.Bot.Migrations
                     b.Property<int?>("IntervalUnit")
                         .HasColumnType("int");
 
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
-                    b.Property<string>("Name")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<int?>("RepeatIntervalUnit")
-                        .HasColumnType("int");
-
-                    b.Property<double?>("RepeatIntervalValue")
-                        .HasColumnType("float");
+                    b.Property<bool>("IsRepeat")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<int>("TaskStatus")
                         .HasColumnType("int");
@@ -261,7 +253,7 @@ namespace TaskManagement.Bot.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IsActive");
+                    b.HasIndex("IsRepeat");
 
                     b.HasIndex("TaskStatus");
 
@@ -372,6 +364,9 @@ namespace TaskManagement.Bot.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
+                    b.Property<DateTime?>("ReviewStartedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -393,6 +388,8 @@ namespace TaskManagement.Bot.Migrations
                     b.HasIndex("AssignedTo");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ReviewStartedAt");
 
                     b.HasIndex("Status");
 

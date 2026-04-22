@@ -113,6 +113,53 @@ public class MezonUserService : IMezonUserService
     }
 
     /// <summary>
+    /// Refresh full user information by bypassing the local cache.
+    /// </summary>
+    public async Task<MezonUser?> RefreshUserAsync(string userId, string? clanId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            _logger.LogWarning("[USER_SERVICE] RefreshUserAsync called with empty userId");
+            return null;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(clanId))
+            {
+                var clanUser = await FetchUserFromClanAsync(userId, clanId, cancellationToken);
+                if (clanUser != null)
+                {
+                    _userCache[userId] = clanUser;
+                    return clanUser;
+                }
+            }
+
+            var allClans = _client.Clans.GetAll();
+            foreach (var clan in allClans)
+            {
+                var user = await FetchUserFromClanAsync(userId, clan.Id, cancellationToken);
+                if (user != null)
+                {
+                    _userCache[userId] = user;
+                    return user;
+                }
+            }
+
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[USER_SERVICE] Error refreshing user {UserId}", userId);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Get display name for a user (convenience method)
     /// </summary>
     public async Task<string> GetDisplayNameAsync(string userId, string? clanId = null, CancellationToken cancellationToken = default)

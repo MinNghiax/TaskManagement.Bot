@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,7 +11,7 @@ namespace TaskManagement.Bot.Infrastructure.Entities
     {
         public string Name { get; set; } = null!;
 
-        public string CreatedBy { get; set; } = null!; // PM
+        public string CreatedBy { get; set; } = null!; 
 
         public int ProjectId { get; set; }
         public Project Project { get; set; } = null!;

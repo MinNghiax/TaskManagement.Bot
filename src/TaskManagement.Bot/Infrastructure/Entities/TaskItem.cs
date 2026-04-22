@@ -16,6 +16,8 @@ public class TaskItem : BaseEntity
 
     public ETaskStatus Status { get; set; } = ETaskStatus.ToDo;
 
+    public DateTime? ReviewStartedAt { get; set; }
+
     public EPriorityLevel Priority { get; set; } = EPriorityLevel.Medium;
 
     public int? TeamId { get; set; }

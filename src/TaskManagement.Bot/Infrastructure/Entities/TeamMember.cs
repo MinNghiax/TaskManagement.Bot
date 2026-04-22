@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,9 +10,8 @@ namespace TaskManagement.Bot.Infrastructure.Entities
     {
         public string Username { get; set; } = null!;
 
-        public string Role { get; set; } = "Member"; // PM | Member
+        public string Role { get; set; } = "Member"; 
         public string Status { get; set; } = "Pending";
-        // Pending | Accepted | Rejected
 
         public int TeamId { get; set; }
         public Team Team { get; set; } = null!;

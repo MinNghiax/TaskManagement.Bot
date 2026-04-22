@@ -25,20 +25,42 @@ public class ComplainComponentHandler : IComponentHandler
         _userService = userService;
     }
 
+    //public bool CanHandle(string customId)
+    //{
+    //    return customId == "complain_submit" ||
+    //           customId == "complain_cancel" ||
+    //           customId == "complain_approve_submit" ||
+    //           customId == "complain_reject_submit" ||
+    //           customId == "approve_cancel" ||
+    //           customId.StartsWith("complain_approve_") ||
+    //           customId.StartsWith("complain_reject_");
+    //}
+
     public bool CanHandle(string customId)
     {
-        return customId == "complain_submit" ||
-               customId == "complain_cancel" ||
-               customId == "complain_approve_submit" ||
-               customId == "complain_reject_submit" ||
-               customId == "approve_cancel" ||
-               customId.StartsWith("complain_approve_") ||
-               customId.StartsWith("complain_reject_");
+        var (clean, _) = ParseCustomId(customId);
+        return clean == "complain_submit" ||
+               clean == "complain_cancel" ||
+               clean == "complain_approve_submit" ||
+               clean == "complain_reject_submit" ||
+               clean == "approve_cancel" ||
+               clean.StartsWith("complain_approve_") ||
+               clean.StartsWith("complain_reject_");
     }
 
     public async Task<ComponentResponse> HandleAsync(ComponentContext context, CancellationToken cancellationToken)
     {
-        var customId = context.CustomId;
+        //var customId = context.CustomId;
+        var (customId, ownerId) = ParseCustomId(context.CustomId);
+
+        // Chỉ người tạo form mới được thao tác
+        if (!string.IsNullOrEmpty(ownerId) && ownerId != context.CurrentUserId)
+        {
+            return ComponentResponse.FromText(
+                context.ClanId!, context.ChannelId!,
+                "⛔ You are not authorized to interact with this form.",
+                context.Mode, context.IsPublic, context.MessageId!, null);
+        }
         var clanId = context.ClanId!;
         var channelId = context.ChannelId!;
         var userId = context.CurrentUserId!;
@@ -137,6 +159,13 @@ public class ComplainComponentHandler : IComponentHandler
         {
             return ComponentResponse
                 .FromText(clanId, channelId, "❌ Task does not exist.", mode, isPublic, messageId, null);
+        }
+
+        // ✅ THÊM: Chặn complaint nếu task ở trạng thái Review
+        if (task.Status == ETaskStatus.Review)
+        {
+            return ComponentResponse
+                .FromText(clanId, channelId, "❌ Cannot complain about a task that is in Review status. Please wait for the review to complete.", mode, isPublic, messageId, null);
         }
 
         // Handle RequestExtend
@@ -483,7 +512,7 @@ public class ComplainComponentHandler : IComponentHandler
             }
         };
 
-        return new ChannelMessageContent { Text = " ", Embed = new object[] { embed } };
+        return new ChannelMessageContent { Text = null, Embed = new object[] { embed } };
     }
 
     private static ChannelMessageContent BuildCancelSuccessMessage(ComplainDto complain, TaskDto task, string userName, string reason)
@@ -504,9 +533,8 @@ public class ComplainComponentHandler : IComponentHandler
 
             new { name = "📊 Status", value = GetStatusText(task.Status), inline = true },
             new { name = "⏰ Deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
-            new { name = "\u200B", value = "\u200B", inline = true },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
+            new { name = "\u200B", value = "\u200B", inline = true },
 
             new { name = "👤 Submitted by", value = userName, inline = true },
             new { name = "💬 Reason", value = reason, inline = true },
@@ -514,7 +542,7 @@ public class ComplainComponentHandler : IComponentHandler
             }
         };
 
-        return new ChannelMessageContent { Text = " ", Embed = new object[] { embed } };
+        return new ChannelMessageContent { Text = null, Embed = new object[] { embed } };
     }
 
     private static ChannelMessageContent BuildApproveSuccessMessage(ComplainDto complain, TaskDto? task, string? complainantName, string approverName)
@@ -544,7 +572,6 @@ public class ComplainComponentHandler : IComponentHandler
         else
         {
             fields.Add(new { name = "\u200B", value = "\u200B", inline = true });
-            fields.Add(new { name = "\u200B", value = "\u200B", inline = true });
         }
 
         fields.AddRange(new object[]
@@ -553,13 +580,11 @@ public class ComplainComponentHandler : IComponentHandler
 
         new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
         new { name = "👤 Approved by", value = approverName, inline = true },
-        new { name = "\u200B", value = "\u200B", inline = true },
 
-        new { name = "\u200B", value = "\u200B", inline = false },
+        new { name = "\u200B", value = "\u200B", inline = true },
 
         new { name = "🕐 Created at", value = createdAt, inline = true },
         new { name = "🕐 Approved at", value = approvedTime, inline = true },
-        new { name = "\u200B", value = "\u200B", inline = true }
         });
 
         var embed = new
@@ -569,7 +594,7 @@ public class ComplainComponentHandler : IComponentHandler
             fields = fields.ToArray()
         };
 
-        return new ChannelMessageContent { Text = " ", Embed = new object[] { embed } };
+        return new ChannelMessageContent { Text = null, Embed = new object[] { embed } };
     }
 
     private static ChannelMessageContent BuildRejectSuccessMessage(ComplainDto complain, TaskDto? task, string? complainantName, string rejectorName, string rejectReason)
@@ -592,26 +617,26 @@ public class ComplainComponentHandler : IComponentHandler
 
             new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "💬 Original reason", value = complain.Reason, inline = false },
-
-            new { name = "\u200B", value = "\u200B", inline = false },
-
+            new { name = "💬 Original reason", value = complain.Reason, inline = true },
             new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
             new { name = "👤 Rejected by", value = rejectorName, inline = true },
-            new { name = "\u200B", value = "\u200B", inline = true },
 
             new { name = "\u200B", value = "\u200B", inline = false },
 
             new { name = "🕐 Created at", value = createdAt, inline = true },
             new { name = "🕐 Rejected at", value = rejectedTime, inline = true },
-            new { name = "\u200B", value = "\u200B", inline = true },
-
-            new { name = "\u200B", value = "\u200B", inline = false },
-
-            new { name = "💬 Rejection reason", value = rejectReason, inline = false }
+            new { name = "💬 Rejection reason", value = rejectReason, inline = true }
             }
         };
 
-        return new ChannelMessageContent { Text = " ", Embed = new object[] { embed } };
+        return new ChannelMessageContent { Text = null, Embed = new object[] { embed } };
+    }
+
+    private static (string CustomId, string? OwnerId) ParseCustomId(string rawCustomId)
+    {
+        var parts = rawCustomId.Split('|');
+        return parts.Length >= 2
+            ? (parts[0], parts[1])
+            : (rawCustomId, null);
     }
 }

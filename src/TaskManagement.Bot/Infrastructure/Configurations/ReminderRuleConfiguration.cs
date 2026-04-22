@@ -20,12 +20,12 @@ public class ReminderRuleConfiguration : IEntityTypeConfiguration<ReminderRule>
         entity.Property(e => e.IsDeleted)
             .HasDefaultValue(false);
 
-        entity.Property(e => e.Name)
-            .HasMaxLength(200);
-
         entity.Property(e => e.TriggerType)
             .HasConversion<int>()
             .IsRequired();
+
+        entity.Property(e => e.IntervalUnit)
+            .HasConversion<int>();
 
         entity.Property(e => e.Value)
             .IsRequired();
@@ -33,17 +33,12 @@ public class ReminderRuleConfiguration : IEntityTypeConfiguration<ReminderRule>
         entity.Property(e => e.TaskStatus)
             .HasConversion<int>();
 
-        entity.Property(e => e.RepeatIntervalUnit)
-            .HasConversion<int>();
-
-        entity.Property(e => e.RepeatIntervalValue);
-
-        entity.Property(e => e.IsActive)
-            .HasDefaultValue(true);
+        entity.Property(e => e.IsRepeat)
+            .HasDefaultValue(false);
 
         entity.HasIndex(e => e.TriggerType);
         entity.HasIndex(e => e.TaskStatus);
-        entity.HasIndex(e => e.IsActive);
+        entity.HasIndex(e => e.IsRepeat);
 
         entity.HasQueryFilter(e => !e.IsDeleted);
     }

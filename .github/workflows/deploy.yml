@@ -33,23 +33,23 @@ jobs:
           echo "  - Kubernetes cluster"
           echo "  - CI/CD notifications"
 
-      # - name: Setup .NET
-      #   uses: actions/setup-dotnet@v3
-      #   with:
-      #     dotnet-version: '8.0.x'
-      #
-      # - name: Build Release
-      #   run: dotnet publish -c Release -o ./publish
-      #
-      # - name: Upload artifacts
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #     name: release-build
-      #     path: ./publish
-      #
-      # TODO: Add deployment steps
-      # - name: Deploy to Azure App Service
-      #   uses: azure/webapps-deploy@v2
-      # - name: Push to Docker Registry
-      # - name: Deploy to Kubernetes
-      # - name: Send Slack notification
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
