@@ -36,7 +36,7 @@ public class TaskComponentHandler : IComponentHandler
     {
         var prefixes = new[] { "NEXT_STEP_1", "NEXT_STEP_2", "VIEW_STEP_1", "VIEW_SUBMIT", "UPDATE_STEP_1", "UPDATE_STEP_2",
             "UPDATE_SELECT_TASK", "UPDATE_SUBMIT", "DELETE_STEP_1", "DELETE_STEP_2", "DELETE_CONFIRM", "OPEN_UPDATE_FORM", "SUBMIT",
-            "UPDATE", "UPDATE_STATUS", "CONFIRM_DELETE", "CANCEL", "CLOSE", "FILTER_STATUS", "FILTER_USER", "SELECT_PROJECT", "SELECT_TEAM" };
+            "UPDATE", "UPDATE_STATUS", "CONFIRM_DELETE", "CANCEL", "CLOSE", "SELECT_PROJECT", "SELECT_TEAM" };
         return prefixes.Any(p => customId.StartsWith(p, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -89,7 +89,7 @@ public class TaskComponentHandler : IComponentHandler
 
         var originalMessageId = parts.Length >= 2 ? parts[1] : null;
 
-        return ReplaceForm(context, TaskFormBuilder.BuildSelectTeam(projectId, teams, originalMessageId));
+        return ReplaceForm(context, TaskFormBuilder.BuildSelectTeam(projectId, teams, originalMessageId ?? context.MessageId!));
     }
 
     private async Task<ComponentResponse> HandleNextStep2Async(ComponentContext context, string[] parts, CancellationToken ct)
@@ -145,7 +145,7 @@ public class TaskComponentHandler : IComponentHandler
                 projectId,
                 teamId,
                 members,
-                originalMessageId
+                originalMessageId ?? context.MessageId!
             ));
     }
 
@@ -164,7 +164,7 @@ public class TaskComponentHandler : IComponentHandler
         var originalMessageId = parts.Length >= 2 ? parts[1] : null;
 
         return ReplaceForm(context,
-            TaskFormBuilder.BuildViewSelectTeam(projectId, teams, originalMessageId));
+            TaskFormBuilder.BuildViewSelectTeam(projectId, teams, originalMessageId ?? context.MessageId!));
     }
 
     private async Task<ComponentResponse> HandleViewSubmit(ComponentContext context, string[] parts, CancellationToken ct)
@@ -265,7 +265,7 @@ public class TaskComponentHandler : IComponentHandler
 
         if (isMentor)
         {
-            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId);
+            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId ?? context.MessageId!);
         }
         else
         {
@@ -310,7 +310,7 @@ public class TaskComponentHandler : IComponentHandler
 
         if (isMentor)
         {
-            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId);
+            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId ?? context.MessageId!);
         }
         else
         {
@@ -435,7 +435,6 @@ public class TaskComponentHandler : IComponentHandler
             Description = description,
             AssignedTo = assignee,
             CreatedBy = context.CurrentUserId!,
-            //DueDate = deadline,
             DueDate = utcDeadline,
             Priority = priority,
             TeamId = teamId,
@@ -623,7 +622,7 @@ public class TaskComponentHandler : IComponentHandler
                 projectId,
                 teams,
                 members,
-                originalMessageId
+                originalMessageId ?? context.MessageId!
             ));
     }
 
@@ -651,7 +650,7 @@ public class TaskComponentHandler : IComponentHandler
                 projectId,
                 teams,
                 members, 
-                originalMessageId,
+                originalMessageId ?? context.MessageId!,
                 teamId
             ));
     }
@@ -691,7 +690,7 @@ public class TaskComponentHandler : IComponentHandler
 
             OriginalMessage = new ChannelMessage
             {
-                Id = originalMessageId,
+                Id = originalMessageId ?? context.MessageId!,
                 ChannelId = context.ChannelId!,
                 ClanId = context.ClanId!,
                 SenderId = context.CurrentUserId,
@@ -734,7 +733,7 @@ public class TaskComponentHandler : IComponentHandler
                 ReplyToMessageId = originalMessageId,
                 OriginalMessage = new ChannelMessage
                 {
-                    Id = originalMessageId,
+                    Id = originalMessageId ?? context.MessageId!,
                     ChannelId = context.ChannelId!,
                     ClanId = context.ClanId!,
                     SenderId = context.CurrentUserId,
@@ -749,7 +748,7 @@ public class TaskComponentHandler : IComponentHandler
     {
         //  LẤY originalMessageId từ customId
         var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        //var originalMessageId = parts.Length >= 2 ? parts[^1] : null;
+        
         // luôn lấy cái CUỐI nếu có
         var originalMessageId = parts.LastOrDefault() ?? context.MessageId;
 
@@ -761,11 +760,11 @@ public class TaskComponentHandler : IComponentHandler
             context.IsPublic,
 
             //  reply vào message gốc
-            originalMessageId,
+            originalMessageId ?? context.MessageId!,
 
             new ChannelMessage
             {
-                Id = originalMessageId,
+                Id = originalMessageId ?? context.MessageId!,
                 ChannelId = context.ChannelId!,
                 ClanId = context.ClanId!,
                 SenderId = context.CurrentUserId,
@@ -810,7 +809,7 @@ public class TaskComponentHandler : IComponentHandler
             ReplyToMessageId = originalMessageId,
             OriginalMessage = new ChannelMessage
             {
-                Id = originalMessageId,
+                Id = originalMessageId ?? context.MessageId!,
                 ChannelId = context.ChannelId!,
                 ClanId = context.ClanId!,
                 SenderId = context.CurrentUserId,
@@ -828,8 +827,8 @@ public class TaskComponentHandler : IComponentHandler
         {
             Id = task.Id,
             Title = task.Title,
-            AssignedTo = GetDisplayName(task.AssignedTo, clanId),
-            CreatedBy = GetDisplayName(task.CreatedBy, clanId),
+            AssignedTo = GetDisplayName(task.AssignedTo!, clanId),
+            CreatedBy = GetDisplayName(task.CreatedBy!, clanId),
             Status = task.Status,
             Priority = task.Priority,
             DueDate = task.DueDate,
@@ -1057,7 +1056,6 @@ public class TaskComponentHandler : IComponentHandler
     {
         return (current, next) switch
         {
-            (ETaskStatus.ToDo, ETaskStatus.Doing) => true,
             (ETaskStatus.Doing, ETaskStatus.Review) => true,
             (ETaskStatus.Review, ETaskStatus.Completed) => true,
             _ => false

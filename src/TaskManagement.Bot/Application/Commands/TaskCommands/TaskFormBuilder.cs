@@ -162,8 +162,23 @@ public static class TaskFormBuilder
                 {
                     title = "📝 Tạo Task",
                     color = "#FEE75C",
-                    fields = fields.ToArray(),
-                    footer = new { text = "Trạng thái mặc định: ToDo" }
+                    fields = new object[]
+                    {
+                        BuildSelectField("📁 Project", "project", projectOptions),
+                        BuildSelectField("👥 Team", "team", teamOptions),
+                        BuildSelectField("👤 Giao cho", "assignee", memberOptions),
+
+                        BuildTextField("📌 Tiêu đề", "title", "Nhập tiêu đề", maxLength: 100),
+                        BuildTextAreaField("📝 Mô tả", "description", "Nhập mô tả"),
+                        BuildTextField("⏰ Deadline", "deadline", "YYYY-MM-DD HH:MM"),
+
+                        BuildRadioField("⚡ Độ ưu tiên", "priority", new object[]
+                        {
+                            new { label = "🔴 Cao", value = "High" },
+                            new { label = "🟡 Trung bình", value = "Medium", @default = true },
+                            new { label = "🟢 Thấp", value = "Low" }
+                        })
+                    },
                 }
             },
             Components = BuildNavigationButtons(
@@ -261,7 +276,26 @@ public static class TaskFormBuilder
                 {
                     title = $"✏️ Cập nhật Task #{task.Id}",
                     color = "#5865F2",
-                    fields = fields.ToArray()
+                    fields = new object[]
+                    {
+                        BuildTextField("📌 Tiêu đề", "title", "Nhập tiêu đề", task.Title ?? "", 100),
+                        BuildTextAreaField("📝 Mô tả", "description", "Nhập mô tả", task.Description ?? ""),
+                        BuildRadioField("⚡ Độ ưu tiên", "priority", new[]
+                        {
+                            new { label = "🔴 Cao", value = "High", @default = task.Priority == EPriorityLevel.High },
+                            new { label = "🟡 Trung bình", value = "Medium", @default = task.Priority == EPriorityLevel.Medium },
+                            new { label = "🟢 Thấp", value = "Low", @default = task.Priority == EPriorityLevel.Low }
+                        }),
+                        BuildRadioField("📊 Trạng thái", "status", new[]
+                        {
+                            new { label = "🔄 Doing", value = "Doing", @default = task.Status == ETaskStatus.Doing },
+                            new { label = "✅ Review", value = "Review", @default = task.Status == ETaskStatus.Review },
+                            new { label = "✔️ Completed", value = "Completed", @default = task.Status == ETaskStatus.Completed },
+                            new { label = "❌ Cancelled", value = "Cancelled", @default = task.Status == ETaskStatus.Cancelled }
+                        }),
+                        BuildTextField("⏰ Deadline", "deadline", "YYYY-MM-DD HH:MM", task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? ""),
+                        BuildSelectField("👤 Giao cho", "assignee", memberOptions)
+                    }
                 }
             },
             Components = BuildNavigationButtons($"UPDATE|{task.Id}|{originalMessageId}", "💾 Lưu", $"CANCEL|{originalMessageId}", "❌ Hủy")
@@ -413,12 +447,6 @@ public static class TaskFormBuilder
                 var done = teamTasks.Count(t => t.Status == ETaskStatus.Completed);
                 var percent = teamTasks.Count == 0 ? 0 : (double)done / teamTasks.Count * 100;
 
-                //var taskLines = teamTasks.Count == 0
-                //    ? "_Không có task_"
-                //    : string.Join("\n\n", teamTasks.Select((t, i) =>
-                //        $"\n{i + 1}. **{t.Title}**\n" +
-                //        $"   {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} |  👤 {t.AssignedTo} | 📅 {t.DueDate:dd/MM}"
-                //    ));
                 var taskLines = teamTasks.Count == 0
                     ? "_Không có task_"
                     : string.Join("\n\n", teamTasks.Select((t, i) =>
