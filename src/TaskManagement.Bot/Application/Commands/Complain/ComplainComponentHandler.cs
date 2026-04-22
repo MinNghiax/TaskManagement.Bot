@@ -157,7 +157,7 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, "❌ Cannot complain about a task that is in Review status. Please wait for the review to complete.", mode, isPublic, messageId, null);
         }
 
-        
+
         if (complainType == "RequestExtend")
         {
             // Validate duration
@@ -270,7 +270,6 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, $"❌ This complaint has already been {complain.Status.ToLower()}.", mode, isPublic, messageId, null);
         }
 
-        var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         var complainantName = await _userService.GetDisplayNameAsync(complain.UserId, clanId, ct);
 
         var dto = new ApproveComplainDto
@@ -287,8 +286,10 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
 
+        var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
+
         return ComponentResponse
-            .FromContent(clanId, channelId, BuildApproveSuccessMessage(complain, task, complainantName, userName), mode, isPublic, messageId, null)
+            .FromContent(clanId, channelId, BuildApproveSuccessMessage(complain, updatedTask, complainantName, userName), mode, isPublic, messageId, null)
             .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
     }
 
@@ -331,7 +332,6 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, $"❌ This complaint has already been {complain.Status.ToLower()}.", mode, isPublic, messageId, null);
         }
 
-        var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         var complainantName = await _userService.GetDisplayNameAsync(complain.UserId, clanId, ct);
 
         var dto = new ApproveComplainDto
@@ -349,8 +349,9 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
 
+        var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         return ComponentResponse
-            .FromContent(clanId, channelId, BuildRejectSuccessMessage(complain, task, complainantName, userName, rejectReason), mode, isPublic, messageId, null)
+            .FromContent(clanId, channelId, BuildRejectSuccessMessage(complain, updatedTask, complainantName, userName, rejectReason), mode, isPublic, messageId, null)
             .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
     }
 
@@ -370,7 +371,6 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null);
         }
 
-        var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         var complainantName = await _userService.GetDisplayNameAsync(complain.UserId, clanId, ct);
 
         var dto = new ApproveComplainDto
@@ -386,9 +386,9 @@ public class ComplainComponentHandler : IComponentHandler
             return ComponentResponse
                 .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
-
+        var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         return ComponentResponse
-            .FromContent(clanId, channelId, BuildApproveSuccessMessage(complain, task, complainantName, userName), mode, isPublic, messageId, null)
+            .FromContent(clanId, channelId, BuildApproveSuccessMessage(complain, updatedTask, complainantName, userName), mode, isPublic, messageId, null)
             .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
     }
 
@@ -414,7 +414,6 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, "❌ Complaint not found.", mode, isPublic, messageId, null);
         }
 
-        var task = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         var complainantName = await _userService.GetDisplayNameAsync(complain.UserId, clanId, ct);
 
         var dto = new ApproveComplainDto
@@ -431,9 +430,9 @@ public class ComplainComponentHandler : IComponentHandler
             return ComponentResponse
                 .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
-
+        var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
         return ComponentResponse
-            .FromContent(clanId, channelId, BuildRejectSuccessMessage(complain, task, complainantName, userName, rejectReason), mode, isPublic, messageId, null)
+            .FromContent(clanId, channelId, BuildRejectSuccessMessage(complain, updatedTask, complainantName, userName, rejectReason), mode, isPublic, messageId, null)
             .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
     }
 

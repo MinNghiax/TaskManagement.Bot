@@ -87,10 +87,17 @@ public class ComplainService : IComplainService
 
             if (complain.Type == EComplainType.RequestExtend)
             {
-                // Update deadline; Late → Doing
                 await _tasks.UpdateDueDateAsync(task.Id, complain.NewDueDate!.Value, ct);
-                if (task.Status == ETaskStatus.Late)
+
+                // Nếu deadline mới trong tương lai -> Doing, ngược lại -> Late
+                if (complain.NewDueDate.Value > DateTime.UtcNow)
+                {
                     await _tasks.ChangeStatusAsync(task.Id, ETaskStatus.Doing, ct);
+                }
+                else
+                {
+                    await _tasks.ChangeStatusAsync(task.Id, ETaskStatus.Late, ct);
+                }
             }
             else // RequestCancel
             {
