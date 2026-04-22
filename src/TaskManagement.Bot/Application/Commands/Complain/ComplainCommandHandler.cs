@@ -1,4 +1,5 @@
 ﻿using Mezon.Sdk.Domain;
+using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Enums; 
 namespace TaskManagement.Bot.Application.Commands.Complain;
@@ -7,11 +8,13 @@ public class ComplainCommandHandler : ICommandHandler
 {
     private readonly IComplainService _complainService;
     private readonly IMezonUserService _userService;
+    private readonly ITaskService _taskService;
 
-    public ComplainCommandHandler(IComplainService complainService, IMezonUserService userService)
+    public ComplainCommandHandler(IComplainService complainService, IMezonUserService userService, ITaskService taskService)
     {
         _complainService = complainService;
         _userService = userService;
+        _taskService = taskService;
     }
 
     public bool CanHandle(string command)
@@ -73,18 +76,50 @@ public class ComplainCommandHandler : ICommandHandler
             return new CommandResponse("❌ No pending complaints to review.");
         }
 
+        var taskIds = pendingComplains.Select(c => c.TaskItemId).Distinct();
+        var taskDict = new Dictionary<int, TaskDto>();
+        foreach (var taskId in taskIds)
+        {
+            var task = await _taskService.GetByIdAsync(taskId, ct);
+            if (task != null)
+            {
+                taskDict[taskId] = task;
+            }
+        }
+
         var options = new List<object>();
         foreach (var c in pendingComplains)
         {
             var complainantName = await _userService.GetDisplayNameAsync(c.UserId, clanId, ct);
+            var shortReason = c.Reason?.Length > 30 ? c.Reason.Substring(0, 27) + "..." : c.Reason;
+            var createdAt = FormatDateWithVietnamTime(c.CreatedAt);
+
+            // Tính số giờ gia hạn nếu là RequestExtend
+            var extendInfo = "";
+            if (c.Type == "RequestExtend" && c.NewDueDate.HasValue)
+            {
+                var task = taskDict.GetValueOrDefault(c.TaskItemId);
+                if (task?.DueDate.HasValue == true)
+                {
+                    var hours = Math.Round((c.NewDueDate.Value - task.DueDate.Value).TotalHours, 1);
+                    extendInfo = $"+{hours}h";
+                }
+            }
+
             options.Add(new
             {
-                label = $"#{c.Id} - {c.TaskTitle} [{c.Type}] - From: {complainantName}",
+                label = $"ID: {c.Id} || Task: {c.TaskTitle} || Type: {c.Type}  {extendInfo} || Reason: {shortReason} || By: {complainantName} || {createdAt}",
                 value = c.Id.ToString()
             });
         }
 
         var formContent = ComplainFormBuilder.BuildApproveForm(options.ToArray(), userId);
         return new CommandResponse(formContent);
+    }
+
+    private string FormatDateWithVietnamTime(DateTime date)
+    {
+        var vietnamTime = date.AddHours(7);
+        return vietnamTime.ToString("dd/MM/yyyy HH:mm");
     }
 }
