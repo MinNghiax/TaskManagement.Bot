@@ -11,12 +11,14 @@ public class TaskDto
     public string? CreatedBy { get; set; }
     public DateTime? DueDate { get; set; }
     public ETaskStatus Status { get; set; }
+    public DateTime? ReviewStartedAt { get; set; }
     public EPriorityLevel Priority { get; set; }
 
     public int? TeamId { get; set; }
     public List<string>? ClanIds { get; set; }
     public List<string>? ChannelIds { get; set; }
     public List<string>? ThreadIds { get; set; }
+    public List<CreateReminderRuleDto> ReminderRules { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -33,6 +35,7 @@ public class CreateTaskDto
     public List<string>? ClanIds { get; set; }
     public List<string>? ChannelIds { get; set; }
     public List<string>? ThreadIds { get; set; }
+    public List<CreateReminderRuleDto> ReminderRules { get; set; } = new();
 }
 
 public class UpdateTaskDto
@@ -43,4 +46,13 @@ public class UpdateTaskDto
     public DateTime? DueDate { get; set; }
     public ETaskStatus? Status { get; set; }
     public EPriorityLevel? Priority { get; set; }
+    public List<CreateReminderRuleDto>? ReminderRules { get; set; }
+}
+
+public class CreateReminderRuleDto
+{
+    public EReminderTriggerType TriggerType { get; set; }
+    public ETimeUnit IntervalUnit { get; set; }
+    public double Value { get; set; }
+    public bool IsRepeat { get; set; }
 }

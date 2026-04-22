@@ -161,7 +161,6 @@ public class BotService : IBotService
 
         var content = new ChannelMessageContent { Text = text };
 
-        // Tạo references để reply
         var references = BuildMessageReferences(replyToMessageId, originalMessage);
 
         _logger.LogInformation(
@@ -249,7 +248,6 @@ public class BotService : IBotService
             cancellationToken: CancellationToken.None);
     }
 
-    // Helper tạo references để reply
     private static ApiMessageRef[]? BuildMessageReferences(string? replyToMessageId, ChannelMessage? originalMessage)
     {
         if (string.IsNullOrEmpty(replyToMessageId) || originalMessage == null)

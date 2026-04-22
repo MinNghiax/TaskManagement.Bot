@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TaskManagement.Bot.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using TaskManagement.Bot.Infrastructure.Data;
 namespace TaskManagement.Bot.Migrations
 {
     [DbContext(typeof(TaskManagementDbContext))]
-    partial class TaskManagementDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260420150000_StoreReminderTargetUserIdAsString")]
+    partial class StoreReminderTargetUserIdAsString
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -43,9 +46,6 @@ namespace TaskManagement.Bot.Migrations
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("NewDueDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("OldDueDate")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Reason")
@@ -364,9 +364,6 @@ namespace TaskManagement.Bot.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
-                    b.Property<DateTime?>("ReviewStartedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -388,8 +385,6 @@ namespace TaskManagement.Bot.Migrations
                     b.HasIndex("AssignedTo");
 
                     b.HasIndex("CreatedAt");
-
-                    b.HasIndex("ReviewStartedAt");
 
                     b.HasIndex("Status");
 

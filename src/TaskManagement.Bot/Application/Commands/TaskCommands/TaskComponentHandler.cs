@@ -109,7 +109,7 @@ public class TaskComponentHandler : IComponentHandler
         //        var name = user?.DisplayName
         //                   ?? user?.ClanNick
         //                   ?? user?.Username
-        //                   ?? GetDisplayName(userId, context.ClanId!); 
+        //                   ?? GetDisplayName(userId, context.ClanId!);
 
         //        return (Id: userId, Name: name);
         //    })
@@ -312,7 +312,10 @@ public class TaskComponentHandler : IComponentHandler
     private async Task<ComponentResponse> HandleSubmitAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
         var originalMessageId = parts.Length >= 4 ? parts[3] : null;
-        if (parts.Length < 3 || !int.TryParse(parts[1], out var projectId) || !int.TryParse(parts[2], out var teamId))
+        var projectIdStr = parts.Length >= 2 ? parts[1] : GetSelectedValue(context.Payload, "project");
+        var teamIdStr = parts.Length >= 3 ? parts[2] : GetSelectedValue(context.Payload, "team");
+
+        if (!int.TryParse(projectIdStr, out var projectId) || !int.TryParse(teamIdStr, out var teamId))
             return BuildTextResponse(context, "❌ Dữ liệu không hợp lệ");
 
         var title = ReadValue(context.Payload, "title");
@@ -320,9 +323,14 @@ public class TaskComponentHandler : IComponentHandler
         var priorityStr = ReadValue(context.Payload, "priority");
         var deadlineStr = ReadValue(context.Payload, "deadline");
         var assignee = ReadValue(context.Payload, "assignee");
+        var reminderState = ReadReminderState(context.Payload);
 
         var (isValid, message) = TaskFormBuilder.ValidateTaskForm(title, deadlineStr, assignee);
         if (!isValid) return BuildTextResponse(context, message);
+
+        var reminderValidation = reminderState.Validate();
+        if (!reminderValidation.IsValid)
+            return BuildTextResponse(context, reminderValidation.Message);
 
         var members = await _teamService.GetMembersWithDisplay(teamId, context.ClanId!);
         if (!members.Any(x => x.Id == assignee))
@@ -341,7 +349,8 @@ public class TaskComponentHandler : IComponentHandler
             Priority = priority,
             TeamId = teamId,
             ClanIds = new List<string> { context.ClanId! },
-            ChannelIds = new List<string> { context.ChannelId! }
+            ChannelIds = new List<string> { context.ChannelId! },
+            ReminderRules = reminderValidation.Rules.ToList()
         };
 
         var task = await _taskService.CreateAsync(dto, ct);
@@ -369,6 +378,14 @@ public class TaskComponentHandler : IComponentHandler
         var statusStr = ReadValue(context.Payload, "status");
         var deadlineStr = ReadValue(context.Payload, "deadline");
         var assignee = ReadValue(context.Payload, "assignee");
+        var hasReminderState = TryReadReminderState(context.Payload, out var reminderState);
+        TaskReminderValidationResult? reminderValidation = null;
+        if (hasReminderState)
+        {
+            reminderValidation = reminderState.Validate();
+            if (!reminderValidation.IsValid)
+                return BuildTextResponse(context, reminderValidation.Message);
+        }
 
         var newStatus = ParseStatus(statusStr);
 
@@ -384,7 +401,8 @@ public class TaskComponentHandler : IComponentHandler
             Priority = ParsePriority(priorityStr),
             Status = newStatus,
             DueDate = DateTime.TryParse(deadlineStr, out var d) ? d : null,
-            AssignedTo = string.IsNullOrWhiteSpace(assignee) ? null : assignee
+            AssignedTo = string.IsNullOrWhiteSpace(assignee) ? null : assignee,
+            ReminderRules = hasReminderState ? reminderValidation!.Rules.ToList() : null
         };
 
         await _taskService.UpdateAsync(taskId, updateDto, ct);
@@ -611,7 +629,7 @@ public class TaskComponentHandler : IComponentHandler
                 DisplayName = context.CurrentUserId,
                 Content = new ChannelMessageContent
                 {
-                    Text = "" 
+                    Text = ""
                 },
 
                 ChannelLabel = ""
@@ -649,12 +667,12 @@ public class TaskComponentHandler : IComponentHandler
             OriginalMessage = new ChannelMessage
             {
                 Id = originalMessageId,
-                ChannelId = context.ChannelId!, 
+                ChannelId = context.ChannelId!,
                 ClanId = context.ClanId!,
                 SenderId = context.CurrentUserId,
                 Username = "",
                 DisplayName = "",
-                ChannelLabel = "" 
+                ChannelLabel = ""
             }
         });
         return response;
@@ -666,7 +684,7 @@ public class TaskComponentHandler : IComponentHandler
         {
             Id = task.Id,
             Title = task.Title,
-            AssignedTo = GetDisplayName(task.AssignedTo, clanId), 
+            AssignedTo = GetDisplayName(task.AssignedTo, clanId),
             CreatedBy = GetDisplayName(task.CreatedBy, clanId),
             Status = task.Status,
             Priority = task.Priority,
@@ -690,7 +708,7 @@ public class TaskComponentHandler : IComponentHandler
 
     private static string? GetSelectedValue(JsonElement payload, string key)
     {
-        //  Ưu tiên đọc từ ExtraData 
+        //  Ưu tiên đọc từ ExtraData
         var extra = ComponentPayloadHelper.GetExtraData(payload);
 
         if (!string.IsNullOrWhiteSpace(extra) && extra.TrimStart().StartsWith("{"))
@@ -702,12 +720,12 @@ public class TaskComponentHandler : IComponentHandler
                     .GetPropertyIgnoreCase(json.RootElement, key);
 
                 if (val.HasValue)
-                    return val.Value.GetString();
+                    return ConvertElementToString(val.Value);
             }
             catch { }
         }
 
-        //  fallback: đọc từ Values 
+        //  fallback: đọc từ Values
         var values = ComponentPayloadHelper.GetValues(payload);
 
         if (values.ValueKind != JsonValueKind.Object)
@@ -734,19 +752,151 @@ public class TaskComponentHandler : IComponentHandler
         return null;
     }
 
+    private static TaskReminderFieldState ReadReminderState(JsonElement payload)
+    {
+        return new TaskReminderFieldState
+        {
+            IsEnabled = ReadBool(payload, "task_reminder_enabled", defaultValue: true),
+            BeforeValue = ReadValueOrDefault(payload, "task_reminder_before_value", "30"),
+            BeforeUnit = ReadTimeUnit(payload, "task_reminder_before_unit") ?? ETimeUnit.Minutes,
+            AfterValue = ReadValueOrDefault(payload, "task_reminder_after_value", "10"),
+            AfterUnit = ReadTimeUnit(payload, "task_reminder_after_unit") ?? ETimeUnit.Minutes,
+            IsAfterRepeatEnabled = ReadBool(payload, "task_reminder_after_repeat", defaultValue: true),
+            RepeatValue = ReadValue(payload, "task_reminder_repeat_value"),
+            RepeatUnit = ReadTimeUnit(payload, "task_reminder_repeat_unit")
+        };
+    }
+
+    private static bool TryReadReminderState(JsonElement payload, out TaskReminderFieldState state)
+    {
+        if (!TryReadFormElement(payload, "task_reminder_enabled", out _))
+        {
+            state = TaskReminderFieldState.Default(isEnabled: false);
+            return false;
+        }
+
+        state = ReadReminderState(payload);
+        return true;
+    }
+
+    private static ETimeUnit? ReadTimeUnit(JsonElement payload, string key)
+    {
+        var value = ReadValue(payload, key);
+
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        if (Enum.TryParse<ETimeUnit>(value, ignoreCase: true, out var unit))
+            return unit;
+
+        return int.TryParse(value, out var numericUnit) && Enum.IsDefined(typeof(ETimeUnit), numericUnit)
+            ? (ETimeUnit)numericUnit
+            : null;
+    }
+
+    private static string ReadValueOrDefault(JsonElement payload, string key, string defaultValue) =>
+        TryReadFormElement(payload, key, out var element)
+            ? ConvertElementToString(element)
+            : defaultValue;
+
     private static string ReadValue(JsonElement payload, string key)
     {
+        return TryReadFormElement(payload, key, out var element)
+            ? ConvertElementToString(element)
+            : string.Empty;
+    }
+
+    private static bool ReadBool(JsonElement payload, string key, bool defaultValue)
+    {
+        if (!TryReadFormElement(payload, key, out var element))
+            return defaultValue;
+
+        return ConvertElementToBool(element, defaultValue);
+    }
+
+    private static bool TryReadFormElement(JsonElement payload, string key, out JsonElement element)
+    {
         var valuesNode = ComponentPayloadHelper.GetValues(payload);
-        var value = ComponentPayloadHelper.GetPropertyIgnoreCase(valuesNode, key)?.GetString();
-        if (!string.IsNullOrWhiteSpace(value)) return value;
+        var valueElement = ComponentPayloadHelper.GetPropertyIgnoreCase(valuesNode, key);
+        if (valueElement.HasValue)
+        {
+            element = valueElement.Value;
+            return true;
+        }
+
         var extraData = ComponentPayloadHelper.GetExtraData(payload);
-        if (string.IsNullOrWhiteSpace(extraData) || !extraData.TrimStart().StartsWith("{")) return string.Empty;
+        if (string.IsNullOrWhiteSpace(extraData) || !extraData.TrimStart().StartsWith("{"))
+        {
+            element = default;
+            return false;
+        }
+
         try
         {
             using var json = JsonDocument.Parse(extraData);
-            return ComponentPayloadHelper.GetPropertyIgnoreCase(json.RootElement, key)?.GetString() ?? string.Empty;
+            valueElement = ComponentPayloadHelper.GetPropertyIgnoreCase(json.RootElement, key);
+            if (valueElement.HasValue)
+            {
+                element = valueElement.Value.Clone();
+                return true;
+            }
         }
-        catch { return string.Empty; }
+        catch
+        {
+        }
+
+        element = default;
+        return false;
+    }
+
+    private static string ConvertElementToString(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? string.Empty,
+            JsonValueKind.Number => element.GetRawText(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "value") is { } value =>
+                ConvertElementToString(value),
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "values") is { } values =>
+                ConvertElementToString(values),
+            JsonValueKind.Array => element.EnumerateArray().Select(ConvertElementToString).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    private static bool ConvertElementToBool(JsonElement element, bool defaultValue)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number => element.TryGetInt32(out var value) ? value != 0 : defaultValue,
+            JsonValueKind.String => ParseBoolString(element.GetString(), defaultValue),
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "checked") is { } checkedValue =>
+                ConvertElementToBool(checkedValue, defaultValue),
+            JsonValueKind.Object when ComponentPayloadHelper.GetPropertyIgnoreCase(element, "value") is { } value =>
+                ConvertElementToBool(value, defaultValue),
+            JsonValueKind.Array => element.EnumerateArray().Any(item => ConvertElementToBool(item, false)),
+            _ => defaultValue
+        };
+    }
+
+    private static bool ParseBoolString(string? value, bool defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultValue;
+
+        if (bool.TryParse(value, out var parsed))
+            return parsed;
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "1" or "on" or "yes" or "checked" => true,
+            "0" or "off" or "no" or "unchecked" => false,
+            _ => defaultValue
+        };
     }
 
     private static bool IsValidMemberTransition(ETaskStatus current, ETaskStatus next)

@@ -18,6 +18,15 @@ public interface IMezonUserService
     Task<MezonUser?> GetUserAsync(string userId, string? clanId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Refresh full user information from the Mezon API and update the cache.
+    /// </summary>
+    /// <param name="userId">User ID to refresh</param>
+    /// <param name="clanId">Clan ID where to search for the user</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Full user information or null if not found</returns>
+    Task<MezonUser?> RefreshUserAsync(string userId, string? clanId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get display name for a user (convenience method)
     /// </summary>
     /// <param name="userId">User ID to resolve</param>

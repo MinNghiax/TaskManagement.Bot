@@ -35,9 +35,13 @@ public class TaskConfiguration : IEntityTypeConfiguration<TaskItem>
             .HasConversion<int>()
             .HasDefaultValue(TaskManagement.Bot.Infrastructure.Enums.ETaskStatus.ToDo);
 
+        builder.Property(t => t.ReviewStartedAt)
+            .IsRequired(false);
+
         builder.Property(t => t.Priority)
             .HasConversion<int>()
-            .HasDefaultValue(EPriorityLevel.Medium);
+            .HasDefaultValue(EPriorityLevel.Medium)
+            .HasSentinel((EPriorityLevel)(-1));
 
         builder.Property(t => t.CreatedAt)
             .HasDefaultValueSql("GETUTCDATE()");
@@ -69,6 +73,7 @@ public class TaskConfiguration : IEntityTypeConfiguration<TaskItem>
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(t => t.Status);
+        builder.HasIndex(t => t.ReviewStartedAt);
         builder.HasIndex(t => t.AssignedTo);
         builder.HasIndex(t => t.CreatedAt);
     }

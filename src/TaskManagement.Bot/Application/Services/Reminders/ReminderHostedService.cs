@@ -1,24 +1,22 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TaskManagement.Bot.Infrastructure.Data;
 
-namespace TaskManagement.Bot.Application.Services;
+namespace TaskManagement.Bot.Application.Services.Reminders;
 
-public class PendingTeamRequestTimeoutService : IHostedService, IDisposable
+public class ReminderHostedService : IHostedService, IDisposable
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<PendingTeamRequestTimeoutService> _logger;
+    private readonly ILogger<ReminderHostedService> _logger;
     private CancellationTokenSource? _stoppingCts;
     private Task? _executingTask;
     private int _started;
 
-    public PendingTeamRequestTimeoutService(
+    public ReminderHostedService(
         IServiceScopeFactory scopeFactory,
-        ILogger<PendingTeamRequestTimeoutService> logger)
+        ILogger<ReminderHostedService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -31,6 +29,7 @@ public class PendingTeamRequestTimeoutService : IHostedService, IDisposable
             return Task.CompletedTask;
         }
 
+        _logger.LogInformation("Starting reminder hosted service");
         _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executingTask = RunAsync(_stoppingCts.Token);
 
@@ -43,6 +42,8 @@ public class PendingTeamRequestTimeoutService : IHostedService, IDisposable
         {
             return;
         }
+
+        _logger.LogInformation("Stopping reminder hosted service");
 
         if (_executingTask == null)
         {
@@ -72,17 +73,12 @@ public class PendingTeamRequestTimeoutService : IHostedService, IDisposable
             try
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
-                var context = scope.ServiceProvider.GetRequiredService<TaskManagementDbContext>();
-                var expiredAt = DateTime.UtcNow.AddMinutes(-30);
+                var processor = scope.ServiceProvider.GetRequiredService<IReminderProcessor>();
+                var processedCount = await processor.ProcessDueRemindersAsync(stoppingToken);
 
-                var expiredRequests = await context.PendingTeamRequests
-                    .Where(x => x.CreatedAt < expiredAt)
-                    .ToListAsync(stoppingToken);
-
-                if (expiredRequests.Count > 0)
+                if (processedCount > 0)
                 {
-                    context.PendingTeamRequests.RemoveRange(expiredRequests);
-                    await context.SaveChangesAsync(stoppingToken);
+                    _logger.LogInformation("Processed {Count} due reminders", processedCount);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -91,7 +87,7 @@ public class PendingTeamRequestTimeoutService : IHostedService, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Pending team request timeout processing failed");
+                _logger.LogError(ex, "Reminder processing failed");
             }
 
             try

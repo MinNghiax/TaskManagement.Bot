@@ -5,10 +5,6 @@ using TaskManagement.Bot.Infrastructure.Enums;
 using ETaskStatus = TaskManagement.Bot.Infrastructure.Enums.ETaskStatus;
 namespace TaskManagement.Bot.Application.Services;
 
-/// <summary>
-/// In-memory task service for testing without database.
-/// All tasks are stored in RAM and lost when application restarts.
-/// </summary>
 public class InMemoryTaskService : ITaskService
 {
     private readonly ILogger<InMemoryTaskService> _logger;
@@ -30,11 +26,13 @@ public class InMemoryTaskService : ITaskService
                 Description = dto.Description ?? "",
                 AssignedTo = dto.AssignedTo ?? "unknown",
                 CreatedBy = dto.CreatedBy ?? "unknown",
-                Status = ETaskStatus.ToDo,  // Changed from Pending to ToDo
+                Status = ETaskStatus.ToDo,  
+                ReviewStartedAt = null,
                 DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 ClanIds = dto.ClanIds,
-                ChannelIds = dto.ChannelIds
+                ChannelIds = dto.ChannelIds,
+                ReminderRules = dto.ReminderRules.ToList()
             };
 
             _store.Add(task.Id, task);
@@ -109,7 +107,25 @@ public class InMemoryTaskService : ITaskService
         var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
         if (task != null)
         {
+            var previousStatus = task.Status;
             task.Status = newStatus;
+            task.UpdatedAt = DateTime.UtcNow;
+            task.ReviewStartedAt = newStatus == ETaskStatus.Review
+                ? task.ReviewStartedAt ?? task.UpdatedAt
+                : previousStatus == ETaskStatus.Review
+                    ? null
+                    : task.ReviewStartedAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
+    {
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task != null)
+        {
+            task.DueDate = newDueDate;
             task.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -142,7 +158,6 @@ public class InMemoryTaskService : ITaskService
 
     public Task UpdateAsync(int taskId, UpdateTaskDto updateDto, CancellationToken ct = default)
     {
-        // Implement cho InMemory
         var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
         if (task == null) throw new Exception("Task not found");
 
@@ -156,13 +171,24 @@ public class InMemoryTaskService : ITaskService
             task.Priority = updateDto.Priority.Value;
 
         if (updateDto.Status.HasValue)
+        {
+            var previousStatus = task.Status;
             task.Status = updateDto.Status.Value;
+            task.ReviewStartedAt = updateDto.Status.Value == ETaskStatus.Review
+                ? task.ReviewStartedAt ?? DateTime.UtcNow
+                : previousStatus == ETaskStatus.Review
+                    ? null
+                    : task.ReviewStartedAt;
+        }
 
         if (updateDto.DueDate.HasValue)
             task.DueDate = updateDto.DueDate.Value;
 
         if (!string.IsNullOrWhiteSpace(updateDto.AssignedTo))
             task.AssignedTo = updateDto.AssignedTo;
+
+        if (updateDto.ReminderRules is not null)
+            task.ReminderRules = updateDto.ReminderRules.ToList();
 
         task.UpdatedAt = DateTime.UtcNow;
 
@@ -175,16 +201,4 @@ public class InMemoryTaskService : ITaskService
         return Task.FromResult(tasks);
     }
 
-    //Them phan Complain
-    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
-    {
-        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
-        if (task != null)
-        {
-            task.DueDate = newDueDate;
-            task.UpdatedAt = DateTime.UtcNow;
-        }
-
-        return Task.CompletedTask;
-    }
 }

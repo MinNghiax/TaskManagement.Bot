@@ -33,6 +33,9 @@ namespace TaskManagement.Bot.Infrastructure.Configurations
             builder.Property(x => x.NewDueDate)
                    .IsRequired(false);
 
+            builder.Property(x => x.OldDueDate)
+                   .IsRequired(false);
+
             builder.Property(x => x.ApprovedBy)
                    .IsRequired(false);
 
