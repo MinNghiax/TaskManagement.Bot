@@ -120,18 +120,6 @@ public class InMemoryTaskService : ITaskService
         return Task.CompletedTask;
     }
 
-    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
-    {
-        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
-        if (task != null)
-        {
-            task.DueDate = newDueDate;
-            task.UpdatedAt = DateTime.UtcNow;
-        }
-
-        return Task.CompletedTask;
-    }
-
     public Task DeleteAsync(int taskId, CancellationToken cancellationToken = default)
     {
         var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
@@ -201,4 +189,28 @@ public class InMemoryTaskService : ITaskService
         return Task.FromResult(tasks);
     }
 
+    //Them phan Complain
+    public Task UpdateDueDateAsync(int taskId, DateTime newDueDate, CancellationToken cancellationToken = default)
+    {
+        var task = _store.Values.FirstOrDefault(t => t.Id == taskId);
+        if (task != null)
+        {
+            task.DueDate = newDueDate;
+            task.UpdatedAt = DateTime.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<TaskDto>> GetByAssigneeAndTeamAsync(string assignee, int teamId, CancellationToken ct)
+    {
+        var tasks = _store.Values
+            .Where(t =>
+                t.AssignedTo == assignee &&
+                t.TeamId == teamId
+            )
+            .ToList();
+
+        return Task.FromResult(tasks);
+    }
 }

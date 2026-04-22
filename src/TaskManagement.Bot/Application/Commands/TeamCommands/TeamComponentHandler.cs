@@ -56,7 +56,7 @@ public class TeamComponentHandler : IComponentHandler
     }
 
     private async Task<ComponentResponse> HandleCreateTeamAsync(ComponentContext context, CancellationToken ct)
-    
+
     {
         var projectName = ReadValue(context.Payload, "project_name");
         var teamName = ReadValue(context.Payload, "team_name");

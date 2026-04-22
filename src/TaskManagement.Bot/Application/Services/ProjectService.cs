@@ -16,6 +16,7 @@ namespace TaskManagement.Bot.Application.Services
         Task<List<Project>> GetAllProjectsAsync();
         Task<Project?> GetProjectByIdAsync(int id);
         Task<List<Project>> GetProjectsByUserAsync(string userId);
+        Task<List<Project>> GetProjectsByMemberAsync(string userId);
     }
 
     public class ProjectService : IProjectService
@@ -71,6 +72,15 @@ namespace TaskManagement.Bot.Application.Services
         {
             return await _context.Projects
                 .Where(p => p.CreatedBy == userId && !p.IsDeleted)
+                .ToListAsync();
+        }
+
+        public async Task<List<Project>> GetProjectsByMemberAsync(string userId)
+        {
+            return await _context.Teams
+                .Where(t => t.Members.Any(m => m.Username == userId))
+                .Select(t => t.Project)
+                .Distinct()
                 .ToListAsync();
         }
     }

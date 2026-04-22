@@ -28,12 +28,8 @@ public class TaskService : ITaskService
             Id = task.Id,
             Title = task.Title,
             Description = task.Description,
-            AssignedTo = clanId != null
-                ? GetDisplayName(task.AssignedTo, clanId)
-                : task.AssignedTo,
-            CreatedBy = clanId != null
-                ? GetDisplayName(task.CreatedBy, clanId)
-                : task.CreatedBy,
+            AssignedTo = task.AssignedTo,
+            CreatedBy = task.CreatedBy,
             DueDate = task.DueDate,
             Status = task.Status,
             ReviewStartedAt = task.ReviewStartedAt,
@@ -103,7 +99,8 @@ public class TaskService : ITaskService
         var reminders = ReminderScheduleBuilder.BuildTaskReminderEntities(task, dto.ReminderRules);
         if (reminders.Count > 0)
             _context.Reminders.AddRange(reminders);
-        await _context.SaveChangesAsync(ct);
+
+        await _context.SaveChangesAsync(ct);
         return await GetByIdAsync(task.Id, ct);
     }
     public async Task<List<TaskDto>> GetAllAsync(CancellationToken ct = default)
@@ -204,7 +201,8 @@ public class TaskService : ITaskService
     public async Task DeleteAsync(int taskId, CancellationToken ct = default)
     {
         var id = taskId;
-        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == id, ct);
+
+        var task = await _context.TaskItems.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (task == null || task.IsDeleted) return;
         task.IsDeleted = true;
         task.UpdatedAt = DateTime.UtcNow;
@@ -256,7 +254,8 @@ public class TaskService : ITaskService
 
         await _context.SaveChangesAsync(ct);
     }
-    public async Task<List<TaskDto>> GetTasksByTeamAsync(int teamId, CancellationToken ct = default)
+
+    public async Task<List<TaskDto>> GetTasksByTeamAsync(int teamId, CancellationToken ct = default)
     {
         var tasks = await _context.TaskItems
             .Include(t => t.Clans)
@@ -332,5 +331,28 @@ public class TaskService : ITaskService
             ?? user?.ClanNick
             ?? user?.Username
             ?? $"User-{userId.Substring(0, 4)}";
+    }
+
+    public async Task<List<TaskDto>> GetByAssigneeAndTeamAsync(string assignee, int teamId, CancellationToken ct)
+    {
+        return await _context.TaskItems
+            .Where(t =>
+                t.AssignedTo == assignee &&
+                t.TeamId == teamId &&
+                !t.IsDeleted
+            )
+            .Select(t => new TaskDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                AssignedTo = t.AssignedTo,
+                CreatedBy = t.CreatedBy,
+                Status = t.Status,
+                Priority = t.Priority,
+                DueDate = t.DueDate,
+                TeamId = t.TeamId,
+                CreatedAt = t.CreatedAt
+            })
+            .ToListAsync(ct);
     }
 }

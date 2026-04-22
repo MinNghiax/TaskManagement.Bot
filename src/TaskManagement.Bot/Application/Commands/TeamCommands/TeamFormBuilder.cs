@@ -114,6 +114,133 @@ public static class TeamFormBuilder
         };
     }
 
+    public static ChannelMessageContent BuildTeamFormWithMembers(
+    List<(string Id, string Name)> members,
+    int memberCount = 3)
+    {
+        var fields = new List<object>
+        {
+            new
+            {
+                name = "📁 Tên Project",
+                inputs = new
+                {
+                    id = "project_name",
+                    type = 3,
+                    component = new
+                    {
+                        placeholder = "Nhập tên project (tối đa 50 ký tự)",
+                        defaultValue = "",
+                        type = "text"
+                    }
+                }
+            },
+            new
+            {
+                name = "👥 Tên Team",
+                inputs = new
+                {
+                    id = "team_name",
+                    type = 3,
+                    component = new
+                    {
+                        placeholder = "Nhập tên team (tối đa 20 ký tự)",
+                        defaultValue = "",
+                        type = "text"
+                    }
+                }
+            }
+        };
+
+            // MEMBER DROPDOWN
+            for (var i = 1; i <= memberCount; i++)
+            {
+                fields.Add(new
+                {
+                    name = $"👤 Thành viên {i}",
+                    inputs = new
+                    {
+                        id = $"member_{i}",
+                        type = 2,
+                        component = new
+                        {
+                            placeholder = "Chọn thành viên",
+                            options = (members ?? new List<(string Id, string Name)>())
+                                .Select(m => new
+                                {
+                                    label = m.Name,
+                                    value = m.Id
+                                }).ToArray(),
+                            custom_id = $"member_{i}"
+                        }
+                    }
+                });
+            }
+
+            // BUTTONS
+            var components = new List<object>();
+
+            if (memberCount < 6)
+            {
+                components.Add(new
+                {
+                    id = $"ADD_MEMBER|{memberCount}",
+                    type = 1,
+                    component = new
+                    {
+                        label = "➕ Thêm thành viên",
+                        style = 2
+                    }
+                });
+            }
+
+            components.Add(new
+            {
+                id = "CREATE_TEAM",
+                type = 1,
+                component = new
+                {
+                    label = "✅ Tạo Team",
+                    style = 3
+                }
+            });
+
+            components.Add(new
+            {
+                id = "CANCEL_TEAM",
+                type = 1,
+                component = new
+                {
+                    label = "❌ Hủy",
+                    style = 4
+                }
+            });
+
+            return new ChannelMessageContent
+            {
+                Embed = new[]
+                {
+                new
+                {
+                    title = "📋 Tạo Project và Team",
+                    description = "Vui lòng điền thông tin bên dưới:",
+                    color = "#5865F2",
+                    fields = fields.ToArray(),
+                    footer = new
+                    {
+                        text = "Team cần tối thiểu 3, tối đa 6 thành viên"
+                    }
+                }
+            },
+                Components = new[]
+                {
+                new
+                {
+                    components = components.ToArray()
+                }
+            }
+        };
+    }
 
     public static ChannelMessageContent BuildTeamFormWithError(string error, int memberCount = 3)
     {
