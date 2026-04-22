@@ -78,6 +78,342 @@ public class ReminderProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDueRemindersAsync_WhenOnDeadlineSendFails_PersistsTaskLateStatus()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender
+        {
+            FailedTargetUserId = "user-fail"
+        };
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "On deadline failed send",
+            AssignedTo = "user-fail",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddMinutes(-5),
+            Status = ETaskStatus.Doing
+        };
+        var onDeadlineReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddMinutes(-5),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.OnDeadline,
+                TaskStatus = task.Status
+            }
+        };
+
+        context.Reminders.Add(onDeadlineReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(0, processedCount);
+        Assert.Empty(sender.Sent);
+
+        var taskId = task.Id;
+        context.ChangeTracker.Clear();
+
+        var persistedTask = await context.TaskItems.SingleAsync(t => t.Id == taskId);
+        Assert.Equal(ETaskStatus.Late, persistedTask.Status);
+
+        var persistedReminder = await context.Reminders.SingleAsync(r => r.TaskId == taskId);
+        Assert.Equal(EReminderStatus.Pending, persistedReminder.Status);
+    }
+
+    [Fact]
+    public async Task ProcessDueRemindersAsync_WhenAfterDeadlineReminderIsDue_TransitionsTaskToLate()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "After deadline task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddHours(-2),
+            Status = ETaskStatus.Doing
+        };
+        var afterDeadlineReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddHours(-1),
+            NextTriggerAt = DateTime.UtcNow.AddHours(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.AfterDeadline,
+                IntervalUnit = ETimeUnit.Hours,
+                Value = 1,
+                TaskStatus = task.Status,
+                IsRepeat = true
+            }
+        };
+
+        context.Reminders.Add(afterDeadlineReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(1, processedCount);
+        Assert.Empty(sender.Sent);
+        Assert.Equal(ETaskStatus.Late, task.Status);
+        Assert.Equal(EReminderStatus.Cancelled, afterDeadlineReminder.Status);
+        Assert.Null(afterDeadlineReminder.NextTriggerAt);
+    }
+
+    [Fact]
+    public async Task ProcessDueRemindersAsync_WhenTodoTaskReachedDeadline_TransitionsDirectlyToLate()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "Todo overdue task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddMinutes(-10),
+            Status = ETaskStatus.ToDo
+        };
+        var repeatReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddMinutes(-20),
+            NextTriggerAt = DateTime.UtcNow.AddMinutes(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.Repeat,
+                IntervalUnit = ETimeUnit.Minutes,
+                Value = 5,
+                TaskStatus = task.Status,
+                IsRepeat = true
+            }
+        };
+
+        context.Reminders.Add(repeatReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(1, processedCount);
+        Assert.Empty(sender.Sent);
+        Assert.Equal(ETaskStatus.Late, task.Status);
+        Assert.Equal(EReminderStatus.Cancelled, repeatReminder.Status);
+        Assert.Null(repeatReminder.NextTriggerAt);
+    }
+
+    [Fact]
+    public async Task ProcessDueRemindersAsync_WhenTaskAlreadyLate_CancelsRepeatingReminderWithoutSending()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "Late task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddHours(-3),
+            Status = ETaskStatus.Late
+        };
+        var repeatReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddHours(-2),
+            NextTriggerAt = DateTime.UtcNow.AddMinutes(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.Repeat,
+                IntervalUnit = ETimeUnit.Minutes,
+                Value = 15,
+                TaskStatus = task.Status,
+                IsRepeat = true
+            }
+        };
+
+        context.Reminders.Add(repeatReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(1, processedCount);
+        Assert.Empty(sender.Sent);
+        Assert.Equal(ETaskStatus.Late, task.Status);
+        Assert.Equal(EReminderStatus.Cancelled, repeatReminder.Status);
+        Assert.Null(repeatReminder.NextTriggerAt);
+    }
+
+    [Fact]
+    public async Task ProcessDueRemindersAsync_WhenTodoTaskHasOnlyBeforeDeadlineDue_DoesNotTransitionToLate()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "Todo before deadline task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddMinutes(20),
+            Status = ETaskStatus.ToDo
+        };
+        var beforeDeadlineReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddMinutes(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.BeforeDeadline,
+                IntervalUnit = ETimeUnit.Minutes,
+                Value = 30,
+                TaskStatus = task.Status
+            }
+        };
+
+        context.Reminders.Add(beforeDeadlineReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(1, processedCount);
+        Assert.Equal(ETaskStatus.ToDo, task.Status);
+        Assert.Equal(EReminderStatus.Sent, beforeDeadlineReminder.Status);
+    }
+
+    [Fact]
+    public async Task ProcessDueRemindersAsync_TransitionsTaskToLateAndCancelsRepeatingAfterDeadlineReminder()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "Reminder task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddHours(-2),
+            Status = ETaskStatus.Doing
+        };
+
+        var beforeReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddHours(-2.5),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.BeforeDeadline,
+                IntervalUnit = ETimeUnit.Minutes,
+                Value = 30,
+                TaskStatus = task.Status
+            }
+        };
+        var onDeadlineReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddHours(-2),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.OnDeadline,
+                TaskStatus = task.Status
+            }
+        };
+        var repeatingAfterReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddHours(-1),
+            NextTriggerAt = DateTime.UtcNow.AddHours(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = task.Status,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.AfterDeadline,
+                IntervalUnit = ETimeUnit.Hours,
+                Value = 1,
+                TaskStatus = task.Status,
+                IsRepeat = true
+            }
+        };
+
+        context.Reminders.AddRange(beforeReminder, onDeadlineReminder, repeatingAfterReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(3, processedCount);
+        Assert.Equal(2, sender.Sent.Count);
+        Assert.Equal(EReminderStatus.Sent, beforeReminder.Status);
+        Assert.Equal(EReminderStatus.Sent, onDeadlineReminder.Status);
+        Assert.Equal(EReminderStatus.Cancelled, repeatingAfterReminder.Status);
+        Assert.Null(repeatingAfterReminder.NextTriggerAt);
+        Assert.Equal(ETaskStatus.Late, task.Status);
+    }
+
+    [Fact]
+    public async Task ProcessDueRemindersAsync_OnDeadlineReminderForReviewTask_TransitionsToLateAndClearsReviewStartedAt()
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var task = new TaskItem
+        {
+            Title = "Review task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = DateTime.UtcNow.AddMinutes(-1),
+            Status = ETaskStatus.Review,
+            ReviewStartedAt = DateTime.UtcNow.AddHours(-1)
+        };
+        var onDeadlineReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = DateTime.UtcNow.AddMinutes(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = ETaskStatus.Review,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.OnDeadline,
+                TaskStatus = ETaskStatus.Review
+            }
+        };
+
+        context.Reminders.Add(onDeadlineReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(1, processedCount);
+        Assert.Equal(ETaskStatus.Late, task.Status);
+        Assert.Null(task.ReviewStartedAt);
+        Assert.Equal(EReminderStatus.Sent, onDeadlineReminder.Status);
+    }
+
+    [Fact]
     public async Task ProcessDueRemindersAsync_AutoCompletesReviewTaskWhenPolicyIsDue()
     {
         await using var context = CreateContext();

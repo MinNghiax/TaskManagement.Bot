@@ -79,6 +79,7 @@ public class ReminderService : IReminderProcessor
             try
             {
                 await ProcessReminderAsync(reminder, now, cancellationToken);
+                await _reminderRepository.SaveAsync(cancellationToken);
                 processedReminderCount++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -93,12 +94,19 @@ public class ReminderService : IReminderProcessor
                     reminder.Id,
                     reminder.TaskId,
                     reminder.TargetUserId);
-            }
-        }
 
-        if (processedReminderCount > 0)
-        {
-            await _reminderRepository.SaveAsync(cancellationToken);
+                try
+                {
+                    await _reminderRepository.SaveAsync(cancellationToken);
+                }
+                catch (Exception persistEx)
+                {
+                    _logger.LogError(
+                        persistEx,
+                        "Failed to persist state changes after reminder {ReminderId} processing error.",
+                        reminder.Id);
+                }
+            }
         }
 
         return processedReminderCount + completedReviewCount;
@@ -166,6 +174,11 @@ public class ReminderService : IReminderProcessor
             return;
         }
 
+        TransitionTaskToLateIfNeeded(task, reminder, now);
+
+        if (reminder.Status != EReminderStatus.Pending)
+            return;
+
         await _notificationSender.SendAsync(reminder, cancellationToken);
 
         ReminderScheduleBuilder.ApplyNextSchedule(reminder, now);
@@ -182,6 +195,83 @@ public class ReminderService : IReminderProcessor
             reminder.Status = EReminderStatus.Cancelled;
             reminder.NextTriggerAt = null;
             reminder.UpdatedAt = now;
+        }
+    }
+
+    private static void TransitionTaskToLateIfNeeded(TaskItem task, Reminder reminder, DateTime changedAtUtc)
+    {
+        if (task.Status is ETaskStatus.Completed or ETaskStatus.Cancelled)
+            return;
+
+        if (task.Status == ETaskStatus.Late)
+        {
+            CancelPendingRepeatReminders(task, changedAtUtc);
+            return;
+        }
+
+        var shouldTransitionFromToDo =
+            task.Status == ETaskStatus.ToDo
+            && task.DueDate.HasValue
+            && HasReminderReachedDeadline(reminder, task.DueDate.Value);
+
+        var shouldTransitionByTrigger =
+            reminder.ReminderRule?.TriggerType is EReminderTriggerType.OnDeadline or EReminderTriggerType.AfterDeadline;
+
+        if (!shouldTransitionFromToDo && !shouldTransitionByTrigger)
+            return;
+
+        var leavingReview = task.Status == ETaskStatus.Review;
+
+        task.Status = ETaskStatus.Late;
+        task.UpdatedAt = changedAtUtc;
+
+        if (leavingReview)
+            task.ReviewStartedAt = null;
+
+        reminder.StateSnapshot = task.Status;
+
+        if (reminder.ReminderRule is not null)
+        {
+            reminder.ReminderRule.TaskStatus = task.Status;
+            reminder.ReminderRule.UpdatedAt = changedAtUtc;
+        }
+
+        CancelPendingRepeatReminders(task, changedAtUtc);
+    }
+
+    private static bool HasReminderReachedDeadline(Reminder reminder, DateTime deadline)
+    {
+        var reminderDueAt = reminder.NextTriggerAt ?? reminder.TriggerAt;
+        if (reminderDueAt == default)
+            return false;
+
+        return NormalizeUtc(reminderDueAt) >= NormalizeUtc(deadline);
+    }
+
+    private static DateTime NormalizeUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+    private static void CancelPendingRepeatReminders(TaskItem task, DateTime changedAtUtc)
+    {
+        foreach (var pendingRepeatReminder in task.Reminders.Where(r =>
+                     r.Status == EReminderStatus.Pending
+                     && ReminderScheduleBuilder.IsRepeatRule(r.ReminderRule)))
+        {
+            pendingRepeatReminder.Status = EReminderStatus.Cancelled;
+            pendingRepeatReminder.NextTriggerAt = null;
+            pendingRepeatReminder.UpdatedAt = changedAtUtc;
+            pendingRepeatReminder.StateSnapshot = task.Status;
+
+            if (pendingRepeatReminder.ReminderRule is not null)
+            {
+                pendingRepeatReminder.ReminderRule.TaskStatus = task.Status;
+                pendingRepeatReminder.ReminderRule.UpdatedAt = changedAtUtc;
+            }
         }
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Data;
@@ -102,6 +103,41 @@ public class TaskServiceReminderTests
         Assert.Equal(afterReminder.TriggerAt, afterReminder.NextTriggerAt);
         Assert.True(afterReminder.ReminderRule!.IsRepeat);
     }
+
+    [Fact]
+    public async Task CreateAsync_WithConfiguredTimeZone_SchedulesBeforeDeadlineReminderInUtc()
+    {
+        await using var context = CreateContext();
+        var service = new TaskService(context, configuration: CreateConfiguration("SE Asia Standard Time"));
+        var localDueDate = new DateTime(2026, 4, 22, 12, 0, 0, DateTimeKind.Unspecified);
+
+        var created = await service.CreateAsync(new CreateTaskDto
+        {
+            Title = "Reminder task",
+            AssignedTo = "123",
+            CreatedBy = "456",
+            DueDate = localDueDate,
+            ReminderRules =
+            [
+                new()
+                {
+                    TriggerType = EReminderTriggerType.BeforeDeadline,
+                    Value = 30,
+                    IntervalUnit = ETimeUnit.Minutes
+                }
+            ]
+        });
+
+        Assert.NotNull(created);
+
+        var beforeReminder = await context.Reminders
+            .Include(r => r.ReminderRule)
+            .SingleAsync(r => r.ReminderRule!.TriggerType == EReminderTriggerType.BeforeDeadline);
+
+        Assert.Equal(new DateTime(2026, 4, 22, 4, 30, 0, DateTimeKind.Utc), beforeReminder.TriggerAt);
+        Assert.Equal(DateTimeKind.Utc, beforeReminder.TriggerAt.Kind);
+    }
+
     [Fact]
     public async Task CreateAsync_WithNonNumericAssignedUser_PreservesReminderTargetUserId()
     {
@@ -236,6 +272,112 @@ public class TaskServiceReminderTests
     }
 
     [Fact]
+    public async Task UpdateAsync_ChangingDueDateReschedulesCustomTaskReminders()
+    {
+        await using var context = CreateContext();
+        var service = new TaskService(context);
+        var originalDueDate = new DateTime(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc);
+        var newDueDate = new DateTime(2026, 4, 22, 9, 30, 0, DateTimeKind.Utc);
+        var created = await service.CreateAsync(new CreateTaskDto
+        {
+            Title = "Reminder task",
+            AssignedTo = "123",
+            CreatedBy = "456",
+            DueDate = originalDueDate,
+            ReminderRules =
+            [
+                new()
+                {
+                    TriggerType = EReminderTriggerType.BeforeDeadline,
+                    Value = 30,
+                    IntervalUnit = ETimeUnit.Minutes
+                },
+                new()
+                {
+                    TriggerType = EReminderTriggerType.AfterDeadline,
+                    Value = 1,
+                    IntervalUnit = ETimeUnit.Hours,
+                    IsRepeat = true
+                }
+            ]
+        });
+
+        Assert.NotNull(created);
+
+        await service.UpdateAsync(created.Id, new UpdateTaskDto
+        {
+            DueDate = newDueDate
+        });
+
+        context.ChangeTracker.Clear();
+
+        var task = await context.TaskItems
+            .Include(t => t.Reminders).ThenInclude(r => r.ReminderRule)
+            .SingleAsync(t => t.Id == created.Id);
+
+        var beforeReminder = task.Reminders.Single(r =>
+            r.ReminderRule!.TriggerType == EReminderTriggerType.BeforeDeadline);
+        var onDeadlineReminder = task.Reminders.Single(r =>
+            r.ReminderRule!.TriggerType == EReminderTriggerType.OnDeadline);
+        var afterReminder = task.Reminders.Single(r =>
+            r.ReminderRule!.TriggerType == EReminderTriggerType.AfterDeadline);
+
+        Assert.Equal(newDueDate.AddMinutes(-30), beforeReminder.TriggerAt);
+        Assert.Null(beforeReminder.NextTriggerAt);
+        Assert.Equal(newDueDate, onDeadlineReminder.TriggerAt);
+        Assert.Equal(newDueDate.AddHours(1), afterReminder.TriggerAt);
+        Assert.Equal(afterReminder.TriggerAt, afterReminder.NextTriggerAt);
+        Assert.Equal("123", afterReminder.TargetUserId);
+    }
+
+    [Fact]
+    public async Task ChangeStatusAsync_CompletingTaskCancelsCustomPendingReminders()
+    {
+        await using var context = CreateContext();
+        var service = new TaskService(context);
+        var created = await service.CreateAsync(new CreateTaskDto
+        {
+            Title = "Reminder task",
+            AssignedTo = "123",
+            CreatedBy = "456",
+            DueDate = new DateTime(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc),
+            ReminderRules =
+            [
+                new()
+                {
+                    TriggerType = EReminderTriggerType.BeforeDeadline,
+                    Value = 30,
+                    IntervalUnit = ETimeUnit.Minutes
+                },
+                new()
+                {
+                    TriggerType = EReminderTriggerType.AfterDeadline,
+                    Value = 1,
+                    IntervalUnit = ETimeUnit.Hours,
+                    IsRepeat = true
+                }
+            ]
+        });
+
+        Assert.NotNull(created);
+
+        await service.ChangeStatusAsync(created.Id, ETaskStatus.Completed);
+
+        context.ChangeTracker.Clear();
+
+        var reminders = await context.Reminders
+            .Include(r => r.ReminderRule)
+            .Where(r => r.TaskId == created.Id)
+            .ToListAsync();
+
+        Assert.All(reminders, reminder =>
+        {
+            Assert.Equal(EReminderStatus.Cancelled, reminder.Status);
+            Assert.Null(reminder.NextTriggerAt);
+        });
+    }
+
+    [Fact]
     public async Task ChangeStatusAsync_TracksReviewStartedAtForReviewAutoComplete()
     {
         await using var context = CreateContext();
@@ -269,4 +411,12 @@ public class TaskServiceReminderTests
             .Options;
         return new TaskManagementDbContext(options);
     }
+
+    private static IConfiguration CreateConfiguration(string timeZone) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["JobSettings:TimeZone"] = timeZone
+            })
+            .Build();
 }
