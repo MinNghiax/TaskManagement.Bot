@@ -31,15 +31,15 @@ public class TaskService : ITaskService
             Id = task.Id,
             Title = task.Title,
             Description = task.Description,
-            //AssignedTo = task.AssignedTo,
-            //CreatedBy = task.CreatedBy,
-            AssignedTo = clanId != null
-                ? GetDisplayName(task.AssignedTo, clanId)
-                : task.AssignedTo,
+            AssignedTo = task.AssignedTo,
+            CreatedBy = task.CreatedBy,
+            //AssignedTo = clanId != null
+            //    ? GetDisplayName(task.AssignedTo, clanId)
+            //    : task.AssignedTo,
 
-                    CreatedBy = clanId != null
-                ? GetDisplayName(task.CreatedBy, clanId)
-                : task.CreatedBy,
+            //CreatedBy = clanId != null
+            //    ? GetDisplayName(task.CreatedBy, clanId)
+            //    : task.CreatedBy,
 
             DueDate = task.DueDate,
             Status = task.Status,
@@ -265,5 +265,28 @@ public class TaskService : ITaskService
             ?? user?.ClanNick
             ?? user?.Username
             ?? $"User-{userId.Substring(0, 4)}";
+    }
+
+    public async Task<List<TaskDto>> GetByAssigneeAndTeamAsync(string assignee, int teamId, CancellationToken ct)
+    {
+        return await _context.TaskItems
+            .Where(t =>
+                t.AssignedTo == assignee &&
+                t.TeamId == teamId &&
+                !t.IsDeleted
+            )
+            .Select(t => new TaskDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                AssignedTo = t.AssignedTo,
+                CreatedBy = t.CreatedBy,
+                Status = t.Status,
+                Priority = t.Priority,
+                DueDate = t.DueDate,
+                TeamId = t.TeamId,
+                CreatedAt = t.CreatedAt
+            })
+            .ToListAsync(ct);
     }
 }

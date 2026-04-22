@@ -45,8 +45,8 @@ public class TaskCommandHandler : ICommandHandler
         {
             "create" => await HandleCreateAsync(message, message.SenderId, ct),
             "list" => await HandleListAsync(parts, message.SenderId, message.ClanId, ct),
-            "view" => await HandleViewAsync(message, ct),
-            "update" => await HandleUpdateAsync(parts, message.SenderId, message.ClanId, ct),
+            "view" => await HandleViewAsync(message, message.SenderId, ct),
+            "update" => await HandleUpdateEntry(parts, message, ct),
             "delete" => await HandleDeletePrompt(parts, message.SenderId, ct),
             _ => new CommandResponse(GetHelpText())
         };
@@ -66,19 +66,23 @@ public class TaskCommandHandler : ICommandHandler
         return new CommandResponse(TaskFormBuilder.BuildSelectProject(projects, message.Id));
     }
 
-    private async Task<CommandResponse> HandleListAsync(string[] parts, string? userId, string? clanId, CancellationToken ct)
+    private async Task<CommandResponse> HandleListAsync(
+    string[] parts,
+    string? userId,
+    string? clanId,
+    CancellationToken ct)
     {
-        // Lấy team của user
-        var teams = await _teamService.GetTeamsByMemberAsync(userId);
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định user");
 
-        // Check role
+        var teams = await _teamService.GetTeamsByMemberAsync(userId);
 
         var tasks = new List<TaskDto>();
 
         foreach (var team in teams)
         {
-            //  luôn chỉ lấy task của chính user
-            var myTasks = await _taskService.GetByAssigneeAsync(userId, team.Id.ToString(), ct);
+            // chỉ lấy task của user
+            var myTasks = await _taskService.GetByAssigneeAndTeamAsync(userId, team.Id, ct);
             tasks.AddRange(myTasks);
         }
 
@@ -88,14 +92,41 @@ public class TaskCommandHandler : ICommandHandler
             .Select(g => g.First())
             .ToList();
 
-        var content = TaskFormBuilder.BuildTaskList(tasks, userId, teams);
+        //  FILTER STATUS 
+        if (parts.Length >= 4 && parts[2].ToLower() == "status")
+        {
+            var status = ParseStatusFilter(parts[3]);
+
+            if (status == null)
+                return new CommandResponse("❌ Status không hợp lệ (todo | doing | review | completed | cancelled)");
+
+            tasks = tasks
+                .Where(t => t.Status == status.Value)
+                .ToList();
+        }
+
+        // map displayName
+        var mappedTasks = tasks.Select(t => new TaskDto
+        {
+            Id = t.Id,
+            Title = t.Title,
+            AssignedTo = GetDisplayName(t.AssignedTo, clanId!),
+            CreatedBy = GetDisplayName(t.CreatedBy, clanId!),
+            Status = t.Status,
+            Priority = t.Priority,
+            DueDate = t.DueDate,
+            CreatedAt = t.CreatedAt,
+            TeamId = t.TeamId
+        }).ToList();
+
+        var content = TaskFormBuilder.BuildTaskList(mappedTasks, userId, teams);
 
         return new CommandResponse(content);
     }
 
-    private async Task<CommandResponse> HandleViewAsync(ChannelMessage message, CancellationToken ct)
+    private async Task<CommandResponse> HandleViewAsync(ChannelMessage message, string? userId, CancellationToken ct)
     {
-        var projects = await _projectService.GetAllProjectsAsync();
+        var projects = await _projectService.GetProjectsByMemberAsync(userId);
 
         if (projects.Count == 0)
             return new CommandResponse("❌ Chưa có project");
@@ -105,44 +136,117 @@ public class TaskCommandHandler : ICommandHandler
         );
     }
 
-    private async Task<CommandResponse> HandleUpdateAsync(
-    string[] parts,
-    string? userId,
-    string? clanId,
-    CancellationToken ct)
+    private async Task<CommandResponse> HandleUpdateEntry(
+        string[] parts,
+        ChannelMessage message,
+        CancellationToken ct)
     {
-        //var projects = await _projectService.GetAllProjectsAsync();
+        var userId = message.SenderId;
+
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định user");
+
+        var mode = parts.Length >= 3 ? parts[2].ToLower() : "auto";
+
+        var teams = await _teamService.GetTeamsByMemberAsync(userId);
+
+        if (teams.Count == 0)
+            return new CommandResponse("❌ Bạn chưa thuộc team nào");
+
+        if (mode == "pm")
+        {
+            bool isPM = false;
+
+            foreach (var team in teams)
+            {
+                if (await _teamService.IsPM(userId, team.Id))
+                {
+                    isPM = true;
+                    break;
+                }
+            }
+
+            if (!isPM)
+                return new CommandResponse("❌ Bạn không phải PM");
+
+            var projects = await _projectService.GetProjectsByUserAsync(userId);
+
+            if (projects.Count == 0)
+                return new CommandResponse("❌ Bạn chưa có project");
+
+            return new CommandResponse(
+                TaskFormBuilder.BuildUpdateSelectProject(projects, message.Id)
+            );
+        }
+
+        if (mode == "member")
+        {
+            var tasks = new List<TaskDto>();
+
+            foreach (var team in teams)
+            {
+                var myTasks = await _taskService.GetByAssigneeAndTeamAsync(userId, team.Id, ct);
+                tasks.AddRange(myTasks);
+            }
+
+            tasks = tasks
+                .GroupBy(t => t.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            if (tasks.Count == 0)
+                return new CommandResponse("❌ Bạn chưa có task nào");
+
+            return new CommandResponse(
+                TaskFormBuilder.BuildMemberUpdateTaskSelect(tasks, message.Id)
+            );
+        }
+
+        if (mode == "my")
+        {
+            var tasks = new List<TaskDto>();
+
+            foreach (var team in teams)
+            {
+                var teamTasks = await _taskService.GetTasksByTeamAsync(team.Id, ct);
+
+                //  chỉ lấy task do PM tạo
+                var myCreatedTasks = teamTasks
+                    .Where(t => t.CreatedBy == userId)
+                    .ToList();
+
+                tasks.AddRange(myCreatedTasks);
+            }
+
+            tasks = tasks
+                .GroupBy(t => t.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            if (tasks.Count == 0)
+                return new CommandResponse("❌ Bạn chưa tạo task nào");
+
+            return new CommandResponse(
+                TaskFormBuilder.BuildMemberUpdateTaskSelect(tasks, message.Id)
+            );
+        }
+
+        return new CommandResponse("❗ Dùng:\n- !task update pm\n- !task update member");
+    }
+
+    private async Task<CommandResponse> HandleDeletePrompt(string[] parts, string? userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return new CommandResponse("❌ Không xác định user");
+
+        // lấy project của PM
         var projects = await _projectService.GetProjectsByUserAsync(userId);
 
         if (projects.Count == 0)
-            return new CommandResponse("❌ Chưa có project");
+            return new CommandResponse("❌ Bạn chưa có project nào");
 
         return new CommandResponse(
-            TaskFormBuilder.BuildUpdateSelectProject(projects, Guid.NewGuid().ToString())
-        );
-    }
-
-    private async Task<CommandResponse> HandleDeletePrompt(string[] parts, string? userId, CancellationToken cancellationToken)
-    {
-        if (parts.Length < 3 || !int.TryParse(parts[2], out var taskId))
-            return new CommandResponse("❌ Dùng: `!task delete <taskId>`");
-
-        if (string.IsNullOrWhiteSpace(userId))
-            return new CommandResponse("❌ Không xác định được người dùng");
-
-        var task = await _taskService.GetByIdAsync(taskId, cancellationToken);
-        if (task == null)
-            return new CommandResponse("❌ Không tìm thấy task");
-
-        //  CHECK ROLE NGAY TỪ COMMAND
-        var isMentor = task.TeamId.HasValue &&
-                       await _teamService.IsPM(userId, task.TeamId.Value);
-
-        if (!isMentor)
-            return new CommandResponse("❌ Chỉ Mentor mới được dùng lệnh này");
-
-        return new CommandResponse(
-            TaskFormBuilder.BuildDeleteConfirm(task)
+            TaskFormBuilder.BuildDeleteSelectProject(projects, Guid.NewGuid().ToString())
         );
     }
 
@@ -150,11 +254,12 @@ public class TaskCommandHandler : ICommandHandler
         📝 **Quản lý Task**
         
         `!task create` - Tạo task mới
-        `!task list` - Xem danh sách tất cả task
         `!task list status <status>` - Xem danh sách task theo trạng thái
-        `!task list user <id>` - Xem danh sách task theo user
-        `!task update <id>` - Cập nhật task
-        `!task delete <id>` - Xóa task (Mentor)
+        `!task list` - Xem danh sách task theo user
+        `!task update` - Cập nhật task
+            `!task update pm` - Cập nhật task theo pm
+            `!task update member` - Cập nhật task theo member
+        `!task delete` - Xóa task (Mentor)
         """;
 
     private static string? ParseContent(string? raw)
@@ -175,4 +280,27 @@ public class TaskCommandHandler : ICommandHandler
             return raw;
         }
     }
+
+    private string GetDisplayName(string userId, string clanId)
+    {
+        var user = _client.Clans.Get(clanId)?.Users.Get(userId);
+
+        if (user == null)
+            return $"User-{userId.Substring(0, 4)}";
+
+        return user.DisplayName
+            ?? user.ClanNick
+            ?? user.Username
+            ?? $"User-{userId.Substring(0, 4)}";
+    }
+
+    private static ETaskStatus? ParseStatusFilter(string? value) => value?.ToLower() switch
+    {
+        "todo" => ETaskStatus.ToDo,
+        "doing" => ETaskStatus.Doing,
+        "review" => ETaskStatus.Review,
+        "completed" => ETaskStatus.Completed,
+        "cancelled" => ETaskStatus.Cancelled,
+        _ => null
+    };
 }

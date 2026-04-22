@@ -187,4 +187,16 @@ public class InMemoryTaskService : ITaskService
 
         return Task.CompletedTask;
     }
+
+    public Task<List<TaskDto>> GetByAssigneeAndTeamAsync(string assignee, int teamId, CancellationToken ct)
+    {
+        var tasks = _store.Values
+            .Where(t =>
+                t.AssignedTo == assignee &&
+                t.TeamId == teamId
+            )
+            .ToList();
+
+        return Task.FromResult(tasks);
+    }
 }

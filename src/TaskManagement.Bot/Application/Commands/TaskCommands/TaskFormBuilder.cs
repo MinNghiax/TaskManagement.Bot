@@ -1,4 +1,5 @@
-﻿using Mezon.Sdk.Domain;
+﻿using Google.Protobuf.WellKnownTypes;
+using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
@@ -7,6 +8,8 @@ namespace TaskManagement.Bot.Application.Commands.TaskCommands;
 
 public static class TaskFormBuilder
 {
+    private static readonly TimeZoneInfo VN_TIME_ZONE =
+    TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
     public static ChannelMessageContent BuildSelectProject(List<Project> projects, string originalMessageId)
     {
         return new ChannelMessageContent
@@ -106,6 +109,7 @@ public static class TaskFormBuilder
         int selectedProjectId,
         List<Team> teams,
         List<(string Id, string Name)> members,
+        string originalMessageId,
         int? selectedTeamId = null)
     {
         var projectOptions = projects.Select(p => new
@@ -156,7 +160,12 @@ public static class TaskFormBuilder
                     footer = new { text = "Trạng thái mặc định: ToDo" }
                 }
             },
-            Components = BuildNavigationButtons("SUBMIT", "✅ Tạo Task", "CANCEL", "❌ Hủy")
+            Components = BuildNavigationButtons(
+                $"SUBMIT|{selectedProjectId}|{selectedTeamId}|{originalMessageId}",
+                "✅ Tạo Task",
+                $"CANCEL|{originalMessageId}",
+                "❌ Hủy"
+            )
         };
     }
 
@@ -169,6 +178,15 @@ public static class TaskFormBuilder
         var created = string.IsNullOrWhiteSpace(task.CreatedBy)
             ? "Unknown"
             : task.CreatedBy;
+
+        var deadlineText = task.DueDate != null
+            ? TimeZoneInfo.ConvertTimeFromUtc(task.DueDate.Value, VN_TIME_ZONE)
+                .ToString("dd/MM/yyyy HH:mm")
+            : "Không có";
+
+        var createdText = TimeZoneInfo.ConvertTimeFromUtc(task.CreatedAt, VN_TIME_ZONE)
+            .ToString("dd/MM/yyyy HH:mm");
+
         return new ChannelMessageContent
         {
             Embed = new[]
@@ -183,17 +201,20 @@ public static class TaskFormBuilder
                         new { name = "🆔 ID", value = task.Id.ToString(), inline = true },
                         new { name = "📊 Trạng thái", value = GetStatusText(task.Status), inline = true },
                         new { name = "⚡ Độ ưu tiên", value = GetPriorityText(task.Priority), inline = true },
-                        new { name = "⏰ Deadline", value = task.DueDate?.ToString("dd/MM/yyyy HH:mm") ?? "Không có", inline = true },
+                        new { name = "⏰ Deadline", value = deadlineText, inline = true },
                         new { name = "👤 Giao cho", value = assigned, inline = true },
                         new { name = "👤 Người tạo", value = created, inline = true }
                     },
-                    footer = new { text = $"Tạo lúc: {task.CreatedAt:dd/MM/yyyy HH:mm}" }
+                    footer = new
+                    {
+                        text = $"Tạo lúc: {createdText}"
+                    }
                 }
             }
         };
     }
 
-    public static ChannelMessageContent BuildUpdateFormForMentor(TaskDto task, List<(string Id, string Name)> members)
+    public static ChannelMessageContent BuildUpdateFormForMentor(TaskDto task, List<(string Id, string Name)> members, string originalMessageId)
     {
         var memberOptions = members.Select(m => new
         {
@@ -233,7 +254,63 @@ public static class TaskFormBuilder
                     }
                 }
             },
-            Components = BuildNavigationButtons($"UPDATE|{task.Id}", "💾 Lưu", "CANCEL", "❌ Hủy")
+            Components = BuildNavigationButtons($"UPDATE|{task.Id}|{originalMessageId}", "💾 Lưu", $"CANCEL|{originalMessageId}", "❌ Hủy")
+        };
+    }
+
+    public static ChannelMessageContent BuildMemberUpdateTaskSelect(
+    List<TaskDto> tasks,
+    string originalMessageId)
+    {
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+            new
+            {
+                title = "✏️ Cập nhật Task (Member)",
+                description = "Chọn task của bạn:",
+                color = "#5865F2",
+                fields = new object[]
+                {
+                    BuildSelectField("📋 Task", "task",
+                        tasks.Select(t => new
+                        {
+                            label = $"{t.Title} | {t.Status}",
+                            value = t.Id.ToString()
+                        }).ToArray())
+                }
+            }
+        },
+            Components = new[]
+            {
+                new
+                {
+                    components = new object[]
+                    {
+                        new
+                        {
+                            id = $"OPEN_UPDATE_FORM|{originalMessageId}",
+                            type = 1,
+                            component = new
+                            {
+                                label = "💾 Cập nhật",
+                                style = 3
+                            }
+                        },
+                        new
+                        {
+                            id = "CANCEL",
+                            type = 1,
+                            component = new
+                            {
+                                label = "❌ Hủy",
+                                style = 4
+                            }
+                        }
+                    }
+                }
+            }
         };
     }
 
@@ -326,11 +403,24 @@ public static class TaskFormBuilder
                 var done = teamTasks.Count(t => t.Status == ETaskStatus.Completed);
                 var percent = teamTasks.Count == 0 ? 0 : (double)done / teamTasks.Count * 100;
 
+                //var taskLines = teamTasks.Count == 0
+                //    ? "_Không có task_"
+                //    : string.Join("\n\n", teamTasks.Select((t, i) =>
+                //        $"\n{i + 1}. **{t.Title}**\n" +
+                //        $"   {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} |  👤 {t.AssignedTo} | 📅 {t.DueDate:dd/MM}"
+                //    ));
                 var taskLines = teamTasks.Count == 0
                     ? "_Không có task_"
                     : string.Join("\n\n", teamTasks.Select((t, i) =>
                         $"\n{i + 1}. **{t.Title}**\n" +
-                        $"   {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} |  👤 {t.AssignedTo} | 📅 {t.DueDate:dd/MM}"
+                        $"   {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} |  👤 {t.AssignedTo} " +
+                        $"📅 {
+                            (t.DueDate != null
+                                ? TimeZoneInfo.ConvertTimeFromUtc(
+                                    t.DueDate.Value,
+                                    TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time")
+                                ).ToString("dd/MM")
+                                : "N/A")}"
                     ));
 
                 fields.Add(new
@@ -453,7 +543,9 @@ public static class TaskFormBuilder
                 {
                     BuildSelectField("📋 Task", "task", tasks.Select(t => new
                     {
-                        label = $"{t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)}",
+                        label =
+                            $"📁 {projectName} | 👥 {teamName}\n" +
+                            $"📌 {t.Title} | {GetStatusText(t.Status)}",
                         value = t.Id.ToString()
                     }).ToArray())
                 }
@@ -527,6 +619,160 @@ public static class TaskFormBuilder
         };
     }
 
+    public static ChannelMessageContent BuildUpdateStatusForm(TaskDto task)
+    {
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+                new
+                {
+                    title = "🔄 Cập nhật trạng thái",
+                    description = $"📌 {task.Title}",
+                    color = "#FEE75C",
+                    fields = new object[] { }
+                }
+            },
+            Components = new[]
+            {
+                new
+                {
+                    components = new object[]
+                    {
+                        new
+                        {
+                            id = $"UPDATE_STATUS_DOING|{task.Id}",
+                            type = 1,
+                            component = new
+                            {
+                                label = "🔄 Doing",
+                                style = 1
+                            }
+                        },
+                        new
+                        {
+                            id = $"UPDATE_STATUS_REVIEW|{task.Id}",
+                            type = 1,
+                            component = new
+                            {
+                                label = "✅ Review",
+                                style = 3
+                            }
+                        },
+                        new
+                        {
+                            id = "CANCEL",
+                            type = 1,
+                            component = new
+                            {
+                                label = "❌ Hủy",
+                                style = 4
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    public static ChannelMessageContent BuildDeleteSelectProject(
+        List<Project> projects,
+        string originalMessageId)
+    {
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+            new
+            {
+                title = "🗑️ Xóa Task",
+                description = "Chọn Project:",
+                color = "#ED4245",
+                fields = new object[]
+                {
+                    BuildSelectField("📁 Project", "project",
+                        projects.Select(p => new
+                        {
+                            label = p.Name,
+                            value = p.Id.ToString()
+                        }).ToArray())
+                }
+            }
+        },
+            Components = BuildNavigationButtons(
+                $"DELETE_STEP_1|{originalMessageId}",
+                "➡️ Tiếp",
+                "CANCEL",
+                "❌ Hủy")
+        };
+    }
+
+    public static ChannelMessageContent BuildDeleteSelectTeam(
+        int projectId,
+        List<Team> teams,
+        string originalMessageId)
+    {
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+            new
+            {
+                title = "🗑️ Xóa Task",
+                description = $"Project: {projectId}\nChọn Team:",
+                color = "#ED4245",
+                fields = new object[]
+                {
+                    BuildSelectField("👥 Team", "team",
+                        teams.Select(t => new
+                        {
+                            label = t.Name,
+                            value = t.Id.ToString()
+                        }).ToArray())
+                }
+            }
+        },
+            Components = BuildNavigationButtons(
+                $"DELETE_STEP_2|{projectId}|{originalMessageId}",
+                "➡️ Tiếp",
+                "CANCEL",
+                "❌ Hủy")
+        };
+    }
+
+    public static ChannelMessageContent BuildDeleteSelectTask(
+        int teamId,
+        List<TaskDto> tasks,
+        string originalMessageId)
+    {
+        return new ChannelMessageContent
+        {
+            Embed = new[]
+            {
+            new
+            {
+                title = "🗑️ Xóa Task",
+                description = "Chọn task:",
+                color = "#ED4245",
+                fields = new object[]
+                {
+                    BuildSelectField("📋 Task", "task",
+                        tasks.Select(t => new
+                        {
+                            label = $"{t.Title} | {GetStatusText(t.Status)}",
+                            value = t.Id.ToString()
+                        }).ToArray())
+                }
+            }
+        },
+            Components = BuildNavigationButtons(
+                $"DELETE_CONFIRM|{teamId}|{originalMessageId}",
+                "🗑️ Xóa",
+                "CANCEL",
+                "❌ Hủy")
+        };
+    }
+
     private static object BuildSelectField(string name, string id, object[] options)
     {
         return new
@@ -540,8 +786,6 @@ public static class TaskFormBuilder
                 {
                     placeholder = $"Chọn {name.ToLower()}",
                     options,
-                    //custom_id = $"SELECT_{id.ToUpper()}",
-                    //trigger_on_change = true
                     custom_id = id,
                     trigger_on_change = true
                 }
@@ -605,7 +849,13 @@ public static class TaskFormBuilder
         if (title.Length > 100) return (false, "❌ Tiêu đề tối đa 100 ký tự");
         if (string.IsNullOrWhiteSpace(deadline)) return (false, "❌ Deadline không được để trống");
         if (!DateTime.TryParse(deadline, out var deadlineDate)) return (false, "❌ Định dạng deadline không hợp lệ. Dùng: YYYY-MM-DD HH:MM");
-        if (deadlineDate <= DateTime.Now) return (false, "❌ Deadline phải lớn hơn thời gian hiện tại");
+        //if (deadlineDate <= DateTime.Now) return (false, "❌ Deadline phải lớn hơn thời gian hiện tại");
+        var vnNow = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time")
+        );
+
+        if (deadlineDate <= vnNow) return (false, "❌ Deadline phải lớn hơn thời gian hiện tại");
         if (string.IsNullOrWhiteSpace(assignee)) return (false, "❌ Vui lòng chọn người được giao");
         return (true, "✅ Hợp lệ");
     }

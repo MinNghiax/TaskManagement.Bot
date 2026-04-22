@@ -83,7 +83,7 @@ public class TeamService : ITeamService
     public async Task<bool> IsPM(string username, int teamId)
     {
         return await _context.TeamMembers
-            .AnyAsync(x => x.TeamId == teamId && x.Username == username && x.Role == "PM");
+            .AnyAsync(x => x.TeamId == teamId && x.Username == username && x.Role == "PM" && x.Status == "Accepted");
     }
 
     public async Task<List<string>> GetMembers(int teamId)
