@@ -36,7 +36,8 @@ public class TaskComponentHandler : IComponentHandler
     {
         var prefixes = new[] { "NEXT_STEP_1", "NEXT_STEP_2", "VIEW_STEP_1", "VIEW_SUBMIT", "UPDATE_STEP_1", "UPDATE_STEP_2",
             "UPDATE_SELECT_TASK", "UPDATE_SUBMIT", "DELETE_STEP_1", "DELETE_STEP_2", "DELETE_CONFIRM", "OPEN_UPDATE_FORM", "SUBMIT",
-            "UPDATE", "UPDATE_STATUS", "CONFIRM_DELETE", "CANCEL", "CLOSE", "SELECT_PROJECT", "SELECT_TEAM" };
+            "UPDATE", "UPDATE_STATUS", "CONFIRM_DELETE", "CANCEL", "CLOSE", "SELECT_PROJECT", "SELECT_TEAM",
+            "MEMBER_UPDATE_STEP_1", "MEMBER_UPDATE_STEP_2", "MEMBER_UPDATE_SUBMIT" };
         return prefixes.Any(p => customId.StartsWith(p, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -47,6 +48,23 @@ public class TaskComponentHandler : IComponentHandler
 
         var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
         if (parts.Length == 0) return new ComponentResponse();
+
+        // Validate form owner - everyone must be validated
+        var action = parts[0].ToUpperInvariant();
+        var formOwnerId = ExtractFormOwnerId(parts, action);
+        if (!string.IsNullOrWhiteSpace(formOwnerId) && formOwnerId != context.CurrentUserId)
+        {
+            // Hiển thị message nhưng không reply
+            return ComponentResponse.FromText(
+                context.ClanId!,
+                context.ChannelId!,
+                "❌ Bạn không có quyền thao tác form này",
+                context.Mode,
+                context.IsPublic,
+                null, // Không reply
+                null  // Không có original message
+            );
+        }
 
         return parts[0].ToUpperInvariant() switch
         {
@@ -66,12 +84,45 @@ public class TaskComponentHandler : IComponentHandler
             "UPDATE" => await HandleUpdateAsync(context, parts, ct),
             "UPDATE_STATUS" => await HandleUpdateStatusAsync(context, parts, ct),
             "UPDATE_STATUS_MEMBER" => await HandleMemberUpdate(context, ct),
+            "MEMBER_UPDATE_STEP_1" => await HandleMemberUpdateStep1(context, parts, ct),
+            "MEMBER_UPDATE_STEP_2" => await HandleMemberUpdateStep2(context, parts, ct),
+            "MEMBER_UPDATE_SUBMIT" => await HandleMemberUpdateSubmit(context, parts, ct),
             "CONFIRM_DELETE" => await HandleConfirmDeleteAsync(context, parts, ct),
             "CANCEL" => HandleCancel(context),
             "CLOSE" => HandleCancel(context),
             "SELECT_PROJECT" => await HandleSelectProjectAutoAsync(context, ct),
             "SELECT_TEAM" => await HandleSelectTeamAutoAsync(context, ct),
             _ => new ComponentResponse()
+        };
+    }
+
+    private string? ExtractFormOwnerId(string[] parts, string action)
+    {
+        // Extract senderId based on customId format
+        return action switch
+        {
+            "NEXT_STEP_1" when parts.Length >= 3 => parts[2],
+            "NEXT_STEP_2" when parts.Length >= 4 => parts[3],
+            "SUBMIT" when parts.Length >= 5 => parts[4],
+            "UPDATE_STEP_1" when parts.Length >= 3 => parts[2],
+            "UPDATE_STEP_2" when parts.Length >= 4 => parts[3],
+            "UPDATE_SUBMIT" when parts.Length >= 4 => parts[3],
+            "UPDATE" when parts.Length >= 4 => parts[3],
+            "UPDATE_STATUS" when parts.Length >= 4 => parts[3],
+            "MEMBER_UPDATE_STEP_1" when parts.Length >= 3 => parts[2],
+            "MEMBER_UPDATE_STEP_2" when parts.Length >= 4 => parts[3],
+            "MEMBER_UPDATE_SUBMIT" when parts.Length >= 4 => parts[3],
+            "DELETE_STEP_1" when parts.Length >= 3 => parts[2],
+            "DELETE_STEP_2" when parts.Length >= 4 => parts[3],
+            "DELETE_CONFIRM" when parts.Length >= 4 => parts[3],
+            "CONFIRM_DELETE" when parts.Length >= 4 => parts[3],
+            "CANCEL" when parts.Length >= 3 => parts[2],
+            "CLOSE" when parts.Length >= 3 => parts[2],
+            "VIEW_STEP_1" when parts.Length >= 2 => null, // View is public
+            "VIEW_SUBMIT" when parts.Length >= 2 => null, // View is public
+            "SELECT_PROJECT" when parts.Length >= 2 => null, // Auto-select is part of form flow
+            "SELECT_TEAM" when parts.Length >= 2 => null, // Auto-select is part of form flow
+            _ => null
         };
     }
 
@@ -87,9 +138,12 @@ public class TaskComponentHandler : IComponentHandler
         if (teams.Count == 0)
             return BuildTextResponse(context, "❌ Project này chưa có Team nào");
 
+        // Format: NEXT_STEP_1|originalMessageId|senderId|commandType
         var originalMessageId = parts.Length >= 2 ? parts[1] : null;
+        var senderId = parts.Length >= 3 ? parts[2] : null;
+        var commandType = parts.Length >= 4 ? parts[3] : "create";
 
-        return ReplaceForm(context, TaskFormBuilder.BuildSelectTeam(projectId, teams, originalMessageId ?? context.MessageId!));
+        return ReplaceForm(context, TaskFormBuilder.BuildSelectTeam(projectId, teams, originalMessageId ?? context.MessageId!, senderId, commandType));
     }
 
     private async Task<ComponentResponse> HandleNextStep2Async(ComponentContext context, string[] parts, CancellationToken ct)
@@ -135,7 +189,10 @@ public class TaskComponentHandler : IComponentHandler
             ? GetDisplayName(pmId, context.ClanId!)
             : "Unknown";
 
+        // Format: NEXT_STEP_2|projectId|originalMessageId|senderId|commandType
         var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "create";
 
         return ReplaceForm(context,
             TaskFormBuilder.BuildEnterDetails(
@@ -145,7 +202,9 @@ public class TaskComponentHandler : IComponentHandler
                 projectId,
                 teamId,
                 members,
-                originalMessageId ?? context.MessageId!
+                originalMessageId ?? context.MessageId!,
+                senderId,
+                commandType
             ));
     }
 
@@ -178,8 +237,10 @@ public class TaskComponentHandler : IComponentHandler
         var tasks = await _taskService.GetTasksByTeamAsync(teamId, ct);
 
         var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+        var projects = await _projectService.GetAllProjectsAsync();
+        var displayName = GetDisplayName(context.CurrentUserId!, context.ClanId!);
 
-        var content = TaskFormBuilder.BuildTaskList(tasks, context.CurrentUserId!, teams);
+        var content = TaskFormBuilder.BuildTaskList(tasks, displayName, context.ClanId!, teams, projects);
 
         return ReplaceForm(context, content);
     }
@@ -196,8 +257,13 @@ public class TaskComponentHandler : IComponentHandler
         var projects = await _projectService.GetAllProjectsAsync();
         var projectName = projects.FirstOrDefault(p => p.Id == projectId)?.Name ?? $"#{projectId}";
 
+        // Format: UPDATE_STEP_1|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 2 ? parts[1] : null;
+        var senderId = parts.Length >= 3 ? parts[2] : null;
+        var commandType = parts.Length >= 4 ? parts[3] : "update pm";
+
         return ReplaceForm(context,
-            TaskFormBuilder.BuildUpdateSelectTeam(projectName, projectId, teams, parts[1]));
+            TaskFormBuilder.BuildUpdateSelectTeam(projectName, projectId, teams, originalMessageId ?? context.MessageId!, senderId, commandType));
     }
 
     private async Task<ComponentResponse> HandleUpdateStep2(ComponentContext context, string[] parts, CancellationToken ct)
@@ -226,6 +292,11 @@ public class TaskComponentHandler : IComponentHandler
             ? GetDisplayName(pmId, context.ClanId!)
             : "Unknown";
 
+        // Format: UPDATE_STEP_2|projectId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "update pm";
+
         return ReplaceForm(context,
             TaskFormBuilder.BuildUpdateSelectTask(
                 projectName,
@@ -233,7 +304,9 @@ public class TaskComponentHandler : IComponentHandler
                 pmName,
                 teamId,
                 tasks,
-                parts[2]
+                originalMessageId ?? context.MessageId!,
+                senderId,
+                commandType
             ));
     }
 
@@ -261,15 +334,18 @@ public class TaskComponentHandler : IComponentHandler
 
         ChannelMessageContent content;
 
-        var originalMessageId = parts.LastOrDefault();
+        // Format: UPDATE_SUBMIT|teamId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "update pm";
 
         if (isMentor)
         {
-            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId ?? context.MessageId!);
+            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId ?? context.MessageId!, senderId, commandType);
         }
         else
         {
-            content = TaskFormBuilder.BuildUpdateFormForMember(task);
+            content = TaskFormBuilder.BuildUpdateFormForMember(task, originalMessageId, senderId, commandType);
         }
 
         return ReplaceForm(context, content);
@@ -306,15 +382,18 @@ public class TaskComponentHandler : IComponentHandler
 
         ChannelMessageContent content;
 
-        var originalMessageId = parts.LastOrDefault();
+        // Format: UPDATE_SUBMIT|teamId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "update pm";
 
         if (isMentor)
         {
-            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId ?? context.MessageId!);
+            content = TaskFormBuilder.BuildUpdateFormForMentor(task, members, originalMessageId ?? context.MessageId!, senderId, commandType);
         }
         else
         {
-            content = TaskFormBuilder.BuildUpdateFormForMember(task);
+            content = TaskFormBuilder.BuildUpdateFormForMember(task, originalMessageId, senderId, commandType);
         }
 
         return ReplaceForm(context, content);
@@ -329,8 +408,13 @@ public class TaskComponentHandler : IComponentHandler
 
         var teams = await _teamService.GetTeamsByProjectAsync(projectId);
 
+        // Format: DELETE_STEP_1|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 2 ? parts[1] : null;
+        var senderId = parts.Length >= 3 ? parts[2] : null;
+        var commandType = parts.Length >= 4 ? parts[3] : "delete";
+
         return ReplaceForm(context,
-            TaskFormBuilder.BuildDeleteSelectTeam(projectId, teams, parts[1]));
+            TaskFormBuilder.BuildDeleteSelectTeam(projectId, teams, originalMessageId ?? context.MessageId!, senderId, commandType));
     }
 
     private async Task<ComponentResponse> HandleDeleteStep2(ComponentContext context, string[] parts, CancellationToken ct)
@@ -351,8 +435,13 @@ public class TaskComponentHandler : IComponentHandler
         if (!tasks.Any())
             return BuildTextResponse(context, "❌ Không có task nào để xóa");
 
+        // Format: DELETE_STEP_2|projectId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "delete";
+
         return ReplaceForm(context,
-            TaskFormBuilder.BuildDeleteSelectTask(teamId, tasks, parts[2]));
+            TaskFormBuilder.BuildDeleteSelectTask(teamId, tasks, originalMessageId ?? context.MessageId!, senderId, commandType));
     }
 
     private async Task<ComponentResponse> HandleDeleteSelectTask(ComponentContext context, string[] parts, CancellationToken ct)
@@ -373,8 +462,17 @@ public class TaskComponentHandler : IComponentHandler
         if (task.CreatedBy != context.CurrentUserId)
             return BuildTextResponse(context, "❌ Không thể xóa task của người khác");
 
+        // Map createdBy to displayName
+        var createdByDisplayName = GetDisplayName(task.CreatedBy!, context.ClanId!);
+        task.CreatedBy = createdByDisplayName;
+
+        // Format: DELETE_CONFIRM|teamId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "delete";
+
         return ReplaceForm(context,
-            TaskFormBuilder.BuildDeleteConfirm(task));
+            TaskFormBuilder.BuildDeleteConfirm(task, originalMessageId ?? context.MessageId!, senderId, commandType));
     }
 
     private async Task<ComponentResponse> HandleOpenUpdateForm(ComponentContext context, CancellationToken ct)
@@ -395,7 +493,11 @@ public class TaskComponentHandler : IComponentHandler
 
     private async Task<ComponentResponse> HandleSubmitAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
+        // Format: SUBMIT|projectId|teamId|originalMessageId|senderId|commandType
         var originalMessageId = parts.Length >= 4 ? parts[3] : null;
+        var senderId = parts.Length >= 5 ? parts[4] : null;
+        var commandType = parts.Length >= 6 ? parts[5] : "create";
+        
         var projectIdStr = parts.Length >= 2 ? parts[1] : GetSelectedValue(context.Payload, "project");
         var teamIdStr = parts.Length >= 3 ? parts[2] : GetSelectedValue(context.Payload, "team");
 
@@ -448,7 +550,7 @@ public class TaskComponentHandler : IComponentHandler
 
         var result = MapToDisplayTask(task, context.ClanId!);
 
-        return BuildSuccessResponse(context, TaskFormBuilder.BuildTaskResult(result), originalMessageId);
+        return BuildSuccessResponse(context, TaskFormBuilder.BuildTaskResult(result), originalMessageId, senderId, commandType);
     }
 
     private async Task<ComponentResponse> HandleUpdateAsync(ComponentContext context, string[] parts, CancellationToken ct)
@@ -570,6 +672,83 @@ public class TaskComponentHandler : IComponentHandler
             TaskFormBuilder.BuildUpdateStatusForm(task));
     }
 
+    private async Task<ComponentResponse> HandleMemberUpdateStep1(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var projectIdStr = GetSelectedValue(context.Payload, "project");
+
+        if (!int.TryParse(projectIdStr, out var projectId))
+            return BuildTextResponse(context, "❌ Chọn project");
+
+        var teams = await _teamService.GetTeamsByProjectAsync(projectId);
+
+        if (teams.Count == 0)
+            return BuildTextResponse(context, "❌ Project chưa có team");
+
+        // Format: MEMBER_UPDATE_STEP_1|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 2 ? parts[1] : null;
+        var senderId = parts.Length >= 3 ? parts[2] : null;
+        var commandType = parts.Length >= 4 ? parts[3] : "update member";
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildMemberUpdateSelectTeam(projectId, teams, originalMessageId ?? context.MessageId!, senderId, commandType));
+    }
+
+    private async Task<ComponentResponse> HandleMemberUpdateStep2(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        if (parts.Length < 2 || !int.TryParse(parts[1], out var projectId))
+            return BuildTextResponse(context, "❌ Dữ liệu project không hợp lệ");
+
+        var teamIdStr = GetSelectedValue(context.Payload, "team");
+
+        if (!int.TryParse(teamIdStr, out var teamId))
+            return BuildTextResponse(context, "❌ Chọn team");
+
+        var allTasks = await _taskService.GetTasksByTeamAsync(teamId, ct);
+
+        // CHỈ lấy task của member hiện tại
+        var tasks = allTasks
+            .Where(t => t.AssignedTo == context.CurrentUserId)
+            .ToList();
+
+        if (!tasks.Any())
+            return BuildTextResponse(context, "❌ Bạn không có task nào trong team này");
+
+        // Format: MEMBER_UPDATE_STEP_2|projectId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "update member";
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildMemberUpdateSelectTask(teamId, tasks, originalMessageId ?? context.MessageId!, senderId, commandType));
+    }
+
+    private async Task<ComponentResponse> HandleMemberUpdateSubmit(ComponentContext context, string[] parts, CancellationToken ct)
+    {
+        var taskIdStr = GetSelectedValue(context.Payload, "task");
+
+        if (!int.TryParse(taskIdStr, out var taskId))
+            return BuildTextResponse(context, "❌ Chọn task");
+
+        var task = await _taskService.GetByIdAsync(taskId, ct);
+
+        if (task == null)
+            return BuildTextResponse(context, "❌ Không tìm thấy task");
+
+        var assignedTo = task.AssignedTo?.Trim();
+        var currentUser = context.CurrentUserId?.Trim();
+
+        if (!string.Equals(assignedTo, currentUser, StringComparison.Ordinal))
+            return BuildTextResponse(context, "❌ Không phải task của bạn");
+
+        // Format: MEMBER_UPDATE_SUBMIT|teamId|originalMessageId|senderId|commandType
+        var originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        var senderId = parts.Length >= 4 ? parts[3] : null;
+        var commandType = parts.Length >= 5 ? parts[4] : "update member";
+
+        return ReplaceForm(context,
+            TaskFormBuilder.BuildUpdateFormForMember(task, originalMessageId ?? context.MessageId!, senderId, commandType));
+    }
+
     private async Task<ComponentResponse> HandleConfirmDeleteAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
         if (parts.Length < 2 || !int.TryParse(parts[1], out var taskId))
@@ -655,27 +834,136 @@ public class TaskComponentHandler : IComponentHandler
             ));
     }
 
-    private static ComponentResponse ReplaceForm(ComponentContext context, ChannelMessageContent content)
+    private ComponentResponse ReplaceForm(ComponentContext context, ChannelMessageContent content)
     {
+        var formMessageId = context.MessageId ?? "";
+        
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        
+        string? originalMessageId = null;
+        string? senderId = null;
+        string? commandType = null;
+        
+        if (parts.Length >= 4 && parts[0] == "NEXT_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "NEXT_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 6 && parts[0] == "SUBMIT")
+        {
+            originalMessageId = parts[3];
+            senderId = parts[4];
+            commandType = parts[5];
+        }
+        else if (parts.Length >= 4 && parts[0] == "UPDATE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_SUBMIT")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_STATUS")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "MEMBER_UPDATE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "MEMBER_UPDATE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "MEMBER_UPDATE_SUBMIT")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "DELETE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "DELETE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "DELETE_CONFIRM")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "CONFIRM_DELETE")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "CANCEL")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 2)
+        {
+            originalMessageId = parts[^1];
+        }
+        
+        if (string.IsNullOrWhiteSpace(originalMessageId))
+        {
+            originalMessageId = formMessageId;
+        }
+        
         var response = new ComponentResponse();
-        if (!string.IsNullOrWhiteSpace(context.MessageId))
+        
+        if (!string.IsNullOrWhiteSpace(formMessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
             {
                 ClanId = context.ClanId!,
                 ChannelId = context.ChannelId!,
-                MessageId = context.MessageId,
+                MessageId = formMessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
                 ReplyToMessageId = null
             });
         }
-
-        //  LẤY originalMessageId từ customId
-        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        //var originalMessageId = parts.Length >= 2 ? parts[^1] : null;
-        // luôn lấy cái CUỐI nếu có
-        var originalMessageId = parts.LastOrDefault() ?? context.MessageId;
 
         response.Messages.Add(new ComponentMessage
         {
@@ -684,42 +972,135 @@ public class TaskComponentHandler : IComponentHandler
             Content = content,
             Mode = context.Mode,
             IsPublic = context.IsPublic,
-
-            //  reply vào message gốc
             ReplyToMessageId = originalMessageId,
-
-            OriginalMessage = new ChannelMessage
-            {
-                Id = originalMessageId ?? context.MessageId!,
-                ChannelId = context.ChannelId!,
-                ClanId = context.ClanId!,
-                SenderId = context.CurrentUserId,
-                ChannelLabel = ""
-            }
+            OriginalMessage = BuildOriginalMessage(context, originalMessageId, senderId, commandType)
         });
+
         return response;
     }
-
-    private static ComponentResponse HandleCancel(ComponentContext context, string? message = null)
+    private ComponentResponse HandleCancel(ComponentContext context, string? message = null)
     {
+        var formMessageId = context.MessageId ?? "";
         var response = new ComponentResponse();
-        if (!string.IsNullOrWhiteSpace(context.MessageId))
+
+        string? originalMessageId = null;
+        string? senderId = null;
+        string? commandType = null;
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        
+        if (parts.Length >= 4 && parts[0] == "NEXT_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "NEXT_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 6 && parts[0] == "SUBMIT")
+        {
+            originalMessageId = parts[3];
+            senderId = parts[4];
+            commandType = parts[5];
+        }
+        else if (parts.Length >= 4 && parts[0] == "UPDATE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_SUBMIT")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_STATUS")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "MEMBER_UPDATE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "MEMBER_UPDATE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "MEMBER_UPDATE_SUBMIT")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "DELETE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "DELETE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "DELETE_CONFIRM")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "CONFIRM_DELETE")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "CANCEL")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 2)
+        {
+            originalMessageId = parts[^1];
+        }
+
+        if (!string.IsNullOrWhiteSpace(formMessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
             {
                 ClanId = context.ClanId!,
                 ChannelId = context.ChannelId!,
-                MessageId = context.MessageId,
+                MessageId = formMessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
                 ReplyToMessageId = null
             });
         }
-
-        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        //var originalMessageId = context.MessageId;
-        // luôn lấy cái CUỐI nếu có
-        var originalMessageId = parts.LastOrDefault() ?? context.MessageId;
 
         if (!string.IsNullOrWhiteSpace(message))
         {
@@ -730,27 +1111,129 @@ public class TaskComponentHandler : IComponentHandler
                 Text = message,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = originalMessageId,
-                OriginalMessage = new ChannelMessage
-                {
-                    Id = originalMessageId ?? context.MessageId!,
-                    ChannelId = context.ChannelId!,
-                    ClanId = context.ClanId!,
-                    SenderId = context.CurrentUserId,
-                    ChannelLabel = ""
-                }
+                ReplyToMessageId = originalMessageId, 
+                OriginalMessage = !string.IsNullOrWhiteSpace(originalMessageId) 
+                    ? BuildOriginalMessage(context, originalMessageId, senderId, commandType)
+                    : null
             });
         }
+
         return response;
     }
 
-    private static ComponentResponse BuildTextResponse(ComponentContext context, string text)
+    private ComponentResponse BuildTextResponse(ComponentContext context, string text)
     {
-        //  LẤY originalMessageId từ customId
         var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
         
-        // luôn lấy cái CUỐI nếu có
-        var originalMessageId = parts.LastOrDefault() ?? context.MessageId;
+        string? originalMessageId = null;
+        string? senderId = null;
+        string? commandType = null;
+        
+        if (parts.Length >= 4 && parts[0] == "NEXT_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "NEXT_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 6 && parts[0] == "SUBMIT")
+        {
+            originalMessageId = parts[3];
+            senderId = parts[4];
+            commandType = parts[5];
+        }
+        else if (parts.Length >= 4 && parts[0] == "UPDATE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_SUBMIT")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "UPDATE_STATUS")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "MEMBER_UPDATE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "MEMBER_UPDATE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "MEMBER_UPDATE_SUBMIT")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "DELETE_STEP_1")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 5 && parts[0] == "DELETE_STEP_2")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "DELETE_CONFIRM")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 5 && parts[0] == "CONFIRM_DELETE")
+        {
+            originalMessageId = parts[2];
+            senderId = parts[3];
+            commandType = parts[4];
+        }
+        else if (parts.Length >= 4 && parts[0] == "CANCEL")
+        {
+            originalMessageId = parts[1];
+            senderId = parts[2];
+            commandType = parts[3];
+        }
+        else if (parts.Length >= 2)
+        {
+            originalMessageId = parts[^1];
+        }
+
+        if (string.IsNullOrWhiteSpace(originalMessageId))
+        {
+            originalMessageId = context.MessageId;
+        }
 
         return ComponentResponse.FromText(
             context.ClanId!,
@@ -758,29 +1241,12 @@ public class TaskComponentHandler : IComponentHandler
             text,
             context.Mode,
             context.IsPublic,
-
-            //  reply vào message gốc
             originalMessageId ?? context.MessageId!,
-
-            new ChannelMessage
-            {
-                Id = originalMessageId ?? context.MessageId!,
-                ChannelId = context.ChannelId!,
-                ClanId = context.ClanId!,
-                SenderId = context.CurrentUserId,
-                Username = context.CurrentUserId,
-                DisplayName = context.CurrentUserId,
-                Content = new ChannelMessageContent
-                {
-                    Text = ""
-                },
-
-                ChannelLabel = ""
-            }
+            BuildOriginalMessage(context, originalMessageId ?? context.MessageId!, senderId, commandType)
         );
     }
 
-    private static ComponentResponse BuildSuccessResponse(ComponentContext context, ChannelMessageContent content, string? originalMessageId)
+    private ComponentResponse BuildSuccessResponse(ComponentContext context, ChannelMessageContent content, string? originalMessageId, string? senderId = null, string? commandType = null)
     {
         var response = new ComponentResponse();
 
@@ -798,7 +1264,7 @@ public class TaskComponentHandler : IComponentHandler
             });
         }
 
-        // gửi result (KHÔNG reply vào message đã bị xóa)
+        // gửi result với reply đúng command
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -807,16 +1273,7 @@ public class TaskComponentHandler : IComponentHandler
             Mode = context.Mode,
             IsPublic = context.IsPublic,
             ReplyToMessageId = originalMessageId,
-            OriginalMessage = new ChannelMessage
-            {
-                Id = originalMessageId ?? context.MessageId!,
-                ChannelId = context.ChannelId!,
-                ClanId = context.ClanId!,
-                SenderId = context.CurrentUserId,
-                Username = "",
-                DisplayName = "",
-                ChannelLabel = ""
-            }
+            OriginalMessage = BuildOriginalMessage(context, originalMessageId ?? context.MessageId!, senderId, commandType)
         });
         return response;
     }
@@ -1065,4 +1522,51 @@ public class TaskComponentHandler : IComponentHandler
     private static EPriorityLevel? ParsePriority(string? value) => value switch { "High" => EPriorityLevel.High, "Medium" => EPriorityLevel.Medium, "Low" => EPriorityLevel.Low, _ => null };
     private static ETaskStatus? ParseStatus(string? value) => value switch { "ToDo" => ETaskStatus.ToDo, "Doing" => ETaskStatus.Doing, "Review" => ETaskStatus.Review, "Completed" => ETaskStatus.Completed, "Cancelled" => ETaskStatus.Cancelled, _ => null };
 
+    private ChannelMessage BuildOriginalMessage(ComponentContext context, string messageId, string? senderId, string? commandType = null)
+    {
+        var userIdToLookup = senderId ?? context.CurrentUserId;
+        var commandText = !string.IsNullOrWhiteSpace(commandType) ? $"!task {commandType}" : "!task create";
+        
+        var user = _client.Clans.Get(context.ClanId!)?.Users.Get(userIdToLookup!);
+        
+        if (user != null)
+        {
+            _logger.LogInformation(
+                "[BuildOriginalMessage] Found user in cache: {Username} ({UserId})",
+                user.Username,
+                userIdToLookup);
+            
+            return new ChannelMessage
+            {
+                Id = messageId,
+                ChannelId = context.ChannelId!,
+                ChannelLabel = "",
+                SenderId = userIdToLookup,
+                Username = user.Username,
+                DisplayName = user.DisplayName,
+                ClanNick = user.ClanNick,
+                ClanAvatar = user.ClanAvatar,
+                Content = new ChannelMessageContent { Text = commandText }, 
+                ClanId = context.ClanId
+            };
+        }
+        
+        _logger.LogWarning(
+            "[BuildOriginalMessage] User {UserId} not found in cache, using minimal message info",
+            userIdToLookup);
+        
+        return new ChannelMessage
+        {
+            Id = messageId,
+            ChannelId = context.ChannelId!,
+            ChannelLabel = "",
+            SenderId = userIdToLookup ?? "",
+            Username = "",
+            DisplayName = "",
+            ClanNick = "",
+            ClanAvatar = "",
+            Content = new ChannelMessageContent { Text = commandText }, 
+            ClanId = context.ClanId
+        };
+    }
 }
