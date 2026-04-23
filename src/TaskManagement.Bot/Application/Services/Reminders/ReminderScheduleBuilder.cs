@@ -362,8 +362,18 @@ public static class ReminderScheduleBuilder
         return nextReportAtUtc;
     }
 
-    public static bool IsRepeatRule(ReminderRule? rule) =>
-        rule is not null && (rule.IsRepeat || rule.TriggerType == EReminderTriggerType.Repeat);
+    public static bool IsRepeatRule(ReminderRule? rule)
+    {
+        if (rule is null)
+            return false;
+
+        return rule.TriggerType switch
+        {
+            EReminderTriggerType.Repeat => true,
+            EReminderTriggerType.AfterDeadline => rule.IsRepeat,
+            _ => false
+        };
+    }
 
     public static TimeSpan? GetRepeatInterval(ReminderRule? rule)
     {

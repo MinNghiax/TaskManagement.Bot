@@ -72,13 +72,14 @@ public class ReminderService : IReminderProcessor
         }
 
         var reminders = await _reminderRepository.GetDueAsync(now, cancellationToken);
+        var dueTriggerFlagsByTask = BuildDueTriggerFlagsByTask(reminders);
         var processedReminderCount = 0;
 
         foreach (var reminder in reminders)
         {
             try
             {
-                await ProcessReminderAsync(reminder, now, cancellationToken);
+                await ProcessReminderAsync(reminder, now, dueTriggerFlagsByTask, cancellationToken);
                 await _reminderRepository.SaveAsync(cancellationToken);
                 processedReminderCount++;
             }
@@ -143,7 +144,11 @@ public class ReminderService : IReminderProcessor
         return completedCount;
     }
 
-    private async Task ProcessReminderAsync(Reminder reminder, DateTime now, CancellationToken cancellationToken)
+    private async Task ProcessReminderAsync(
+        Reminder reminder,
+        DateTime now,
+        IReadOnlyDictionary<int, DueTriggerFlags> dueTriggerFlagsByTask,
+        CancellationToken cancellationToken)
     {
         var task = reminder.Task;
         if (task == null)
@@ -174,14 +179,55 @@ public class ReminderService : IReminderProcessor
             return;
         }
 
+        if (reminder.Status != EReminderStatus.Pending)
+            return;
+
         TransitionTaskToLateIfNeeded(task, reminder, now);
 
         if (reminder.Status != EReminderStatus.Pending)
             return;
 
+        if (HandleRepeatConflict(reminder, task, now, dueTriggerFlagsByTask))
+            return;
+
         await _notificationSender.SendAsync(reminder, cancellationToken);
 
         ReminderScheduleBuilder.ApplyNextSchedule(reminder, now);
+    }
+
+    private static bool HandleRepeatConflict(
+        Reminder reminder,
+        TaskItem task,
+        DateTime now,
+        IReadOnlyDictionary<int, DueTriggerFlags> dueTriggerFlagsByTask)
+    {
+        if (reminder.ReminderRule?.TriggerType != EReminderTriggerType.Repeat)
+            return false;
+
+        if (!dueTriggerFlagsByTask.TryGetValue(reminder.TaskId, out var flags) || !flags.HasRepeat)
+            return false;
+
+        if (flags.HasOnDeadline || flags.HasAfterDeadline)
+        {
+            reminder.Status = EReminderStatus.Cancelled;
+            reminder.NextTriggerAt = null;
+            reminder.UpdatedAt = now;
+            reminder.StateSnapshot = task.Status;
+
+            if (reminder.ReminderRule is not null)
+            {
+                reminder.ReminderRule.TaskStatus = task.Status;
+                reminder.ReminderRule.UpdatedAt = now;
+            }
+
+            return true;
+        }
+
+        if (!flags.HasBeforeDeadline)
+            return false;
+
+        ReminderScheduleBuilder.ApplyNextSchedule(reminder, now);
+        return true;
     }
 
     private static void AutoCompleteReviewTask(TaskItem task, DateTime now)
@@ -236,7 +282,11 @@ public class ReminderService : IReminderProcessor
             reminder.ReminderRule.UpdatedAt = changedAtUtc;
         }
 
-        CancelPendingRepeatReminders(task, changedAtUtc);
+        var excludedReminder = reminder.ReminderRule?.TriggerType == EReminderTriggerType.AfterDeadline
+            ? reminder
+            : null;
+
+        CancelPendingRepeatReminders(task, changedAtUtc, excludedReminder);
     }
 
     private static bool HasReminderReachedDeadline(Reminder reminder, DateTime deadline)
@@ -256,11 +306,15 @@ public class ReminderService : IReminderProcessor
             _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
         };
 
-    private static void CancelPendingRepeatReminders(TaskItem task, DateTime changedAtUtc)
+    private static void CancelPendingRepeatReminders(
+        TaskItem task,
+        DateTime changedAtUtc,
+        Reminder? excludedReminder = null)
     {
         foreach (var pendingRepeatReminder in task.Reminders.Where(r =>
                      r.Status == EReminderStatus.Pending
-                     && ReminderScheduleBuilder.IsRepeatRule(r.ReminderRule)))
+                     && !ReferenceEquals(r, excludedReminder)
+                     && r.ReminderRule?.TriggerType == EReminderTriggerType.Repeat))
         {
             pendingRepeatReminder.Status = EReminderStatus.Cancelled;
             pendingRepeatReminder.NextTriggerAt = null;
@@ -273,6 +327,51 @@ public class ReminderService : IReminderProcessor
                 pendingRepeatReminder.ReminderRule.UpdatedAt = changedAtUtc;
             }
         }
+    }
+
+    private static Dictionary<int, DueTriggerFlags> BuildDueTriggerFlagsByTask(IEnumerable<Reminder> reminders)
+    {
+        var flagsByTask = new Dictionary<int, DueTriggerFlags>();
+
+        foreach (var reminder in reminders)
+        {
+            if (reminder.Status != EReminderStatus.Pending)
+                continue;
+
+            var taskId = reminder.TaskId;
+            if (taskId <= 0)
+                continue;
+
+            flagsByTask.TryGetValue(taskId, out var flags);
+
+            switch (reminder.ReminderRule?.TriggerType)
+            {
+                case EReminderTriggerType.BeforeDeadline:
+                    flags.HasBeforeDeadline = true;
+                    break;
+                case EReminderTriggerType.OnDeadline:
+                    flags.HasOnDeadline = true;
+                    break;
+                case EReminderTriggerType.AfterDeadline:
+                    flags.HasAfterDeadline = true;
+                    break;
+                case EReminderTriggerType.Repeat:
+                    flags.HasRepeat = true;
+                    break;
+            }
+
+            flagsByTask[taskId] = flags;
+        }
+
+        return flagsByTask;
+    }
+
+    private struct DueTriggerFlags
+    {
+        public bool HasBeforeDeadline { get; set; }
+        public bool HasOnDeadline { get; set; }
+        public bool HasAfterDeadline { get; set; }
+        public bool HasRepeat { get; set; }
     }
 
 }

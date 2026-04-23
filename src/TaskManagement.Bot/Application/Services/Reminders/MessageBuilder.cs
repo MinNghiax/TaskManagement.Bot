@@ -31,7 +31,7 @@ public static class MessageBuilder
             BuildField("📁 Project", Normalize(task?.Team?.Project?.Name, NoneValue), inline: true),
             BuildField("👥 Team", Normalize(task?.Team?.Name, NoneValue), inline: true),
             BuildField("📌 Tiêu đề", Normalize(task?.Title, UnknownValue), inline: false),
-            BuildField("⏰ Deadline", FormatDateTime(task?.DueDate), inline: true),
+            BuildField("⏰ Deadline", FormatDateTime(task?.DueDate, timeZone), inline: true),
             BuildField("📊 Trạng thái", GetStatusText(task?.Status), inline: true),
             BuildField("⚡ Độ ưu tiên", GetPriorityText(task?.Priority), inline: true),
             BuildField("🔔 Loại reminder", FormatRule(rule), inline: false),
