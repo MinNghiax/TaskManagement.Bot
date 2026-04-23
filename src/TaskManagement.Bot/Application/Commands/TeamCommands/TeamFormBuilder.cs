@@ -4,7 +4,7 @@ namespace TaskManagement.Bot.Application.Commands.TeamCommands;
 
 public static class TeamFormBuilder
 {
-    public static ChannelMessageContent BuildTeamForm(int memberCount = 3)
+    public static ChannelMessageContent BuildTeamForm(int memberCount = 2, string? originalMessageId = null, string? senderId = null)
     {
         var fields = new List<object>
         {
@@ -75,24 +75,36 @@ public static class TeamFormBuilder
 
         if (memberCount < 6)
         {
+            var addMemberId = string.IsNullOrWhiteSpace(originalMessageId) 
+                ? $"ADD_MEMBER|{memberCount}" 
+                : $"ADD_MEMBER|{memberCount}|{originalMessageId}|{senderId}";
+            
             components.Add(new
             {
-                id = $"ADD_MEMBER|{memberCount}",
+                id = addMemberId,
                 type = 1,
                 component = new { label = "➕ Thêm thành viên", style = 2 }
             });
         }
 
+        var createTeamId = string.IsNullOrWhiteSpace(originalMessageId) 
+            ? "CREATE_TEAM" 
+            : $"CREATE_TEAM|{originalMessageId}|{senderId}";
+        
+        var cancelTeamId = string.IsNullOrWhiteSpace(originalMessageId) 
+            ? "CANCEL_TEAM" 
+            : $"CANCEL_TEAM|{originalMessageId}|{senderId}";
+
         components.Add(new
         {
-            id = "CREATE_TEAM",
+            id = createTeamId,
             type = 1,
             component = new { label = "✅ Tạo Team", style = 3 }
         });
 
         components.Add(new
         {
-            id = "CANCEL_TEAM",
+            id = cancelTeamId,
             type = 1,
             component = new { label = "❌ Hủy", style = 4 }
         });
@@ -107,140 +119,13 @@ public static class TeamFormBuilder
                     description = "Vui lòng điền thông tin bên dưới:",
                     color = "#5865F2",
                     fields = fields.ToArray(),
-                    footer = new { text = "Team cần tối thiểu 3, tối đa 6 thành viên" }
+                    footer = new { text = "Team cần tối thiểu 1 thành viên, tối đa 6 thành viên" }
                 }
             },
             Components = new[] { new { components = components.ToArray() } }
         };
     }
 
-    public static ChannelMessageContent BuildTeamFormWithMembers(
-    List<(string Id, string Name)> members,
-    int memberCount = 3)
-    {
-        var fields = new List<object>
-        {
-            new
-            {
-                name = "📁 Tên Project",
-                inputs = new
-                {
-                    id = "project_name",
-                    type = 3,
-                    component = new
-                    {
-                        placeholder = "Nhập tên project (tối đa 50 ký tự)",
-                        defaultValue = "",
-                        type = "text"
-                    }
-                }
-            },
-            new
-            {
-                name = "👥 Tên Team",
-                inputs = new
-                {
-                    id = "team_name",
-                    type = 3,
-                    component = new
-                    {
-                        placeholder = "Nhập tên team (tối đa 20 ký tự)",
-                        defaultValue = "",
-                        type = "text"
-                    }
-                }
-            }
-        };
-
-            // MEMBER DROPDOWN
-            for (var i = 1; i <= memberCount; i++)
-            {
-                fields.Add(new
-                {
-                    name = $"👤 Thành viên {i}",
-                    inputs = new
-                    {
-                        id = $"member_{i}",
-                        type = 2,
-                        component = new
-                        {
-                            placeholder = "Chọn thành viên",
-                            options = (members ?? new List<(string Id, string Name)>())
-                                .Select(m => new
-                                {
-                                    label = m.Name,
-                                    value = m.Id
-                                }).ToArray(),
-                            custom_id = $"member_{i}"
-                        }
-                    }
-                });
-            }
-
-            // BUTTONS
-            var components = new List<object>();
-
-            if (memberCount < 6)
-            {
-                components.Add(new
-                {
-                    id = $"ADD_MEMBER|{memberCount}",
-                    type = 1,
-                    component = new
-                    {
-                        label = "➕ Thêm thành viên",
-                        style = 2
-                    }
-                });
-            }
-
-            components.Add(new
-            {
-                id = "CREATE_TEAM",
-                type = 1,
-                component = new
-                {
-                    label = "✅ Tạo Team",
-                    style = 3
-                }
-            });
-
-            components.Add(new
-            {
-                id = "CANCEL_TEAM",
-                type = 1,
-                component = new
-                {
-                    label = "❌ Hủy",
-                    style = 4
-                }
-            });
-
-            return new ChannelMessageContent
-            {
-                Embed = new[]
-                {
-                new
-                {
-                    title = "📋 Tạo Project và Team",
-                    description = "Vui lòng điền thông tin bên dưới:",
-                    color = "#5865F2",
-                    fields = fields.ToArray(),
-                    footer = new
-                    {
-                        text = "Team cần tối thiểu 3, tối đa 6 thành viên"
-                    }
-                }
-            },
-                Components = new[]
-                {
-                new
-                {
-                    components = components.ToArray()
-                }
-            }
-        };
-    }
 
     public static ChannelMessageContent BuildTeamFormWithError(string error, int memberCount = 3)
     {
@@ -256,15 +141,23 @@ public static class TeamFormBuilder
                 description = $"❌ {error}\n\nVui lòng điền lại thông tin:",
                 color = "#ED4245",
                 fields = ((dynamic)form.Embed![0]).fields,
-                footer = new { text = "Team cần tối thiểu 3, tối đa 6 thành viên" }
+                footer = new { text = "Team cần tối thiểu 1 thành viên, tối đa 6 thành viên" }
             }
         },
             Components = form.Components
         };
     }
 
-    public static ChannelMessageContent BuildConfirmForm(string requestId, string teamName, string projectName, string userId)
+    public static ChannelMessageContent BuildConfirmForm(string requestId, string teamName, string projectName, string userId, string? originalMessageId = null, string? originalSenderId = null)
     {
+        var acceptId = string.IsNullOrWhiteSpace(originalMessageId)
+            ? $"ACCEPT|{requestId}|{userId}"
+            : $"ACCEPT|{requestId}|{userId}|{originalMessageId}|{originalSenderId}";
+        
+        var rejectId = string.IsNullOrWhiteSpace(originalMessageId)
+            ? $"REJECT|{requestId}|{userId}"
+            : $"REJECT|{requestId}|{userId}|{originalMessageId}|{originalSenderId}";
+
         return new ChannelMessageContent
         {
             Embed = new[]
@@ -285,13 +178,13 @@ public static class TeamFormBuilder
                     {
                         new
                         {
-                            id = $"ACCEPT|{requestId}|{userId}",
+                            id = acceptId,
                             type = 1,
                             component = new { label = "✅ Chấp nhận", style = 3 }
                         },
                         new
                         {
-                            id = $"REJECT|{requestId}|{userId}",
+                            id = rejectId,
                             type = 1,
                             component = new { label = "❌ Từ chối", style = 4 }
                         }
@@ -327,8 +220,8 @@ public static class TeamFormBuilder
             }
         }
 
-        if (members.Count < 1)
-            return (false, $"❌ Team phải có ít nhất 3 thành viên (hiện tại: {members.Count})", new List<string>());
+        if (members.Count < 2)
+            return (false, $"❌ Team phải có ít nhất 2 thành viên (hiện tại: {members.Count})", new List<string>());
 
         if (members.Count > 6)
             return (false, $"❌ Team tối đa 6 thành viên (hiện tại: {members.Count})", new List<string>());

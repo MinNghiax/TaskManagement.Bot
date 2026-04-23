@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Mezon.Sdk;
+using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Infrastructure.Entities;
 
 namespace TaskManagement.Bot.Application.Services;
@@ -11,17 +12,20 @@ public class TeamWorkflowService : ITeamWorkflowService
     private readonly IProjectService _projectService;
     private readonly ITeamService _teamService;
     private readonly IPendingTeamRequestService _pendingTeamRequestService;
+    private readonly MezonClient _client;
 
     public TeamWorkflowService(
         ILogger<TeamWorkflowService> logger,
         IProjectService projectService,
         ITeamService teamService,
-        IPendingTeamRequestService pendingTeamRequestService)
+        IPendingTeamRequestService pendingTeamRequestService,
+        MezonClient client)
     {
         _logger = logger;
         _projectService = projectService;
         _teamService = teamService;
         _pendingTeamRequestService = pendingTeamRequestService;
+        _client = client;
     }
 
     public async Task<CreateTeamRequestResult> CreateRequestAsync(CreateTeamRequestInput input, CancellationToken cancellationToken = default)
@@ -92,20 +96,21 @@ public class TeamWorkflowService : ITeamWorkflowService
         };
     }
 
-    public Task<TeamRequestActionResult> AcceptAsync(string requestId, string expectedUserId, string currentUserId, CancellationToken cancellationToken = default)
+    public Task<TeamRequestActionResult> AcceptAsync(string requestId, string expectedUserId, string currentUserId, string clanId, CancellationToken cancellationToken = default)
     {
-        return ProcessDecisionAsync(requestId, expectedUserId, currentUserId, accepted: true, cancellationToken);
+        return ProcessDecisionAsync(requestId, expectedUserId, currentUserId, clanId, accepted: true, cancellationToken);
     }
 
-    public Task<TeamRequestActionResult> RejectAsync(string requestId, string expectedUserId, string currentUserId, CancellationToken cancellationToken = default)
+    public Task<TeamRequestActionResult> RejectAsync(string requestId, string expectedUserId, string currentUserId, string clanId, CancellationToken cancellationToken = default)
     {
-        return ProcessDecisionAsync(requestId, expectedUserId, currentUserId, accepted: false, cancellationToken);
+        return ProcessDecisionAsync(requestId, expectedUserId, currentUserId, clanId, accepted: false, cancellationToken);
     }
 
     private async Task<TeamRequestActionResult> ProcessDecisionAsync(
         string requestId,
         string expectedUserId,
         string currentUserId,
+        string clanId,
         bool accepted,
         CancellationToken cancellationToken)
     {
@@ -147,13 +152,16 @@ public class TeamWorkflowService : ITeamWorkflowService
             };
         }
 
+        // Lấy display name của user
+        var userName = GetDisplayName(currentUserId, clanId);
+
         if (!accepted)
         {
             await _pendingTeamRequestService.RemoveAsync(requestId, cancellationToken);
             return new TeamRequestActionResult
             {
                 Success = true,
-                Message = $"<@{currentUserId}> đã từ chối. Yêu cầu tạo team bị hủy."
+                Message = $"{userName} đã từ chối. Yêu cầu tạo team bị hủy."
             };
         }
 
@@ -162,7 +170,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = true,
-                Message = $"<@{currentUserId}> đã xác nhận trước đó."
+                Message = $"{userName} đã xác nhận trước đó."
             };
         }
 
@@ -174,7 +182,7 @@ public class TeamWorkflowService : ITeamWorkflowService
             return new TeamRequestActionResult
             {
                 Success = true,
-                Message = $"<@{currentUserId}> đã xác nhận ({request.AcceptedUserIds.Count}/{request.MemberUserIds.Count})."
+                Message = $"{userName} đã xác nhận ({request.AcceptedUserIds.Count}/{request.MemberUserIds.Count})."
             };
         }
 
@@ -215,5 +223,18 @@ public class TeamWorkflowService : ITeamWorkflowService
             TeamCreated = true,
             Message = $"Team `{request.TeamName}` đã tạo thành công."
         };
+    }
+
+    private string GetDisplayName(string userId, string clanId)
+    {
+        var user = _client.Clans.Get(clanId)?.Users.Get(userId);
+
+        if (user == null)
+            return $"User-{userId.Substring(0, Math.Min(4, userId.Length))}";
+
+        return user.DisplayName
+            ?? user.ClanNick
+            ?? user.Username
+            ?? $"User-{userId.Substring(0, Math.Min(4, userId.Length))}";
     }
 }

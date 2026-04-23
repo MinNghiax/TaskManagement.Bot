@@ -26,5 +26,6 @@ public interface ITaskService
     Task<List<TaskDto>> GetTasksByTeamAsync(int teamId, CancellationToken ct = default);
 
     Task<List<TaskDto>> GetByAssigneeAndTeamAsync(string assignee, int teamId, CancellationToken ct);
+    Task<List<TaskDto>> GetByAssigneeAndTeamsAsync(string userId, List<int> teamIds, CancellationToken ct);
 }
 

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using TaskManagement.Bot.Application.DTOs;
@@ -209,6 +210,23 @@ public class InMemoryTaskService : ITaskService
                 t.AssignedTo == assignee &&
                 t.TeamId == teamId
             )
+            .ToList();
+
+        return Task.FromResult(tasks);
+    }
+
+    public Task<List<TaskDto>> GetByAssigneeAndTeamsAsync(
+    string userId,
+    List<int> teamIds,
+    CancellationToken ct)
+    {
+        var tasks = _store.Values
+            .Where(t =>
+                t.AssignedTo == userId &&
+                t.TeamId.HasValue &&
+                teamIds.Contains(t.TeamId.Value)
+            )
+            .OrderByDescending(t => t.CreatedAt)
             .ToList();
 
         return Task.FromResult(tasks);

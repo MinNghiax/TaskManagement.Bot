@@ -47,7 +47,7 @@ public class TaskCommandHandler : ICommandHandler
             "list" => await HandleListAsync(parts, message.SenderId, message.ClanId, ct),
             "view" => await HandleViewAsync(message, message.SenderId, ct),
             "update" => await HandleUpdateEntry(parts, message, ct),
-            "delete" => await HandleDeletePrompt(parts, message.SenderId, ct),
+            "delete" => await HandleDeletePrompt(message, ct),
             _ => new CommandResponse(GetHelpText())
         };
     }
@@ -58,12 +58,13 @@ public class TaskCommandHandler : ICommandHandler
             return new CommandResponse("❌ Không xác định được người dùng");
 
         var projects = await _projectService.GetProjectsByUserAsync(userId);
-        var teams = await _teamService.GetAllAsync();
-        var members = await _teamService.GetAllMembersAsync();
         if (projects.Count == 0)
             return new CommandResponse("❌ Chưa có project nào. Hãy tạo project bằng `!team init`");
 
-        return new CommandResponse(TaskFormBuilder.BuildSelectProject(projects, message.Id));
+        Console.WriteLine($"[HandleCreateAsync] message.Id = {message.Id}");
+        Console.WriteLine($"[HandleCreateAsync] Is GUID? {Guid.TryParse(message.Id, out _)}");
+
+        return new CommandResponse(TaskFormBuilder.BuildSelectProject(projects, message.Id, userId, "create"));
     }
 
     private async Task<CommandResponse> HandleListAsync(
@@ -110,8 +111,8 @@ public class TaskCommandHandler : ICommandHandler
         {
             Id = t.Id,
             Title = t.Title,
-            AssignedTo = GetDisplayName(t.AssignedTo, clanId!),
-            CreatedBy = GetDisplayName(t.CreatedBy, clanId!),
+            AssignedTo = GetDisplayName(t.AssignedTo!, clanId!),
+            CreatedBy = GetDisplayName(t.CreatedBy!, clanId!),
             Status = t.Status,
             Priority = t.Priority,
             DueDate = t.DueDate,
@@ -119,14 +120,17 @@ public class TaskCommandHandler : ICommandHandler
             TeamId = t.TeamId
         }).ToList();
 
-        var content = TaskFormBuilder.BuildTaskList(mappedTasks, userId, teams);
+        var projects = await _projectService.GetAllProjectsAsync();
+        var displayName = GetDisplayName(userId, clanId!);
+
+        var content = TaskFormBuilder.BuildTaskList(mappedTasks, displayName, clanId!, teams, projects);
 
         return new CommandResponse(content);
     }
 
     private async Task<CommandResponse> HandleViewAsync(ChannelMessage message, string? userId, CancellationToken ct)
     {
-        var projects = await _projectService.GetProjectsByMemberAsync(userId);
+        var projects = await _projectService.GetProjectsByMemberAsync(userId!);
 
         if (projects.Count == 0)
             return new CommandResponse("❌ Chưa có project");
@@ -135,18 +139,27 @@ public class TaskCommandHandler : ICommandHandler
             TaskFormBuilder.BuildViewSelectProject(projects, message.Id)
         );
     }
-
+     
     private async Task<CommandResponse> HandleUpdateEntry(
-        string[] parts,
-        ChannelMessage message,
-        CancellationToken ct)
+    string[] parts,
+    ChannelMessage message,
+    CancellationToken ct)
     {
         var userId = message.SenderId;
 
         if (string.IsNullOrWhiteSpace(userId))
             return new CommandResponse("❌ Không xác định user");
 
-        var mode = parts.Length >= 3 ? parts[2].ToLower() : "auto";
+        var mode = parts.Length >= 3 ? parts[2].ToLower() : "";
+
+        if (mode != "pm" && mode != "member")
+        {
+            return new CommandResponse("""
+                ❗ Dùng:
+                - !task update pm
+                - !task update member
+                """);
+        }
 
         var teams = await _teamService.GetTeamsByMemberAsync(userId);
 
@@ -155,8 +168,7 @@ public class TaskCommandHandler : ICommandHandler
 
         if (mode == "pm")
         {
-            bool isPM = false;
-
+            var isPM = false;
             foreach (var team in teams)
             {
                 if (await _teamService.IsPM(userId, team.Id))
@@ -175,67 +187,25 @@ public class TaskCommandHandler : ICommandHandler
                 return new CommandResponse("❌ Bạn chưa có project");
 
             return new CommandResponse(
-                TaskFormBuilder.BuildUpdateSelectProject(projects, message.Id)
+                TaskFormBuilder.BuildUpdateSelectProject(projects, message.Id, userId)
             );
         }
 
-        if (mode == "member")
-        {
-            var tasks = new List<TaskDto>();
+        // mode == "member"
+        var memberProjects = await _projectService.GetProjectsByMemberAsync(userId);
 
-            foreach (var team in teams)
-            {
-                var myTasks = await _taskService.GetByAssigneeAndTeamAsync(userId, team.Id, ct);
-                tasks.AddRange(myTasks);
-            }
+        if (memberProjects.Count == 0)
+            return new CommandResponse("❌ Bạn chưa có project nào");
 
-            tasks = tasks
-                .GroupBy(t => t.Id)
-                .Select(g => g.First())
-                .ToList();
-
-            if (tasks.Count == 0)
-                return new CommandResponse("❌ Bạn chưa có task nào");
-
-            return new CommandResponse(
-                TaskFormBuilder.BuildMemberUpdateTaskSelect(tasks, message.Id)
-            );
-        }
-
-        if (mode == "my")
-        {
-            var tasks = new List<TaskDto>();
-
-            foreach (var team in teams)
-            {
-                var teamTasks = await _taskService.GetTasksByTeamAsync(team.Id, ct);
-
-                //  chỉ lấy task do PM tạo
-                var myCreatedTasks = teamTasks
-                    .Where(t => t.CreatedBy == userId)
-                    .ToList();
-
-                tasks.AddRange(myCreatedTasks);
-            }
-
-            tasks = tasks
-                .GroupBy(t => t.Id)
-                .Select(g => g.First())
-                .ToList();
-
-            if (tasks.Count == 0)
-                return new CommandResponse("❌ Bạn chưa tạo task nào");
-
-            return new CommandResponse(
-                TaskFormBuilder.BuildMemberUpdateTaskSelect(tasks, message.Id)
-            );
-        }
-
-        return new CommandResponse("❗ Dùng:\n- !task update pm\n- !task update member");
+        return new CommandResponse(
+            TaskFormBuilder.BuildMemberUpdateSelectProject(memberProjects, message.Id, userId)
+        );
     }
 
-    private async Task<CommandResponse> HandleDeletePrompt(string[] parts, string? userId, CancellationToken ct)
+    private async Task<CommandResponse> HandleDeletePrompt(ChannelMessage message, CancellationToken ct)
     {
+        var userId = message.SenderId;
+        
         if (string.IsNullOrWhiteSpace(userId))
             return new CommandResponse("❌ Không xác định user");
 
@@ -246,7 +216,7 @@ public class TaskCommandHandler : ICommandHandler
             return new CommandResponse("❌ Bạn chưa có project nào");
 
         return new CommandResponse(
-            TaskFormBuilder.BuildDeleteSelectProject(projects, Guid.NewGuid().ToString())
+            TaskFormBuilder.BuildDeleteSelectProject(projects, message.Id, userId)
         );
     }
 

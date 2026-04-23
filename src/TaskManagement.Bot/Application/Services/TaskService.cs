@@ -355,4 +355,22 @@ public class TaskService : ITaskService
             })
             .ToListAsync(ct);
     }
+
+    public async Task<List<TaskDto>> GetByAssigneeAndTeamsAsync(
+    string userId,
+    List<int> teamIds,
+    CancellationToken ct)
+    {
+        var tasks = await _context.TaskItems
+            .Where(t =>
+                t.AssignedTo == userId &&
+                t.TeamId.HasValue &&
+                teamIds.Contains(t.TeamId.Value) &&
+                !t.IsDeleted
+            )
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync(ct);
+
+        return tasks.Select(MapToDto).ToList();
+    }
 }

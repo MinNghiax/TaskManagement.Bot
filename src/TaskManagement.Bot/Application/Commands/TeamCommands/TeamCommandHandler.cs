@@ -25,24 +25,10 @@ public class TeamCommandHandler : ICommandHandler
         if (parts.Length < 2)
             return Task.FromResult(new CommandResponse(GetHelpText()));
 
-        //return parts[1].ToLowerInvariant() switch
-        //{
-        //    "init" => Task.FromResult(new CommandResponse(TeamFormBuilder.BuildTeamForm(1))),
-        //    _ => Task.FromResult(new CommandResponse(GetHelpText()))
-        //};
-        var users = _client.Clans.Get(message.ClanId!)?.Users.GetAll();
-
-        var members = users?
-            .Select(u => (
-                Id: u.Id,
-                Name: u.DisplayName ?? u.ClanNick ?? u.Username ?? $"User-{u.Id[..4]}"
-            ))
-            .ToList() ?? new List<(string, string)>();
-
         return parts[1].ToLowerInvariant() switch
         {
             "init" => Task.FromResult(new CommandResponse(
-                TeamFormBuilder.BuildTeamFormWithMembers(members, 1))),
+                TeamFormBuilder.BuildTeamForm(2, message.Id, message.SenderId))),
             _ => Task.FromResult(new CommandResponse(GetHelpText()))
         };
     }
