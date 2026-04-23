@@ -300,7 +300,6 @@ public class TeamComponentHandler : IComponentHandler
         if (currentCount >= 6)
             return BuildTextResponse(context, "❌ Đã đạt giới hạn 6 thành viên");
 
-        // Format: ADD_MEMBER|memberCount|originalMessageId|senderId
         string? originalMessageId = parts.Length >= 3 ? parts[2] : null;
         string? senderId = parts.Length >= 4 ? parts[3] : null;
 
