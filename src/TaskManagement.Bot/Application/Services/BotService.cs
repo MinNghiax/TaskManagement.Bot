@@ -238,6 +238,24 @@ public class BotService : IBotService
 
         var references = BuildMessageReferences(replyToMessageId, originalMessage);
 
+        _logger.LogInformation(
+            "[SEND_FORM] ClanId={ClanId} ChannelId={ChannelId} Mode={Mode} IsPublic={IsPublic} ReplyTo={ReplyToMessageId} HasOriginalMessage={HasOriginalMessage}",
+            clanId,
+            channelId,
+            mode,
+            finalIsPublic,
+            replyToMessageId,
+            originalMessage != null);
+
+        if (originalMessage != null)
+        {
+            _logger.LogInformation(
+                "[SEND_FORM] OriginalMessage: SenderId={SenderId} Username={Username} DisplayName={DisplayName}",
+                originalMessage.SenderId,
+                originalMessage.Username,
+                originalMessage.DisplayName);
+        }
+
         await _client.SendMessageAsync(
             clanId: clanId,
             channelId: channelId,
@@ -252,8 +270,36 @@ public class BotService : IBotService
     {
         if (string.IsNullOrEmpty(replyToMessageId) || originalMessage == null)
         {
+            Console.WriteLine($"[BuildMessageReferences] Skipping: replyToMessageId={replyToMessageId}, originalMessage={originalMessage != null}");
             return null;
         }
+
+        // Parse content text - it might be JSON format
+        var contentText = originalMessage.Content?.Text ?? "";
+        if (!string.IsNullOrEmpty(contentText) && contentText.StartsWith("{"))
+        {
+            try
+            {
+                using var json = System.Text.Json.JsonDocument.Parse(contentText);
+                if (json.RootElement.TryGetProperty("t", out var textNode))
+                {
+                    contentText = textNode.GetString() ?? contentText;
+                }
+            }
+            catch
+            {
+                // Keep original if parsing fails
+            }
+        }
+
+        Console.WriteLine($"[BuildMessageReferences] Creating reference:");
+        Console.WriteLine($"  MessageId: {replyToMessageId}");
+        Console.WriteLine($"  SenderId: {originalMessage.SenderId}");
+        Console.WriteLine($"  Username: {originalMessage.Username}");
+        Console.WriteLine($"  DisplayName: {originalMessage.DisplayName}");
+        Console.WriteLine($"  ClanNick: {originalMessage.ClanNick}");
+        Console.WriteLine($"  ClanAvatar: {originalMessage.ClanAvatar}");
+        Console.WriteLine($"  Content (parsed): {contentText}");
 
         return new[]
         {
@@ -266,7 +312,7 @@ public class BotService : IBotService
                 MessageSenderDisplayName = originalMessage.DisplayName ?? "",
                 MessageSenderClanNick = originalMessage.ClanNick ?? "",
                 MesagesSenderAvatar = originalMessage.ClanAvatar ?? "",
-                Content = originalMessage.Content?.Text ?? "",
+                Content = contentText,
                 HasAttachment = originalMessage.Attachments?.Any() ?? false,
                 RefType = 0
             }
@@ -351,6 +397,11 @@ public class BotService : IBotService
 
                 if (response.Content != null)
                 {
+                    _logger.LogInformation(
+                        "[SEND] Sending form response. ReplyTo={ReplyTo} MessageSenderId={SenderId} Username={Username}",
+                        message.Id,
+                        message.SenderId,
+                        message.Username);
                     await SendFormMessageAsync(message.ClanId, message.ChannelId, response.Content, finalMode, finalIsPublic, message.Id, message);
                 }
                 else if (response.Embed != null)
@@ -588,12 +639,10 @@ public class BotService : IBotService
             return null;
         }
 
-        return parts[0].Equals("CREATE_TEAM", StringComparison.OrdinalIgnoreCase)
-            || parts[0].Equals("CANCEL_TEAM", StringComparison.OrdinalIgnoreCase)
-            ? parts[1]
-            : parts[0].Equals("ACCEPT", StringComparison.OrdinalIgnoreCase)
-                || parts[0].Equals("REJECT", StringComparison.OrdinalIgnoreCase)
-                ? parts.Length >= 4 ? parts[3] : null
-                : null;
+        // ACCEPT and REJECT may have ClanId in customId
+        // Old format: ACCEPT|requestId|userId (no ClanId)
+        // New format: ACCEPT|requestId|userId|originalMessageId (no ClanId either)
+        // So we don't extract ClanId from ACCEPT/REJECT anymore
+        return null;
     }
 }

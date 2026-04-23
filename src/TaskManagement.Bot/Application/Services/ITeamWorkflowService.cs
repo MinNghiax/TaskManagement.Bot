@@ -3,8 +3,8 @@ namespace TaskManagement.Bot.Application.Services;
 public interface ITeamWorkflowService
 {
     Task<CreateTeamRequestResult> CreateRequestAsync(CreateTeamRequestInput input, CancellationToken cancellationToken = default);
-    Task<TeamRequestActionResult> AcceptAsync(string requestId, string expectedUserId, string currentUserId, CancellationToken cancellationToken = default);
-    Task<TeamRequestActionResult> RejectAsync(string requestId, string expectedUserId, string currentUserId, CancellationToken cancellationToken = default);
+    Task<TeamRequestActionResult> AcceptAsync(string requestId, string expectedUserId, string currentUserId, string clanId, CancellationToken cancellationToken = default);
+    Task<TeamRequestActionResult> RejectAsync(string requestId, string expectedUserId, string currentUserId, string clanId, CancellationToken cancellationToken = default);
 }
 
 public sealed record CreateTeamRequestInput
