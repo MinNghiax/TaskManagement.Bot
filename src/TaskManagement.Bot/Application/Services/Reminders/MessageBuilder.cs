@@ -14,7 +14,8 @@ public static class MessageBuilder
     public static ChannelMessageContent BuildReminderNotification(
         Reminder reminder,
         string? assigneeUsername,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        DateTime? sentAtUtc = null)
     {
         ArgumentNullException.ThrowIfNull(reminder);
 
@@ -25,6 +26,9 @@ public static class MessageBuilder
         var triggerType = rule?.TriggerType;
         var taskId = task?.Id ?? reminder.TaskId;
         var projectTitle = Normalize(task?.Title, $"Task #{taskId}");
+
+        var displayReminderTime = sentAtUtc ?? reminder.NextTriggerAt ?? reminder.TriggerAt;
+
         var fields = new List<object>
         {
             BuildField("👤 Người được giao", Normalize(assigneeUsername, UnknownUserValue), inline: true),
@@ -35,7 +39,7 @@ public static class MessageBuilder
             BuildField("📊 Trạng thái", GetStatusText(task?.Status), inline: true),
             BuildField("⚡ Độ ưu tiên", GetPriorityText(task?.Priority), inline: true),
             BuildField("🔔 Loại reminder", FormatRule(rule), inline: false),
-            BuildField("🕒 Thời điểm nhắc", FormatDateTime(reminder.NextTriggerAt ?? reminder.TriggerAt, timeZone), inline: true)
+            BuildField("🕒 Thời điểm nhắc", FormatDateTime(displayReminderTime, timeZone), inline: true)
         };
 
         if (!string.IsNullOrWhiteSpace(task?.Description))

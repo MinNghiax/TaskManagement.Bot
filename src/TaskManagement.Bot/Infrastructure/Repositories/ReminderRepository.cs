@@ -70,5 +70,6 @@ public class ReminderRepository : IReminderRepository
         _ctx.Reminders
             .Include(r => r.ReminderRule)
             .Include(r => r.Task!.Clans)
+            .Include(r => r.Task!.Reminders).ThenInclude(r => r.ReminderRule)
             .Include(r => r.Task!.Team!.Project);
 }

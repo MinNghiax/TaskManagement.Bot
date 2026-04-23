@@ -75,7 +75,12 @@ public class ReminderService : IReminderProcessor
         var dueTriggerFlagsByTask = BuildDueTriggerFlagsByTask(reminders);
         var processedReminderCount = 0;
 
-        foreach (var reminder in reminders)
+        var orderedReminders = reminders
+            .OrderBy(r => r.NextTriggerAt ?? r.TriggerAt)
+            .ThenBy(r => GetReminderProcessingPriority(r.ReminderRule?.TriggerType))
+            .ToList();
+
+        foreach (var reminder in orderedReminders)
         {
             try
             {
@@ -451,6 +456,16 @@ public class ReminderService : IReminderProcessor
             reminder.UpdatedAt = now;
         }
     }
+
+    private static int GetReminderProcessingPriority(EReminderTriggerType? triggerType) =>
+        triggerType switch
+        {
+            EReminderTriggerType.OnDeadline => 0,
+            EReminderTriggerType.BeforeDeadline => 1,
+            EReminderTriggerType.AfterDeadline => 2,
+            EReminderTriggerType.Repeat => 3,
+            _ => 4
+        };
 
     private struct DueTriggerFlags
     {

@@ -27,7 +27,7 @@ public class MezonReminderNotificationSender : IReminderNotificationSender
     public async Task SendAsync(Reminder reminder, CancellationToken cancellationToken)
     {
         var assigneeUsername = await ResolveAssigneeUsernameAsync(reminder, cancellationToken);
-        var message = MessageBuilder.BuildReminderNotification(reminder, assigneeUsername, _timeZone);
+        var message = MessageBuilder.BuildReminderNotification(reminder, assigneeUsername, _timeZone, DateTime.UtcNow);
 
         try
         {
