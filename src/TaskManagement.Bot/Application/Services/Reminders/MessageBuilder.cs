@@ -31,7 +31,7 @@ public static class MessageBuilder
             BuildField("📁 Project", Normalize(task?.Team?.Project?.Name, NoneValue), inline: true),
             BuildField("👥 Team", Normalize(task?.Team?.Name, NoneValue), inline: true),
             BuildField("📌 Tiêu đề", Normalize(task?.Title, UnknownValue), inline: false),
-            BuildField("⏰ Deadline", FormatDateTime(task?.DueDate), inline: true),
+            BuildField("⏰ Deadline", FormatDateTime(task?.DueDate, timeZone), inline: true),
             BuildField("📊 Trạng thái", GetStatusText(task?.Status), inline: true),
             BuildField("⚡ Độ ưu tiên", GetPriorityText(task?.Priority), inline: true),
             BuildField("🔔 Loại reminder", FormatRule(rule), inline: false),
@@ -152,7 +152,7 @@ public static class MessageBuilder
             EReminderTriggerType.OnDeadline => "⏰ TASK ĐẾN DEADLINE",
             EReminderTriggerType.BeforeDeadline => "🔔 NHẮC TASK SẮP ĐẾN HẠN",
             EReminderTriggerType.AfterDeadline => "⚠️ TASK QUÁ HẠN",
-            EReminderTriggerType.Repeat => "🔁 NHẮC TASK LẶP LẠI",
+            EReminderTriggerType.Repeat => "🔁 NHẮC ĐỊNH KỲ",
             _ => "🔔 REMINDER TASK"
         };
 
@@ -162,7 +162,7 @@ public static class MessageBuilder
             EReminderTriggerType.OnDeadline => "Task đã đến thời điểm deadline.",
             EReminderTriggerType.BeforeDeadline => "Task sắp đến deadline. Vui lòng kiểm tra tiến độ.",
             EReminderTriggerType.AfterDeadline => "Task đã quá deadline. Vui lòng cập nhật trạng thái.",
-            EReminderTriggerType.Repeat => "Reminder lặp lại cho task chưa hoàn tất.",
+            EReminderTriggerType.Repeat => "Reminder định kỳ cho task chưa hoàn tất.",
             _ => "Thông tin reminder task."
         };
 
