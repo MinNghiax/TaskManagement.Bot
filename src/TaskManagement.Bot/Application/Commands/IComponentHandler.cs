@@ -21,14 +21,14 @@ public sealed record ComponentContext
     public string? CurrentUserId { get; init; }
     public string? MessageId { get; init; }
     public int Mode { get; init; } = 2;
-    public bool IsPublic { get; init; } = true;
+    public bool IsPublic { get; init; } = true;  
 }
 
 public sealed class ComponentResponse
 {
     public List<ComponentMessage> Messages { get; } = [];
     public List<ComponentDeleteMessage> DeleteMessages { get; } = [];
-    public List<ComponentUpdateMessage> UpdateMessages { get; } = [];  // ⭐ NEW
+    public List<ComponentUpdateMessage> UpdateMessages { get; } = [];
 
     public static ComponentResponse FromText(string clanId, string channelId, string text, int mode, bool isPublic, string replyToMessageId, ChannelMessage? originalMessage = null)
     {
@@ -110,7 +110,7 @@ public sealed record ComponentUpdateMessage
     public required ChannelMessageContent Content { get; init; }
     public int Mode { get; init; } = 2;
     public bool IsPublic { get; init; } = true;
-    public Action? OnSuccess { get; init; }  // ⭐ Callback sau khi update thành công
+    public Action? OnSuccess { get; init; }
 }
 
 public sealed record ComponentMessage

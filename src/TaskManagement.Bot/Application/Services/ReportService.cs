@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Application.DTOs;
+using TaskManagement.Bot.Application.Extensions;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Enums;
 
@@ -25,86 +26,56 @@ public class ReportService : IReportService
     public async Task<UserPersonalReportDto> GetUserPersonalReportAsync(string userId)
     {
         _logger.LogInformation("[REPORT_ME] Getting personal report for user: {UserId}", userId);
-        
-        // BƯỚC 1: Lấy tasks của user (filter ngay từ đầu)
-        var userTasksQuery = _context.TaskItems
-            .Where(t => t.AssignedTo.Equals(userId) && !t.IsDeleted);
 
-        // BƯỚC 2: Join với Teams
-        var taskTeamQuery = from task in userTasksQuery
-                            join team in _context.Teams on task.TeamId equals team.Id
-                            where !team.IsDeleted
-                            select new { task, team };
-
-        // BƯỚC 3: Join với Projects
-        var taskTeamProjectQuery = from x in taskTeamQuery
-                                   join project in _context.Projects on x.team.ProjectId equals project.Id
-                                   where !project.IsDeleted
-                                   select new { x.task, x.team, project };
-
-        // BƯỚC 4: Join với TeamMembers để verify user là member
-        var fullQuery = from x in taskTeamProjectQuery
-                        join member in _context.TeamMembers on x.team.Id equals member.TeamId
-                        where member.Username.Equals(userId) 
-                              && member.Status.Equals("Accepted") 
-                              && !member.IsDeleted
-                        select new
-                        {
-                            TaskId = x.task.Id,
-                            TaskTitle = x.task.Title,
-                            TaskStatus = x.task.Status,
-                            TaskPriority = x.task.Priority,
-                            TaskDueDate = x.task.DueDate,
-                            TeamId = x.team.Id,
-                            TeamName = x.team.Name,
-                            ProjectId = x.project.Id,
-                            ProjectName = x.project.Name
-                        };
-
-        // BƯỚC 5: Execute query một lần duy nhất
-        var results = await fullQuery
+        // BƯỚC 1: Query từ TaskItems với navigation properties
+        var query = _context.TaskItems
+            .Where(t => 
+                t.AssignedTo.Equals(userId) 
+                && !t.IsDeleted
+                && t.Team != null 
+                && !t.Team.IsDeleted
+                && t.Team.Project != null
+                && !t.Team.Project.IsDeleted
+                // ⭐ Validate user là member của team bằng Any()
+                && t.Team.Members.Any(m => 
+                    m.Username.Equals(userId) 
+                    && m.Status.Equals("Accepted") 
+                    && !m.IsDeleted))
+            // ⭐ Chỉ select đúng fields cần thiết
+            .Select(t => new
+            {
+                ProjectId = t.Team!.Project!.Id,
+                ProjectName = t.Team.Project.Name,
+                TeamId = t.Team.Id,
+                TeamName = t.Team.Name,
+                TaskId = t.Id,
+                TaskTitle = t.Title,
+                TaskStatus = t.Status,
+                TaskPriority = t.Priority,
+                TaskDueDate = t.DueDate
+            })
             .OrderBy(x => x.ProjectId)
             .ThenBy(x => x.TeamId)
-            .ThenBy(x => x.TaskDueDate)
-            .ToListAsync();
+            .ThenBy(x => x.TaskDueDate);
+
+        // BƯỚC 2: Execute query một lần duy nhất
+        var results = await query.ToListAsync();
 
         _logger.LogInformation("[REPORT_ME] Found {Count} tasks across teams", results.Count);
 
-        // BƯỚC 6: Group và build DTO
+        // BƯỚC 3: Group và build DTO bằng extension methods
         var projects = results
-            .GroupBy(x => new { x.ProjectId, x.ProjectName })
-            .Select(projectGroup => new ProjectTaskGroupDto
-            {
-                ProjectId = projectGroup.Key.ProjectId,
-                ProjectName = projectGroup.Key.ProjectName,
-                Teams = projectGroup
-                    .GroupBy(x => new { x.TeamId, x.TeamName })
-                    .Select(teamGroup =>
-                    {
-                        var tasks = teamGroup.Select(x => new TaskSummaryDto
-                        {
-                            Id = x.TaskId,
-                            Title = x.TaskTitle,
-                            Status = x.TaskStatus,
-                            Priority = x.TaskPriority,
-                            DueDate = x.TaskDueDate
-                        }).ToList();
-
-                        var completedCount = tasks.Count(t => t.Status == ETaskStatus.Completed);
-
-                        return new TeamTaskGroupDto
-                        {
-                            TeamId = teamGroup.Key.TeamId,
-                            TeamName = teamGroup.Key.TeamName,
-                            Tasks = tasks,
-                            TotalTasks = tasks.Count,
-                            CompletedTasks = completedCount,
-                            CompletionRate = CalculateCompletionRate(completedCount, tasks.Count)
-                        };
-                    })
-                    .ToList()
-            })
-            .ToList();
+            .Select(x => (
+                x.ProjectId, 
+                x.ProjectName, 
+                x.TeamId, 
+                x.TeamName, 
+                x.TaskId, 
+                x.TaskTitle, 
+                x.TaskStatus, 
+                x.TaskPriority, 
+                x.TaskDueDate))
+            .GroupByProject();
 
         var totalTasks = projects.SelectMany(p => p.Teams).Sum(t => t.TotalTasks);
         var completedTasks = projects.SelectMany(p => p.Teams).Sum(t => t.CompletedTasks);
@@ -117,7 +88,7 @@ public class ReportService : IReportService
             Projects = projects,
             TotalTasks = totalTasks,
             CompletedTasks = completedTasks,
-            CompletionRate = CalculateCompletionRate(completedTasks, totalTasks)
+            CompletionRate = ReportExtensions.CalculateCompletionRate(completedTasks, totalTasks)
         };
     }
 
@@ -170,119 +141,74 @@ public class ReportService : IReportService
     {
         _logger.LogInformation("[REPORT_TEAM_DETAIL] Getting detail for team: {TeamId}", teamId);
 
-        var team = await _context.Teams
+        // BƯỚC 1: Lấy team info + tasks với navigation properties
+        var teamQuery = _context.Teams
             .Where(t => t.Id == teamId && !t.IsDeleted)
             .Select(t => new
             {
-                t.Id,
-                t.Name,
-                t.ProjectId,
-                ProjectName = t.Project.Name
-            })
-            .FirstOrDefaultAsync();
+                TeamId = t.Id,
+                TeamName = t.Name,
+                ProjectId = t.ProjectId,
+                ProjectName = t.Project.Name,
+                // Lấy luôn tasks và members trong 1 query
+                Tasks = t.Tasks
+                    .Where(task => !task.IsDeleted)
+                    .Select(task => new
+                    {
+                        TaskId = task.Id,
+                        TaskTitle = task.Title,
+                        TaskStatus = task.Status,
+                        TaskPriority = task.Priority,
+                        TaskDueDate = task.DueDate,
+                        AssignedTo = task.AssignedTo
+                    })
+                    .ToList(),
+                Members = t.Members
+                    .Where(m => m.Status.Equals("Accepted") && !m.IsDeleted)
+                    .Select(m => m.Username)
+                    .ToList()
+            });
 
-        if (team == null)
+        var teamData = await teamQuery.FirstOrDefaultAsync();
+
+        if (teamData == null)
         {
             throw new KeyNotFoundException($"Team {teamId} not found");
         }
 
-        // BƯỚC 2: Lấy tasks của team, join với members
-        var taskMemberQuery = from task in _context.TaskItems
-                              where task.TeamId == teamId && !task.IsDeleted
-                              join member in _context.TeamMembers on new { TeamId = teamId, Username = task.AssignedTo }
-                                  equals new { member.TeamId, member.Username }
-                              where member.Status.Equals("Accepted") && !member.IsDeleted
-                              select new
-                              {
-                                  TaskId = task.Id,
-                                  TaskTitle = task.Title,
-                                  TaskStatus = task.Status,
-                                  TaskPriority = task.Priority,
-                                  TaskDueDate = task.DueDate,
-                                  MemberUsername = member.Username
-                              };
+        _logger.LogInformation(
+            "[REPORT_TEAM_DETAIL] Found team {TeamId} with {TaskCount} tasks and {MemberCount} members",
+            teamId,
+            teamData.Tasks.Count,
+            teamData.Members.Count);
 
-        // BƯỚC 3: Execute query một lần
-        var taskResults = await taskMemberQuery
-            .OrderBy(x => x.MemberUsername)
-            .ThenBy(x => x.TaskDueDate)
-            .ToListAsync();
-
-        _logger.LogInformation("[REPORT_TEAM_DETAIL] Found {Count} tasks for team {TeamId}", taskResults.Count, teamId);
-
-        // BƯỚC 4: Lấy danh sách members (distinct từ tasks + members không có task)
-        var membersWithTasks = taskResults
-            .Select(x => x.MemberUsername)
-            .Distinct()
-            .ToHashSet();
-
-        var allMembers = await _context.TeamMembers
-            .Where(m => m.TeamId == teamId && m.Status.Equals("Accepted") && !m.IsDeleted)
-            .Select(m => m.Username)
-            .ToListAsync();
-
-        // BƯỚC 5: Lấy display names một lần cho tất cả members
+        // BƯỚC 2: Lấy display names một lần cho tất cả members
         var userDisplayNames = new Dictionary<string, string>();
-        foreach (var username in allMembers)
+        foreach (var username in teamData.Members)
         {
             userDisplayNames[username] = await _userService.GetDisplayNameAsync(username);
         }
 
-        // BƯỚC 6: Group tasks theo member và build DTO
-        var memberReports = allMembers.Select(username =>
-        {
-            var memberTasks = taskResults
-                .Where(x => x.MemberUsername.Equals(username))
-                .Select(x => new TaskSummaryDto
-                {
-                    Id = x.TaskId,
-                    Title = x.TaskTitle,
-                    Status = x.TaskStatus,
-                    Priority = x.TaskPriority,
-                    DueDate = x.TaskDueDate
-                })
-                .ToList();
+        // BƯỚC 3: Group tasks theo member
+        var tasksData = teamData.Tasks
+            .Select(t => (
+                TaskId: t.TaskId,
+                TaskTitle: t.TaskTitle,
+                TaskStatus: t.TaskStatus,
+                TaskPriority: t.TaskPriority,
+                TaskDueDate: t.TaskDueDate,
+                AssignedTo: t.AssignedTo
+            ));
 
-            var completedCount = memberTasks.Count(t => t.Status == ETaskStatus.Completed);
-
-            return new MemberTaskReportDto
-            {
-                UserId = username,
-                Username = userDisplayNames[username],
-                Tasks = memberTasks,
-                TotalTasks = memberTasks.Count,
-                CompletedTasks = completedCount,
-                CompletionRate = CalculateCompletionRate(completedCount, memberTasks.Count)
-            };
-        })
-        .OrderByDescending(m => m.TotalTasks)
-        .ThenBy(m => m.Username)
-        .ToList();
+        var memberReports = tasksData.GroupByMember(teamData.Members, userDisplayNames);
 
         return new TeamDetailReportDto
         {
-            TeamId = team.Id,
-            TeamName = team.Name,
-            ProjectId = team.ProjectId,
-            ProjectName = team.ProjectName,
+            TeamId = teamData.TeamId,
+            TeamName = teamData.TeamName,
+            ProjectId = teamData.ProjectId,
+            ProjectName = teamData.ProjectName,
             Members = memberReports
         };
-    }
-
-    private static TaskSummaryDto MapToTaskSummary(Infrastructure.Entities.TaskItem task)
-    {
-        return new TaskSummaryDto
-        {
-            Id = task.Id,
-            Title = task.Title,
-            Status = task.Status,
-            Priority = task.Priority,
-            DueDate = task.DueDate
-        };
-    }
-
-    private static double CalculateCompletionRate(int completed, int total)
-    {
-        return total > 0 ? (double)completed / total * 100 : 0;
     }
 }
