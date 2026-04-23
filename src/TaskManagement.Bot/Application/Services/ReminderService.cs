@@ -185,6 +185,11 @@ public class ReminderService : IReminderProcessor
         if (HandlePausedTaskStatuses(reminder, task, now))
             return;
 
+        if (task.DueDate.HasValue && reminder.ReminderRule != null)
+        {
+            RecalculateScheduleIfNeeded(reminder, task, now);
+        }
+
         TransitionTaskToLateIfNeeded(task, reminder, now);
 
         if (reminder.Status != EReminderStatus.Pending)
@@ -303,15 +308,15 @@ public class ReminderService : IReminderProcessor
             return;
         }
 
-        var shouldTransitionFromToDo =
-            task.Status == ETaskStatus.ToDo
-            && task.DueDate.HasValue
-            && HasReminderReachedDeadline(reminder, task.DueDate.Value);
+        var isOverdue =
+            task.DueDate.HasValue &&
+            NormalizeUtc(changedAtUtc) >= NormalizeUtc(task.DueDate.Value);
 
-        var shouldTransitionByTrigger =
-            reminder.ReminderRule?.TriggerType is EReminderTriggerType.OnDeadline or EReminderTriggerType.AfterDeadline;
+        var shouldTransition =
+            task.Status == ETaskStatus.ToDo &&
+            isOverdue;
 
-        if (!shouldTransitionFromToDo && !shouldTransitionByTrigger)
+        if (!shouldTransition)
             return;
 
         var leavingReview = task.Status == ETaskStatus.Review;
@@ -412,6 +417,39 @@ public class ReminderService : IReminderProcessor
         }
 
         return flagsByTask;
+    }
+
+    private static void RecalculateScheduleIfNeeded(Reminder reminder, TaskItem task, DateTime now)
+    {
+        if (!task.DueDate.HasValue || reminder.ReminderRule == null)
+            return;
+
+        var dueDate = task.DueDate.Value;
+
+        DateTime? newTrigger = reminder.ReminderRule.TriggerType switch
+        {
+            EReminderTriggerType.BeforeDeadline =>
+                reminder.ReminderRule.IntervalUnit.HasValue
+                    ? dueDate.Subtract(ReminderScheduleBuilder.ToTimeSpan(reminder.ReminderRule.Value, reminder.ReminderRule.IntervalUnit.Value))
+                    : dueDate,
+
+            EReminderTriggerType.OnDeadline =>
+                dueDate,
+
+            EReminderTriggerType.AfterDeadline =>
+                reminder.ReminderRule.IntervalUnit.HasValue
+                    ? dueDate.Add(ReminderScheduleBuilder.ToTimeSpan(reminder.ReminderRule.Value, reminder.ReminderRule.IntervalUnit.Value))
+                    : dueDate,
+
+            _ => reminder.NextTriggerAt
+        };
+
+        // chỉ update khi khác (tránh loop vô hạn)
+        if (newTrigger.HasValue && NormalizeUtc(newTrigger.Value) != NormalizeUtc(reminder.NextTriggerAt ?? default))
+        {
+            reminder.NextTriggerAt = newTrigger;
+            reminder.UpdatedAt = now;
+        }
     }
 
     private struct DueTriggerFlags
