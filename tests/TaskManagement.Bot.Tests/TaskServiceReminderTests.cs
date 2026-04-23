@@ -378,6 +378,62 @@ public class TaskServiceReminderTests
     }
 
     [Fact]
+    public async Task ChangeStatusAsync_WhenTaskReturnsFromCompletedToDoing_ReactivatesCustomReminders()
+    {
+        await using var context = CreateContext();
+        var service = new TaskService(context);
+        var created = await service.CreateAsync(new CreateTaskDto
+        {
+            Title = "Reopen reminder task",
+            AssignedTo = "123",
+            CreatedBy = "456",
+            DueDate = DateTime.UtcNow.AddHours(-2),
+            ReminderRules =
+            [
+                new()
+                {
+                    TriggerType = EReminderTriggerType.BeforeDeadline,
+                    Value = 30,
+                    IntervalUnit = ETimeUnit.Minutes
+                },
+                new()
+                {
+                    TriggerType = EReminderTriggerType.AfterDeadline,
+                    Value = 1,
+                    IntervalUnit = ETimeUnit.Hours,
+                    IsRepeat = true
+                }
+            ]
+        });
+
+        Assert.NotNull(created);
+
+        await service.ChangeStatusAsync(created.Id, ETaskStatus.Completed);
+        await service.ChangeStatusAsync(created.Id, ETaskStatus.Doing);
+
+        context.ChangeTracker.Clear();
+
+        var reminders = await context.Reminders
+            .Include(r => r.ReminderRule)
+            .Where(r => r.TaskId == created.Id)
+            .ToListAsync();
+
+        var customReminders = reminders
+            .Where(r => r.ReminderRule!.TriggerType != EReminderTriggerType.OnDeadline)
+            .ToList();
+
+        Assert.Equal(2, customReminders.Count);
+        Assert.All(customReminders, reminder => Assert.Equal(EReminderStatus.Pending, reminder.Status));
+        Assert.All(customReminders, reminder => Assert.Equal(ETaskStatus.Doing, reminder.StateSnapshot));
+        Assert.All(customReminders, reminder => Assert.Equal(ETaskStatus.Doing, reminder.ReminderRule!.TaskStatus));
+
+        var repeatingAfterDeadlineReminder = customReminders.Single(r =>
+            r.ReminderRule!.TriggerType == EReminderTriggerType.AfterDeadline);
+        Assert.NotNull(repeatingAfterDeadlineReminder.NextTriggerAt);
+        Assert.True(repeatingAfterDeadlineReminder.NextTriggerAt > DateTime.UtcNow);
+    }
+
+    [Fact]
     public async Task ChangeStatusAsync_TracksReviewStartedAtForReviewAutoComplete()
     {
         await using var context = CreateContext();

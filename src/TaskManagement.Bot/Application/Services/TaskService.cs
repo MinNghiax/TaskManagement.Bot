@@ -345,16 +345,29 @@ public class TaskService : ITaskService
 
         foreach (var reminder in customReminders)
         {
-            if (reminder.Status != EReminderStatus.Pending)
-                continue;
-
             if (ReminderScheduleBuilder.IsTaskActive(task))
             {
+                if (reminder.Status == EReminderStatus.Cancelled
+                    && task.Status == ETaskStatus.Doing
+                    && reminder.ReminderRule?.TaskStatus is ETaskStatus.Review or ETaskStatus.Completed)
+                {
+                    reminder.Status = EReminderStatus.Pending;
+
+                    if (ReminderScheduleBuilder.IsRepeatRule(reminder.ReminderRule))
+                        ReminderScheduleBuilder.ApplyNextSchedule(reminder, nowUtc);
+                }
+
+                if (reminder.Status != EReminderStatus.Pending)
+                    continue;
+
                 reminder.TargetUserId = task.AssignedTo;
                 reminder.StateSnapshot = task.Status;
             }
             else
             {
+                if (reminder.Status != EReminderStatus.Pending)
+                    continue;
+
                 reminder.Status = EReminderStatus.Cancelled;
                 reminder.NextTriggerAt = null;
             }

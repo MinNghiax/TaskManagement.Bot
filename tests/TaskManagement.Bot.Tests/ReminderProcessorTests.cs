@@ -637,44 +637,99 @@ public class ReminderProcessorTests
         Assert.Equal(ETaskStatus.Late, task.Status);
     }
 
-    [Fact]
-    public async Task ProcessDueRemindersAsync_OnDeadlineReminderForReviewTask_TransitionsToLateAndClearsReviewStartedAt()
+    [Theory]
+    [InlineData(ETaskStatus.Review)]
+    [InlineData(ETaskStatus.Completed)]
+    public async Task ProcessDueRemindersAsync_WhenTaskIsReviewOrCompleted_DoesNotSendDueReminder(ETaskStatus pausedStatus)
     {
         await using var context = CreateContext();
         var sender = new FakeReminderNotificationSender();
         var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var reviewStartedAt = DateTime.UtcNow.AddHours(-1);
         var task = new TaskItem
         {
-            Title = "Review task",
+            Title = "Paused task",
             AssignedTo = "user-1",
             CreatedBy = "user-2",
             DueDate = DateTime.UtcNow.AddMinutes(-1),
-            Status = ETaskStatus.Review,
-            ReviewStartedAt = DateTime.UtcNow.AddHours(-1)
+            Status = pausedStatus,
+            ReviewStartedAt = pausedStatus == ETaskStatus.Review ? reviewStartedAt : null
         };
-        var onDeadlineReminder = new Reminder
+        var dueReminder = new Reminder
         {
             Task = task,
             TriggerAt = DateTime.UtcNow.AddMinutes(-1),
             TargetUserId = task.AssignedTo,
             Status = EReminderStatus.Pending,
-            StateSnapshot = ETaskStatus.Review,
+            StateSnapshot = ETaskStatus.Doing,
             ReminderRule = new ReminderRule
             {
                 TriggerType = EReminderTriggerType.OnDeadline,
-                TaskStatus = ETaskStatus.Review
+                TaskStatus = ETaskStatus.Doing
             }
         };
 
-        context.Reminders.Add(onDeadlineReminder);
+        context.Reminders.Add(dueReminder);
         await context.SaveChangesAsync();
 
         var processedCount = await processor.ProcessDueRemindersAsync();
 
         Assert.Equal(1, processedCount);
-        Assert.Equal(ETaskStatus.Late, task.Status);
-        Assert.Null(task.ReviewStartedAt);
-        Assert.Equal(EReminderStatus.Sent, onDeadlineReminder.Status);
+        Assert.Empty(sender.Sent);
+        Assert.Equal(pausedStatus, task.Status);
+        Assert.Equal(pausedStatus == ETaskStatus.Review ? reviewStartedAt : null, task.ReviewStartedAt);
+        Assert.Equal(EReminderStatus.Pending, dueReminder.Status);
+        Assert.Equal(pausedStatus, dueReminder.StateSnapshot);
+        Assert.Equal(pausedStatus, dueReminder.ReminderRule!.TaskStatus);
+    }
+
+    [Theory]
+    [InlineData(ETaskStatus.Review)]
+    [InlineData(ETaskStatus.Completed)]
+    public async Task ProcessDueRemindersAsync_WhenTaskReturnsToDoingFromReviewOrCompleted_RecalculatesRepeatSchedule(ETaskStatus previousStatus)
+    {
+        await using var context = CreateContext();
+        var sender = new FakeReminderNotificationSender();
+        var processor = new ReminderProcessor(context, sender, NullLogger<ReminderProcessor>.Instance);
+        var now = DateTime.UtcNow;
+        var task = new TaskItem
+        {
+            Title = "Resumed task",
+            AssignedTo = "user-1",
+            CreatedBy = "user-2",
+            DueDate = now.AddHours(2),
+            Status = ETaskStatus.Doing
+        };
+        var repeatReminder = new Reminder
+        {
+            Task = task,
+            TriggerAt = now.AddHours(-1),
+            NextTriggerAt = now.AddMinutes(-1),
+            TargetUserId = task.AssignedTo,
+            Status = EReminderStatus.Pending,
+            StateSnapshot = previousStatus,
+            ReminderRule = new ReminderRule
+            {
+                TriggerType = EReminderTriggerType.Repeat,
+                IntervalUnit = ETimeUnit.Minutes,
+                Value = 15,
+                TaskStatus = previousStatus,
+                IsRepeat = true
+            }
+        };
+
+        context.Reminders.Add(repeatReminder);
+        await context.SaveChangesAsync();
+
+        var processedCount = await processor.ProcessDueRemindersAsync();
+
+        Assert.Equal(1, processedCount);
+        Assert.Empty(sender.Sent);
+        Assert.Equal(EReminderStatus.Pending, repeatReminder.Status);
+        Assert.NotNull(repeatReminder.NextTriggerAt);
+        Assert.True(repeatReminder.NextTriggerAt > now);
+        Assert.Equal(ETaskStatus.Doing, repeatReminder.StateSnapshot);
+        Assert.Equal(ETaskStatus.Doing, repeatReminder.ReminderRule!.TaskStatus);
     }
 
     [Fact]

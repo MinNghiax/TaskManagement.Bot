@@ -158,7 +158,7 @@ public class ReminderService : IReminderProcessor
             return;
         }
 
-        if (task.Status is ETaskStatus.Completed or ETaskStatus.Cancelled)
+        if (task.Status == ETaskStatus.Cancelled)
         {
             reminder.Status = EReminderStatus.Cancelled;
             reminder.NextTriggerAt = null;
@@ -182,6 +182,9 @@ public class ReminderService : IReminderProcessor
         if (reminder.Status != EReminderStatus.Pending)
             return;
 
+        if (HandlePausedTaskStatuses(reminder, task, now))
+            return;
+
         TransitionTaskToLateIfNeeded(task, reminder, now);
 
         if (reminder.Status != EReminderStatus.Pending)
@@ -193,6 +196,51 @@ public class ReminderService : IReminderProcessor
         await _notificationSender.SendAsync(reminder, cancellationToken);
 
         ReminderScheduleBuilder.ApplyNextSchedule(reminder, now);
+    }
+
+    private static bool HandlePausedTaskStatuses(Reminder reminder, TaskItem task, DateTime now)
+    {
+        if (task.Status is ETaskStatus.Review or ETaskStatus.Completed)
+        {
+            SyncReminderTaskState(reminder, task, now);
+
+            if (ReminderScheduleBuilder.IsRepeatRule(reminder.ReminderRule))
+                ReminderScheduleBuilder.ApplyNextSchedule(reminder, now);
+
+            return true;
+        }
+
+        if (task.Status == ETaskStatus.Doing
+            && reminder.StateSnapshot is ETaskStatus.Review or ETaskStatus.Completed
+            && ReminderScheduleBuilder.IsRepeatRule(reminder.ReminderRule))
+        {
+            SyncReminderTaskState(reminder, task, now);
+            ReminderScheduleBuilder.ApplyNextSchedule(reminder, now);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void SyncReminderTaskState(Reminder reminder, TaskItem task, DateTime now)
+    {
+        var hasChanges = false;
+
+        if (reminder.StateSnapshot != task.Status)
+        {
+            reminder.StateSnapshot = task.Status;
+            hasChanges = true;
+        }
+
+        if (reminder.ReminderRule is not null && reminder.ReminderRule.TaskStatus != task.Status)
+        {
+            reminder.ReminderRule.TaskStatus = task.Status;
+            reminder.ReminderRule.UpdatedAt = now;
+            hasChanges = true;
+        }
+
+        if (hasChanges)
+            reminder.UpdatedAt = now;
     }
 
     private static bool HandleRepeatConflict(
