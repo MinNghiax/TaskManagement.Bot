@@ -17,6 +17,8 @@ namespace TaskManagement.Bot.Application.Services
         Task<Project?> GetProjectByIdAsync(int id);
         Task<List<Project>> GetProjectsByUserAsync(string userId);
         Task<List<Project>> GetProjectsByMemberAsync(string userId);
+        Task<List<Project>> GetProjectsByIdsAsync(List<int> projectIds);
+        Task<string> GetProjectNameByIdAsync(int projectId);
     }
 
     public class ProjectService : IProjectService
@@ -82,6 +84,23 @@ namespace TaskManagement.Bot.Application.Services
                 .Select(t => t.Project)
                 .Distinct()
                 .ToListAsync();
+        }
+
+        public async Task<List<Project>> GetProjectsByIdsAsync(List<int> projectIds)
+        {
+            return await _context.Projects
+                .Where(p => projectIds.Contains(p.Id) && !p.IsDeleted)
+                .ToListAsync();
+        }
+
+        public async Task<string> GetProjectNameByIdAsync(int projectId)
+        {
+            var project = await _context.Projects
+                .Where(p => p.Id == projectId && !p.IsDeleted)
+                .Select(p => p.Name)
+                .FirstOrDefaultAsync();
+            
+            return project ?? $"#{projectId}";
         }
     }
 }

@@ -57,7 +57,10 @@ public class ComplainCommandHandler : ICommandHandler
         }
 
         var options = validTasks
-            .Select(t => (object)new { label = $"#{t.Id} {t.Title} [{t.Status}]", value = t.Id.ToString() })
+            .Select(t => (object)new { 
+                label = $"#{t.Id} - {t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} | 📅 {(t.DueDate.HasValue ? t.DueDate.Value.AddHours(7).ToString("dd/MM HH:mm") : "N/A")}", 
+                value = t.Id.ToString() 
+            })
             .ToArray();
 
         var formContent = ComplainFormBuilder.BuildComplainForm(options, userId);
@@ -86,5 +89,30 @@ public class ComplainCommandHandler : ICommandHandler
 
         var formContent = ComplainFormBuilder.BuildApproveForm(options.ToArray(), userId);
         return new CommandResponse(formContent);
+    }
+
+    private static string GetStatusText(ETaskStatus status)
+    {
+        return status switch
+        {
+            ETaskStatus.ToDo => "📋 ToDo",
+            ETaskStatus.Doing => "🔄 Doing",
+            ETaskStatus.Review => "✅ Review",
+            ETaskStatus.Late => "⚠️ Late",
+            ETaskStatus.Completed => "✔️ Completed",
+            ETaskStatus.Cancelled => "❌ Cancelled",
+            _ => status.ToString()
+        };
+    }
+
+    private static string GetPriorityText(EPriorityLevel priority)
+    {
+        return priority switch
+        {
+            EPriorityLevel.High => "🔴 High",
+            EPriorityLevel.Medium => "🟡 Medium",
+            EPriorityLevel.Low => "🟢 Low",
+            _ => priority.ToString()
+        };
     }
 }
