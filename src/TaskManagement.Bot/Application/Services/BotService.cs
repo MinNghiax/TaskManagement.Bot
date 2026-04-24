@@ -93,8 +93,6 @@ public class BotService : IBotService
             _logger.LogWarning(ex, "[DM CACHE] Failed to cache DM channel ids");
         }
 
-
-        //  PRELOAD ALL CLAN MEMBERS using new MezonUserService
         _logger.LogInformation("[USER_PRELOAD] Starting user preload from all clans...");
         try
         {
@@ -274,7 +272,6 @@ public class BotService : IBotService
             return null;
         }
 
-        // Parse content text - it might be JSON format
         var contentText = originalMessage.Content?.Text ?? "";
         if (!string.IsNullOrEmpty(contentText) && contentText.StartsWith("{"))
         {
@@ -288,7 +285,6 @@ public class BotService : IBotService
             }
             catch
             {
-                // Keep original if parsing fails
             }
         }
 
@@ -336,8 +332,6 @@ public class BotService : IBotService
                 _channelClanMap[message.ChannelId] = message.ClanId;
             }
 
-            //  Cache user from message (real-time updates)
-            // 📨 Cache user from message (real-time updates)
             if (!string.IsNullOrWhiteSpace(message.SenderId))
             {
                 _userService.CacheUserFromMessage(
@@ -349,7 +343,6 @@ public class BotService : IBotService
                     message.ClanId);
             }
 
-            // Cache all mentioned users
             if (message.Mentions != null)
             {
                 foreach (var mention in message.Mentions)
@@ -358,8 +351,8 @@ public class BotService : IBotService
                     {
                         _userService.CacheUserFromMessage(
                             mention.UserId,
-                            null, // ApiMessageMention doesn't have ClanNick
-                            null, // ApiMessageMention doesn't have DisplayName
+                            null, 
+                            null, 
                             mention.Username,
                             null,
                             message.ClanId);
@@ -639,10 +632,6 @@ public class BotService : IBotService
             return null;
         }
 
-        // ACCEPT and REJECT may have ClanId in customId
-        // Old format: ACCEPT|requestId|userId (no ClanId)
-        // New format: ACCEPT|requestId|userId|originalMessageId (no ClanId either)
-        // So we don't extract ClanId from ACCEPT/REJECT anymore
         return null;
     }
 }

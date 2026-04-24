@@ -239,6 +239,19 @@ public class TeamService : ITeamService
             .ToListAsync();
     }
 
+    public async Task<List<Team>> GetPMTeamsByUserAsync(string userId)
+    {
+        //  1 query duy nhất để lấy tất cả teams mà user là PM
+        var teamIds = await _context.TeamMembers
+            .Where(x => x.Username == userId && x.Role == "PM" && x.Status == "Accepted")
+            .Select(x => x.TeamId)
+            .ToListAsync();
+
+        return await _context.Teams
+            .Where(t => teamIds.Contains(t.Id) && !t.IsDeleted)
+            .ToListAsync();
+    }
+
     public async Task<List<Team>> GetAllAsync()
     {
         return await _context.Teams

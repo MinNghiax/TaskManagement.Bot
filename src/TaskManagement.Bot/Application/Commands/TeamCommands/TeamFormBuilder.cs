@@ -119,7 +119,7 @@ public static class TeamFormBuilder
                     description = "Vui lòng điền thông tin bên dưới:",
                     color = "#5865F2",
                     fields = fields.ToArray(),
-                    footer = new { text = "Team cần tối thiểu 1 thành viên, tối đa 6 thành viên" }
+                    footer = new { text = "Team cần tối thiểu 2 thành viên, tối đa 6 thành viên" }
                 }
             },
             Components = new[] { new { components = components.ToArray() } }
@@ -141,7 +141,7 @@ public static class TeamFormBuilder
                 description = $"❌ {error}\n\nVui lòng điền lại thông tin:",
                 color = "#ED4245",
                 fields = ((dynamic)form.Embed![0]).fields,
-                footer = new { text = "Team cần tối thiểu 1 thành viên, tối đa 6 thành viên" }
+                footer = new { text = "Team cần tối thiểu 2 thành viên, tối đa 6 thành viên" }
             }
         },
             Components = form.Components

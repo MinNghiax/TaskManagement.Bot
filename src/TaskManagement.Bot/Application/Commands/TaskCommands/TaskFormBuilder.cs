@@ -21,7 +21,6 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "📝 Tạo Task ",
-                    description = "Chọn Project:",
                     color = "#FEE75C",
                     fields = new object[]
                     {
@@ -67,7 +66,6 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "📝 Tạo Task",
-                    description = "Chọn Team và điền thông tin:",
                     color = "#FEE75C",
                     fields = new object[]
                     {
@@ -108,7 +106,7 @@ public static class TaskFormBuilder
         };
     }
 
-    public static ChannelMessageContent BuildSelectTeam(int projectId, List<Team> teams, string originalMessageId, string? senderId, string commandType = "create")
+    public static ChannelMessageContent BuildSelectTeam(int projectId, string projectName, List<Team> teams, string originalMessageId, string? senderId, string commandType = "create")
     {
         return new ChannelMessageContent
         {
@@ -117,7 +115,7 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "📝 Tạo Task ",
-                    description = $"Project: {projectId}\nChọn Team:",
+                    description = $"📁 Project: {projectName}",
                     color = "#FEE75C",
                     fields = new object[]
                     {
@@ -307,6 +305,9 @@ public static class TaskFormBuilder
                         new { name = "🆔 ID", value = task.Id.ToString(), inline = true },
                         new { name = "📊 Trạng thái", value = GetStatusText(task.Status), inline = true },
                         new { name = "⚡ Độ ưu tiên", value = GetPriorityText(task.Priority), inline = true },
+
+                        new { name = "\u200B", inline = false },
+
                         new { name = "⏰ Deadline", value = deadlineText, inline = true },
                         new { name = "👤 Giao cho", value = assigned, inline = true },
                         new { name = "👤 Người tạo", value = created, inline = true }
@@ -349,7 +350,10 @@ public static class TaskFormBuilder
                 new { label = "✔️ Completed", value = "Completed", @default = task.Status == ETaskStatus.Completed },
                 new { label = "❌ Cancelled", value = "Cancelled", @default = task.Status == ETaskStatus.Cancelled }
             }),
-            BuildTextField("⏰ Deadline", "deadline", "YYYY-MM-DD HH:MM", task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? ""),
+            BuildTextField("⏰ Deadline", "deadline", "YYYY-MM-DD HH:MM", 
+                task.DueDate != null 
+                    ? TimeZoneInfo.ConvertTimeFromUtc(task.DueDate.Value, VN_TIME_ZONE).ToString("yyyy-MM-dd HH:mm")
+                    : ""),
             BuildSelectField("👤 Giao cho", "assignee", memberOptions)
         };
 
@@ -380,7 +384,10 @@ public static class TaskFormBuilder
                             new { label = "✔️ Completed", value = "Completed", @default = task.Status == ETaskStatus.Completed },
                             new { label = "❌ Cancelled", value = "Cancelled", @default = task.Status == ETaskStatus.Cancelled }
                         }),
-                        BuildTextField("⏰ Deadline", "deadline", "YYYY-MM-DD HH:MM", task.DueDate?.ToString("yyyy-MM-dd HH:mm") ?? ""),
+                        BuildTextField("⏰ Deadline", "deadline", "YYYY-MM-DD HH:MM", 
+                            task.DueDate != null 
+                                ? TimeZoneInfo.ConvertTimeFromUtc(task.DueDate.Value, VN_TIME_ZONE).ToString("yyyy-MM-dd HH:mm")
+                                : ""),
                         BuildSelectField("👤 Giao cho", "assignee", memberOptions)
                     }
                 }
@@ -400,14 +407,13 @@ public static class TaskFormBuilder
             new
             {
                 title = "✏️ Cập nhật Task (Member)",
-                description = "Chọn task của bạn:",
                 color = "#5865F2",
                 fields = new object[]
                 {
                     BuildSelectField("📋 Task", "task",
                         tasks.Select(t => new
                         {
-                            label = $"{t.Title} | {t.Status}",
+                            label = $"#{t.Id} - {t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} | 👤 {t.AssignedTo} | 📅 {(t.DueDate.HasValue ? TimeZoneInfo.ConvertTimeFromUtc(t.DueDate.Value, VN_TIME_ZONE).ToString("dd/MM HH:mm") : "N/A")}",
                             value = t.Id.ToString()
                         }).ToArray())
                 }
@@ -459,7 +465,6 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "✏️ Cập nhật Task (Member)",
-                    description = "Chọn Project:",
                     color = "#5865F2",
                     fields = new object[]
                     {
@@ -482,6 +487,7 @@ public static class TaskFormBuilder
 
     public static ChannelMessageContent BuildMemberUpdateSelectTeam(
         int projectId,
+        string projectName,
         List<Team> teams,
         string originalMessageId,
         string? senderId = null,
@@ -496,7 +502,7 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "✏️ Cập nhật Task (Member)",
-                    description = $"Project: {projectId}\nChọn Team:",
+                    description = $"📁 Project: {projectName}",
                     color = "#5865F2",
                     fields = new object[]
                     {
@@ -533,14 +539,13 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "✏️ Cập nhật Task (Member)",
-                    description = "Chọn task của bạn:",
                     color = "#5865F2",
                     fields = new object[]
                     {
                         BuildSelectField("📋 Task", "task",
                             tasks.Select(t => new
                             {
-                                label = $"{t.Title} | {GetStatusText(t.Status)}",
+                                label = $"#{t.Id} - {t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} | 👤 {t.AssignedTo} | 📅 {(t.DueDate.HasValue ? TimeZoneInfo.ConvertTimeFromUtc(t.DueDate.Value, VN_TIME_ZONE).ToString("dd/MM HH:mm") : "N/A")}",
                                 value = t.Id.ToString()
                             }).ToArray())
                     }
@@ -589,6 +594,10 @@ public static class TaskFormBuilder
     {
         commandType ??= "delete";
         
+        var deadlineText = task.DueDate != null
+            ? TimeZoneInfo.ConvertTimeFromUtc(task.DueDate.Value, VN_TIME_ZONE).ToString("dd/MM/yyyy HH:mm")
+            : "Không có";
+        
         return new ChannelMessageContent
         {
             Embed = new[]
@@ -600,9 +609,14 @@ public static class TaskFormBuilder
                     color = "#ED4245",
                     fields = new object[]
                     {
+                        new { name = "🆔 ID", value = $"#{task.Id}", inline = true },
+                        new { name = "📊 Trạng thái", value = GetStatusText(task.Status), inline = true },
+                        new { name = "⚡ Độ ưu tiên", value = GetPriorityText(task.Priority), inline = true },
                         new { name = "📌 Tiêu đề", value = task.Title, inline = false },
-                        new { name = "🆔 ID", value = task.Id.ToString(), inline = true },
-                        new { name = "👤 Người tạo", value = task.CreatedBy, inline = true }
+                        new { name = "📝 Mô tả", value = string.IsNullOrWhiteSpace(task.Description) ? "_Không có mô tả_" : task.Description, inline = false },
+                        new { name = "👤 Giao cho", value = task.AssignedTo ?? "Chưa giao", inline = true },
+                        new { name = "👤 Người tạo", value = task.CreatedBy ?? "Unknown", inline = true },
+                        new { name = "⏰ Deadline", value = deadlineText, inline = true }
                     }
                 }
             },
@@ -620,92 +634,6 @@ public static class TaskFormBuilder
         };
     }
 
-    //public static ChannelMessageContent BuildTaskList(
-    //    List<TaskDto> tasks,
-    //    string userId,
-    //    string clanId,
-    //    List<Team> teams,
-    //    List<Project> projects)
-    //{
-    //    var total = tasks.Count;
-    //    var completed = tasks.Count(t => t.Status == ETaskStatus.Completed);
-    //    var rate = total == 0 ? 0 : (double)completed / total * 100;
-
-    //    var teamDict = teams.ToDictionary(t => t.Id);
-    //    var projectDict = projects.ToDictionary(p => p.Id);
-
-    //    var projectGroups = tasks
-    //        .GroupBy(t => teamDict[t.TeamId!.Value].ProjectId)
-    //        .ToList();
-
-    //    var embeds = new List<object>();
-
-    //    foreach (var projectGroup in projectGroups)
-    //    {
-    //        var fields = new List<object>();
-
-    //        var teamGroups = projectGroup.GroupBy(t => t.TeamId);
-
-    //        foreach (var teamGroup in teamGroups)
-    //        {
-    //            var team = teamDict[teamGroup.Key!.Value];
-    //            var teamTasks = teamGroup.ToList();
-
-    //            var done = teamTasks.Count(t => t.Status == ETaskStatus.Completed);
-    //            var percent = teamTasks.Count == 0 ? 0 : (double)done / teamTasks.Count * 100;
-
-    //            var taskLines = teamTasks.Count == 0
-    //                ? "_Không có task_"
-    //                : string.Join("\n\n", teamTasks.Select((t, i) =>
-    //                    $"\n{i + 1}. **{t.Title}**\n" +
-    //                    $"   {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} |  👤 {t.AssignedTo} " +
-    //                    $"📅 {
-    //                        (t.DueDate != null
-    //                            ? TimeZoneInfo.ConvertTimeFromUtc(
-    //                                t.DueDate.Value,
-    //                                TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time")
-    //                            ).ToString("dd/MM")
-    //                            : "N/A")}"
-    //                ));
-
-    //            fields.Add(new
-    //            {
-    //                name = $"👥 {team.Name} ({teamTasks.Count} | ✅ {done} | {percent:0}%)",
-    //                value = taskLines,
-    //                inline = false
-    //            });
-    //        }
-
-    //        var projectName = projectDict.ContainsKey(projectGroup.Key) 
-    //            ? projectDict[projectGroup.Key].Name 
-    //            : $"Project {projectGroup.Key}";
-
-    //        embeds.Add(new
-    //        {
-    //            title = $"📁 {projectName}",
-    //            color = "#5865F2",
-    //            fields = fields
-    //        });
-    //    }
-
-    //    // Embed tổng
-    //    embeds.Insert(0, new
-    //    {
-    //        title = $"📊 Task Dashboard - {userId}",
-    //        color = "#57F287",
-    //        fields = new object[]
-    //        {
-    //        new { name = "📌 Total", value = total.ToString(), inline = true },
-    //        new { name = "✅ Done", value = completed.ToString(), inline = true },
-    //        new { name = "📈 Rate", value = $"{rate:0.0}%", inline = true }
-    //        }
-    //    });
-
-    //    return new ChannelMessageContent
-    //    {
-    //        Embed = embeds.ToArray()
-    //    };
-    //}
     public static ChannelMessageContent BuildTaskList(
     List<TaskDto> tasks,
     string userId,
@@ -803,7 +731,6 @@ public static class TaskFormBuilder
             new
             {
                 title = "📊 Xem Task",
-                description = "Chọn Project:",
                 color = "#5865F2",
                 fields = new object[]
                 {
@@ -819,7 +746,7 @@ public static class TaskFormBuilder
         };
     }
 
-    public static ChannelMessageContent BuildViewSelectTeam(int projectId, List<Team> teams, string originalMessageId)
+    public static ChannelMessageContent BuildViewSelectTeam(int projectId, string projectName, List<Team> teams, string originalMessageId)
     {
         return new ChannelMessageContent
         {
@@ -828,7 +755,7 @@ public static class TaskFormBuilder
             new
             {
                 title = "📊 Xem Task",
-                description = $"Project: {projectId}\nChọn Team:",
+                description = $"📁 Project: {projectName}\nChọn Team:",
                 color = "#5865F2",
                 fields = new object[]
                 {
@@ -840,17 +767,7 @@ public static class TaskFormBuilder
                 }
             }
         },
-            Components = new[]
-            {
-                new
-                {
-                    components = new object[]
-                    {
-                        new { id = $"VIEW_SUBMIT|{projectId}|{originalMessageId}", type = 1, component = new { label = "👀 Xem", style = 3 } },
-                        new { id = $"CANCEL|{projectId}|{originalMessageId}", type = 1, component = new { label = "❌ Hủy", style = 4 } }
-                    }
-                }
-            }
+            Components = BuildNavigationButtons($"VIEW_SUBMIT|{projectId}|{originalMessageId}", "👀 Xem", $"CANCEL|{originalMessageId}", "❌ Hủy")
         };
     }
 
@@ -882,9 +799,7 @@ public static class TaskFormBuilder
                 {
                     BuildSelectField("📋 Task", "task", tasks.Select(t => new
                     {
-                        label =
-                            $"📁 {projectName} | 👥 {teamName}\n" +
-                            $"📌 {t.Title} | {GetStatusText(t.Status)}",
+                        label = $"#{t.Id} - {t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} | 👤 {t.AssignedTo} | 📅 {(t.DueDate.HasValue ? TimeZoneInfo.ConvertTimeFromUtc(t.DueDate.Value, VN_TIME_ZONE).ToString("dd/MM HH:mm") : "N/A")}",
                         value = t.Id.ToString()
                     }).ToArray())
                 }
@@ -909,7 +824,7 @@ public static class TaskFormBuilder
             new
             {
                 title = "✏️ Cập nhật Task",
-                description = $"Project: {projectName}\nChọn Team:",
+                description = $"Project: {projectName}",
                 color = "#5865F2",
                 fields = new object[]
                 {
@@ -943,7 +858,6 @@ public static class TaskFormBuilder
             new
             {
                 title = "✏️ Cập nhật Task",
-                description = "Chọn Project:",
                 color = "#5865F2",
                 fields = new object[]
                 {
@@ -1033,7 +947,6 @@ public static class TaskFormBuilder
             new
             {
                 title = "🗑️ Xóa Task",
-                description = "Chọn Project:",
                 color = "#ED4245",
                 fields = new object[]
                 {
@@ -1055,6 +968,7 @@ public static class TaskFormBuilder
     }
 
     public static ChannelMessageContent BuildDeleteSelectTeam(
+        string projectName,
         int projectId,
         List<Team> teams,
         string originalMessageId,
@@ -1070,7 +984,7 @@ public static class TaskFormBuilder
             new
             {
                 title = "🗑️ Xóa Task",
-                description = $"Project: {projectId}\nChọn Team:",
+                description = $"📁 Project: {projectName}",
                 color = "#ED4245",
                 fields = new object[]
                 {
@@ -1092,6 +1006,9 @@ public static class TaskFormBuilder
     }
 
     public static ChannelMessageContent BuildDeleteSelectTask(
+        string projectName,
+        string teamName,
+        string pmName,
         int teamId,
         List<TaskDto> tasks,
         string originalMessageId,
@@ -1107,13 +1024,17 @@ public static class TaskFormBuilder
             new
             {
                 title = "🗑️ Xóa Task",
+                description = 
+                    $"📁 Project: {projectName}\n" +
+                    $"👥 Team: {teamName}\n" +
+                    $"👑 PM: {pmName}",
                 color = "#ED4245",
                 fields = new object[]
                 {
                     BuildSelectField("📋 Task", "task",
                         tasks.Select(t => new
                         {
-                            label = $"{t.Title} | {GetStatusText(t.Status)}",
+                            label = $"#{t.Id} - {t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} | 👤 {t.AssignedTo} | 📅 {(t.DueDate.HasValue ? TimeZoneInfo.ConvertTimeFromUtc(t.DueDate.Value, VN_TIME_ZONE).ToString("dd/MM HH:mm") : "N/A")}",
                             value = t.Id.ToString()
                         }).ToArray())
                 }
@@ -1337,6 +1258,7 @@ public static class TaskFormBuilder
         ETaskStatus.ToDo => "📋 ToDo",
         ETaskStatus.Doing => "🔄 Doing",
         ETaskStatus.Review => "✅ Review",
+        ETaskStatus.Late => "⚠️ Late",
         ETaskStatus.Completed => "✔️ Completed",
         ETaskStatus.Cancelled => "❌ Cancelled",
         _ => "❓ Unknown"

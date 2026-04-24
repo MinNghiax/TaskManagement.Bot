@@ -399,16 +399,6 @@ public class TaskService : ITaskService
             task.ReviewStartedAt = null;
     }
 
-    private string GetDisplayName(string userId, string clanId)
-    {
-        var user = _client?.Clans.Get(clanId)?.Users.Get(userId);
-
-        return user?.DisplayName
-            ?? user?.ClanNick
-            ?? user?.Username
-            ?? $"User-{userId.Substring(0, 4)}";
-    }
-
     public async Task<List<TaskDto>> GetByAssigneeAndTeamAsync(string assignee, int teamId, CancellationToken ct)
     {
         return await _context.TaskItems

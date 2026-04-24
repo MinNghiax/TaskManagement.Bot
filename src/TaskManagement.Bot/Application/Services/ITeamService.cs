@@ -30,6 +30,8 @@ namespace TaskManagement.Bot.Application.Services
 
         Task<List<Team>> GetTeamsByProjectAsync(int projectId);
 
+        Task<List<Team>> GetPMTeamsByUserAsync(string userId);
+
         Task<List<Team>> GetAllAsync();
         Task<List<string>> GetAllMembersAsync();
 
