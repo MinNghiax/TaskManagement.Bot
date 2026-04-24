@@ -14,7 +14,8 @@ public static class MessageBuilder
     public static ChannelMessageContent BuildReminderNotification(
         Reminder reminder,
         string? assigneeUsername,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        DateTime? sentAtUtc = null)
     {
         ArgumentNullException.ThrowIfNull(reminder);
 
@@ -25,17 +26,20 @@ public static class MessageBuilder
         var triggerType = rule?.TriggerType;
         var taskId = task?.Id ?? reminder.TaskId;
         var projectTitle = Normalize(task?.Title, $"Task #{taskId}");
+
+        var displayReminderTime = sentAtUtc ?? reminder.NextTriggerAt ?? reminder.TriggerAt;
+
         var fields = new List<object>
         {
             BuildField("👤 Người được giao", Normalize(assigneeUsername, UnknownUserValue), inline: true),
             BuildField("📁 Project", Normalize(task?.Team?.Project?.Name, NoneValue), inline: true),
             BuildField("👥 Team", Normalize(task?.Team?.Name, NoneValue), inline: true),
             BuildField("📌 Tiêu đề", Normalize(task?.Title, UnknownValue), inline: false),
-            BuildField("⏰ Deadline", FormatDateTime(task?.DueDate), inline: true),
+            BuildField("⏰ Deadline", FormatDateTime(task?.DueDate, timeZone), inline: true),
             BuildField("📊 Trạng thái", GetStatusText(task?.Status), inline: true),
             BuildField("⚡ Độ ưu tiên", GetPriorityText(task?.Priority), inline: true),
             BuildField("🔔 Loại reminder", FormatRule(rule), inline: false),
-            BuildField("🕒 Thời điểm nhắc", FormatDateTime(reminder.NextTriggerAt ?? reminder.TriggerAt, timeZone), inline: true)
+            BuildField("🕒 Thời điểm nhắc", FormatDateTime(displayReminderTime, timeZone), inline: true)
         };
 
         if (!string.IsNullOrWhiteSpace(task?.Description))
@@ -152,7 +156,7 @@ public static class MessageBuilder
             EReminderTriggerType.OnDeadline => "⏰ TASK ĐẾN DEADLINE",
             EReminderTriggerType.BeforeDeadline => "🔔 NHẮC TASK SẮP ĐẾN HẠN",
             EReminderTriggerType.AfterDeadline => "⚠️ TASK QUÁ HẠN",
-            EReminderTriggerType.Repeat => "🔁 NHẮC TASK LẶP LẠI",
+            EReminderTriggerType.Repeat => "🔁 NHẮC ĐỊNH KỲ",
             _ => "🔔 REMINDER TASK"
         };
 
@@ -162,7 +166,7 @@ public static class MessageBuilder
             EReminderTriggerType.OnDeadline => "Task đã đến thời điểm deadline.",
             EReminderTriggerType.BeforeDeadline => "Task sắp đến deadline. Vui lòng kiểm tra tiến độ.",
             EReminderTriggerType.AfterDeadline => "Task đã quá deadline. Vui lòng cập nhật trạng thái.",
-            EReminderTriggerType.Repeat => "Reminder lặp lại cho task chưa hoàn tất.",
+            EReminderTriggerType.Repeat => "Reminder định kỳ cho task chưa hoàn tất.",
             _ => "Thông tin reminder task."
         };
 

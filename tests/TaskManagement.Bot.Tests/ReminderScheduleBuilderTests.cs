@@ -7,6 +7,27 @@ namespace TaskManagement.Bot.Tests;
 
 public class ReminderScheduleBuilderTests
 {
+    [Theory]
+    [InlineData(EReminderTriggerType.Repeat, false, true)]
+    [InlineData(EReminderTriggerType.AfterDeadline, true, true)]
+    [InlineData(EReminderTriggerType.AfterDeadline, false, false)]
+    [InlineData(EReminderTriggerType.BeforeDeadline, true, false)]
+    public void IsRepeatRule_UsesTriggerTypeAndRepeatFlag(
+        EReminderTriggerType triggerType,
+        bool isRepeat,
+        bool expected)
+    {
+        var rule = new ReminderRule
+        {
+            TriggerType = triggerType,
+            IsRepeat = isRepeat
+        };
+
+        var result = ReminderScheduleBuilder.IsRepeatRule(rule);
+
+        Assert.Equal(expected, result);
+    }
+
     [Fact]
     public void CreateRules_BuildsDeadlineAndStateRulesFromPolicy()
     {

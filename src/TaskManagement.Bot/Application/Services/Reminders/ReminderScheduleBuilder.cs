@@ -87,7 +87,8 @@ public static class ReminderScheduleBuilder
 
     public static List<Reminder> BuildTaskReminderEntities(
         TaskItem task,
-        IEnumerable<CreateReminderRuleDto> reminderRules)
+        IEnumerable<CreateReminderRuleDto> reminderRules,
+        TimeZoneInfo? timeZone = null)
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(reminderRules);
@@ -95,16 +96,17 @@ public static class ReminderScheduleBuilder
         var reminders = new List<Reminder>();
 
         if (task.DueDate.HasValue && IsTaskActive(task))
-            reminders.Add(CreateOnDeadlineReminder(task));
+            reminders.Add(CreateOnDeadlineReminder(task, timeZone));
 
-        reminders.AddRange(BuildCustomReminderEntities(task, reminderRules));
+        reminders.AddRange(BuildCustomReminderEntities(task, reminderRules, timeZone));
 
         return reminders;
     }
 
     public static List<Reminder> BuildCustomReminderEntities(
         TaskItem task,
-        IEnumerable<CreateReminderRuleDto> reminderRules)
+        IEnumerable<CreateReminderRuleDto> reminderRules,
+        TimeZoneInfo? timeZone = null)
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(reminderRules);
@@ -122,7 +124,7 @@ public static class ReminderScheduleBuilder
 
         return validRules.Select(ruleDto =>
         {
-            var triggerAt = CalculateTriggerAt(task.DueDate.Value, ruleDto);
+            var triggerAt = CalculateTriggerAt(task.DueDate.Value, ruleDto, timeZone);
             return new Reminder
             {
                 TaskId = task.Id,
@@ -238,7 +240,7 @@ public static class ReminderScheduleBuilder
         return rules.FirstOrDefault(rule => rule.Id == reminderRuleId);
     }
 
-    public static Reminder CreateOnDeadlineReminder(TaskItem task)
+    public static Reminder CreateOnDeadlineReminder(TaskItem task, TimeZoneInfo? timeZone = null)
     {
         ArgumentNullException.ThrowIfNull(task);
 
@@ -248,7 +250,7 @@ public static class ReminderScheduleBuilder
         return new Reminder
         {
             TaskId = task.Id,
-            TriggerAt = task.DueDate.Value,
+            TriggerAt = NormalizeReminderTimeUtc(task.DueDate.Value, timeZone),
             TargetUserId = task.AssignedTo,
             Status = EReminderStatus.Pending,
             NextTriggerAt = null,
@@ -268,7 +270,8 @@ public static class ReminderScheduleBuilder
         TaskItem task,
         Action<Reminder> addReminder,
         bool resetSchedule,
-        DateTime? nowUtc = null)
+        DateTime? nowUtc = null,
+        TimeZoneInfo? timeZone = null)
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(addReminder);
@@ -285,19 +288,20 @@ public static class ReminderScheduleBuilder
 
         if (reminder is null)
         {
-            addReminder(CreateOnDeadlineReminder(task));
+            addReminder(CreateOnDeadlineReminder(task, timeZone));
             return;
         }
 
+        var triggerAtUtc = NormalizeReminderTimeUtc(task.DueDate.Value, timeZone);
         if (resetSchedule || reminder.Status == EReminderStatus.Cancelled)
         {
-            reminder.TriggerAt = task.DueDate.Value;
+            reminder.TriggerAt = triggerAtUtc;
             reminder.NextTriggerAt = null;
             reminder.Status = EReminderStatus.Pending;
         }
         else if (reminder.Status == EReminderStatus.Pending)
         {
-            reminder.TriggerAt = task.DueDate.Value;
+            reminder.TriggerAt = triggerAtUtc;
             reminder.NextTriggerAt = null;
         }
 
@@ -358,8 +362,18 @@ public static class ReminderScheduleBuilder
         return nextReportAtUtc;
     }
 
-    public static bool IsRepeatRule(ReminderRule? rule) =>
-        rule is not null && (rule.IsRepeat || rule.TriggerType == EReminderTriggerType.Repeat);
+    public static bool IsRepeatRule(ReminderRule? rule)
+    {
+        if (rule is null)
+            return false;
+
+        return rule.TriggerType switch
+        {
+            EReminderTriggerType.Repeat => true,
+            EReminderTriggerType.AfterDeadline => rule.IsRepeat,
+            _ => false
+        };
+    }
 
     public static TimeSpan? GetRepeatInterval(ReminderRule? rule)
     {
@@ -402,16 +416,21 @@ public static class ReminderScheduleBuilder
         Enum.IsDefined(typeof(ETimeUnit), rule.IntervalUnit) &&
         Enum.IsDefined(typeof(EReminderTriggerType), rule.TriggerType);
 
-    public static DateTime CalculateTriggerAt(DateTime dueDate, CreateReminderRuleDto rule)
+    public static DateTime CalculateTriggerAt(
+        DateTime dueDate,
+        CreateReminderRuleDto rule,
+        TimeZoneInfo? timeZone = null)
     {
         var interval = ToTimeSpan(rule.Value, rule.IntervalUnit);
-        return rule.TriggerType switch
+        var triggerAt = rule.TriggerType switch
         {
             EReminderTriggerType.BeforeDeadline => dueDate.Subtract(interval),
             EReminderTriggerType.AfterDeadline => dueDate.Add(interval),
             EReminderTriggerType.Repeat => DateTime.UtcNow.Add(interval),
             _ => dueDate
         };
+
+        return NormalizeReminderTimeUtc(triggerAt, timeZone);
     }
 
     public static TimeSpan ToTimeSpan(double value, ETimeUnit unit) =>
@@ -566,6 +585,15 @@ public static class ReminderScheduleBuilder
         {
             DateTimeKind.Utc => value,
             DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+    private static DateTime NormalizeReminderTimeUtc(DateTime value, TimeZoneInfo? timeZone) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ when timeZone is not null => TimeZoneInfo.ConvertTimeToUtc(value, timeZone),
             _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
         };
 }

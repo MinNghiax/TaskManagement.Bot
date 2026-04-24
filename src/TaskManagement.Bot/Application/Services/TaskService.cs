@@ -1,5 +1,6 @@
 using Mezon.Sdk;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
 using TaskManagement.Bot.Infrastructure.Enums;
@@ -11,11 +12,15 @@ public class TaskService : ITaskService
 {
     private readonly TaskManagementDbContext _context;
     private readonly MezonClient? _client;
+    private readonly TimeZoneInfo _timeZone;
 
-    public TaskService(TaskManagementDbContext context, MezonClient? client = null)
+    public TaskService(TaskManagementDbContext context, MezonClient? client = null, IConfiguration? configuration = null)
     {
         _context = context;
         _client = client;
+        _timeZone = configuration is null
+            ? TimeZoneInfo.Utc
+            : ReminderSchedulerConfiguration.CreateTimeZone(configuration);
     }
 
     private TaskDto MapToDto(TaskItem task)
@@ -96,7 +101,7 @@ public class TaskService : ITaskService
                 })
             );
         }
-        var reminders = ReminderScheduleBuilder.BuildTaskReminderEntities(task, dto.ReminderRules);
+        var reminders = ReminderScheduleBuilder.BuildTaskReminderEntities(task, dto.ReminderRules, _timeZone);
         if (reminders.Count > 0)
             _context.Reminders.AddRange(reminders);
 
@@ -169,11 +174,13 @@ public class TaskService : ITaskService
         var now = DateTime.UtcNow;
         ApplyStatusTransition(task, newStatus, now);
         task.UpdatedAt = now;
+        await SyncCustomRemindersAsync(task, resetSchedule: false, now, ct);
         ReminderScheduleBuilder.SyncOnDeadlineReminder(
             task,
             reminder => _context.Reminders.Add(reminder),
             resetSchedule: false,
-            now);
+            nowUtc: now,
+            timeZone: _timeZone);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -189,11 +196,13 @@ public class TaskService : ITaskService
         var now = DateTime.UtcNow;
         task.DueDate = newDueDate;
         task.UpdatedAt = now;
+        await SyncCustomRemindersAsync(task, resetSchedule: dueDateChanged, now, ct);
         ReminderScheduleBuilder.SyncOnDeadlineReminder(
             task,
             reminder => _context.Reminders.Add(reminder),
             resetSchedule: dueDateChanged,
-            now);
+            nowUtc: now,
+            timeZone: _timeZone);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -243,6 +252,8 @@ public class TaskService : ITaskService
             task.AssignedTo = updateDto.AssignedTo;
         if (updateDto.ReminderRules is not null)
             await ReplaceTaskRemindersAsync(task, updateDto.ReminderRules, ct);
+        else if (dueDateChanged || assigneeChanged || statusChanged)
+            await SyncCustomRemindersAsync(task, resetSchedule: dueDateChanged, now, ct);
 
         task.UpdatedAt = now;
         if (dueDateChanged || assigneeChanged || statusChanged || updateDto.ReminderRules is not null)
@@ -250,7 +261,8 @@ public class TaskService : ITaskService
                 task,
                 reminder => _context.Reminders.Add(reminder),
                 resetSchedule: dueDateChanged,
-                now);
+                nowUtc: now,
+                timeZone: _timeZone);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -301,9 +313,73 @@ public class TaskService : ITaskService
             }
         }
 
-        var newReminders = ReminderScheduleBuilder.BuildCustomReminderEntities(task, reminderRules);
+        if (!ReminderScheduleBuilder.IsTaskActive(task))
+            return;
+
+        var newReminders = ReminderScheduleBuilder.BuildCustomReminderEntities(task, reminderRules, _timeZone);
         if (newReminders.Count > 0)
             _context.Reminders.AddRange(newReminders);
+    }
+
+    private async Task SyncCustomRemindersAsync(
+        TaskItem task,
+        bool resetSchedule,
+        DateTime nowUtc,
+        CancellationToken ct)
+    {
+        var customReminders = task.Reminders
+            .Where(r => r.ReminderRule?.TriggerType != EReminderTriggerType.OnDeadline)
+            .ToList();
+
+        if (customReminders.Count == 0)
+            return;
+
+        if (resetSchedule)
+        {
+            var reminderRules = ReminderScheduleBuilder.IsTaskActive(task)
+                ? MapReminderRules(customReminders)
+                : [];
+            await ReplaceTaskRemindersAsync(task, reminderRules, ct);
+            return;
+        }
+
+        foreach (var reminder in customReminders)
+        {
+            if (ReminderScheduleBuilder.IsTaskActive(task))
+            {
+                if (reminder.Status == EReminderStatus.Cancelled
+                    && task.Status == ETaskStatus.Doing
+                    && reminder.ReminderRule?.TaskStatus is ETaskStatus.Review or ETaskStatus.Completed)
+                {
+                    reminder.Status = EReminderStatus.Pending;
+
+                    if (ReminderScheduleBuilder.IsRepeatRule(reminder.ReminderRule))
+                        ReminderScheduleBuilder.ApplyNextSchedule(reminder, nowUtc);
+                }
+
+                if (reminder.Status != EReminderStatus.Pending)
+                    continue;
+
+                reminder.TargetUserId = task.AssignedTo;
+                reminder.StateSnapshot = task.Status;
+            }
+            else
+            {
+                if (reminder.Status != EReminderStatus.Pending)
+                    continue;
+
+                reminder.Status = EReminderStatus.Cancelled;
+                reminder.NextTriggerAt = null;
+            }
+
+            reminder.UpdatedAt = nowUtc;
+
+            if (reminder.ReminderRule is not null)
+            {
+                reminder.ReminderRule.TaskStatus = task.Status;
+                reminder.ReminderRule.UpdatedAt = nowUtc;
+            }
+        }
     }
 
     private static void ApplyStatusTransition(TaskItem task, ETaskStatus newStatus, DateTime changedAtUtc)
