@@ -40,7 +40,6 @@ public class CacheManagerTests
 
         var result = await cache.FetchAsync("42");
         Assert.Equal(42, result);
-        // Second fetch should hit cache
         var cached = await cache.FetchAsync("42");
         Assert.Equal(42, cached);
     }

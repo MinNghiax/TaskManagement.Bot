@@ -14,6 +14,7 @@ public class ReminderConfiguration : IEntityTypeConfiguration<Reminder>
             .IsRequired();
 
         entity.Property(e => e.TargetUserId)
+            .HasMaxLength(100)
             .IsRequired();
 
         entity.Property(e => e.Status)
@@ -42,5 +43,7 @@ public class ReminderConfiguration : IEntityTypeConfiguration<Reminder>
         entity.HasIndex(e => e.TriggerAt);
         entity.HasIndex(e => e.Status);
         entity.HasIndex(e => new { e.Status, e.TriggerAt });
+
+        entity.HasQueryFilter(e => !e.IsDeleted && !e.ReminderRule!.IsDeleted);
     }
 }

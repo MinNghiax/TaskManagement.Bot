@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -25,13 +25,11 @@ namespace TaskManagement.Bot.Infrastructure.Configurations
                 .IsRequired()
                 .HasMaxLength(100);
 
-            // 1 Team có nhiều Member
             builder.HasMany(t => t.Members)
                 .WithOne(m => m.Team)
                 .HasForeignKey(m => m.TeamId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // 1 Team có nhiều Task
             builder.HasMany(t => t.Tasks)
                 .WithOne(t => t.Team)
                 .HasForeignKey(t => t.TeamId)

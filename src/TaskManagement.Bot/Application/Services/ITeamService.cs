@@ -20,6 +20,8 @@ namespace TaskManagement.Bot.Application.Services
 
         Task<List<string>> GetMembers(int teamId);
 
+        Task<List<(string Id, string Name)>> GetMembersWithDisplay(int teamId, string clanId);
+
         Task AddMemberAsync(int teamId, string username, string role = "Member");
 
         Task<Team> CreateTeamWithProjectAsync(string projectName, string teamName, string pmUserId, List<string> memberUserIds);

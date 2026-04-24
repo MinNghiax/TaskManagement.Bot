@@ -1,8 +1,11 @@
-﻿using Mezon.Sdk.Domain;
+﻿using Mezon.Sdk;
+using Mezon.Sdk.Domain;
+using System.Linq;
 using System.Text.Json;
 using TaskManagement.Bot.Application.Commands.TaskCommands;
 using TaskManagement.Bot.Application.DTOs;
 using TaskManagement.Bot.Application.Services;
+using TaskManagement.Bot.Infrastructure.Enums;
 
 namespace TaskManagement.Bot.Application.Commands;
 
@@ -11,15 +14,18 @@ public class TaskCommandHandler : ICommandHandler
     private readonly IProjectService _projectService;
     private readonly ITeamService _teamService;
     private readonly ITaskService _taskService;
+    private readonly MezonClient _client;
 
     public TaskCommandHandler(
         IProjectService projectService,
         ITeamService teamService,
-        ITaskService taskService)
+        ITaskService taskService,
+        MezonClient client)
     {
         _projectService = projectService;
         _teamService = teamService;
         _taskService = taskService;
+        _client = client;
     }
 
     public bool CanHandle(string command) =>
@@ -37,125 +43,180 @@ public class TaskCommandHandler : ICommandHandler
 
         return parts[1].ToLowerInvariant() switch
         {
-            "create" or "form" => await HandleCreateAsync(message.SenderId, ct),
-            "list" => await HandleListAsync(message.SenderId, ct),
-            "update" => await HandleUpdateAsync(parts, message.SenderId, ct),
-            "delete" => await HandleDeletePrompt(parts, message.SenderId, ct),
+            "create" => await HandleCreateAsync(message, message.SenderId, ct),
+            "list" => await HandleListAsync(parts, message.SenderId, message.ClanId, ct),
+            "view" => await HandleViewAsync(message, message.SenderId, ct),
+            "update" => await HandleUpdateEntry(parts, message, ct),
+            "delete" => await HandleDeletePrompt(message, ct),
             _ => new CommandResponse(GetHelpText())
         };
     }
 
-    private async Task<CommandResponse> HandleCreateAsync(string? userId, CancellationToken ct)
+    private async Task<CommandResponse> HandleCreateAsync(ChannelMessage message, string? userId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId))
             return new CommandResponse("❌ Không xác định được người dùng");
 
-        var projects = await _projectService.GetAllProjectsAsync();
-        var teams = await _teamService.GetAllAsync(); 
-        var members = await _teamService.GetAllMembersAsync();
+        var projects = await _projectService.GetProjectsByUserAsync(userId);
         if (projects.Count == 0)
             return new CommandResponse("❌ Chưa có project nào. Hãy tạo project bằng `!team init`");
 
-        return new CommandResponse(TaskFormBuilder.BuildFullCreateForm(projects, teams, members));
+        Console.WriteLine($"[HandleCreateAsync] message.Id = {message.Id}");
+        Console.WriteLine($"[HandleCreateAsync] Is GUID? {Guid.TryParse(message.Id, out _)}");
+
+        return new CommandResponse(TaskFormBuilder.BuildSelectProject(projects, message.Id, userId, "create"));
     }
 
-    private async Task<CommandResponse> HandleListAsync(string? userId, CancellationToken ct)
+    private async Task<CommandResponse> HandleListAsync(
+    string[] parts,
+    string? userId,
+    string? clanId,
+    CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId))
-            return new CommandResponse("❌ Không xác định người dùng");
+            return new CommandResponse("❌ Không xác định user");
 
-        // Lấy tất cả task
-        var allTasks = await _taskService.GetAllAsync(ct);
+        var teams = await _teamService.GetTeamsByMemberAsync(userId);
 
-        if (allTasks.Count == 0)
-            return new CommandResponse("📭 Không có task nào");
+        var tasks = new List<TaskDto>();
 
-        // Check role (mentor hay member)
-        var isMentor = await _teamService.IsUserPMInAnyTeam(userId);
-
-        List<TaskDto> tasks;
-
-        if (isMentor)
+        foreach (var team in teams)
         {
-            // Mentor thấy tất cả
-            tasks = allTasks;
+            // chỉ lấy task của user
+            var myTasks = await _taskService.GetByAssigneeAndTeamAsync(userId, team.Id, ct);
+            tasks.AddRange(myTasks);
         }
-        else
+
+        // remove duplicate
+        tasks = tasks
+            .GroupBy(t => t.Id)
+            .Select(g => g.First())
+            .ToList();
+
+        //  FILTER STATUS 
+        if (parts.Length >= 4 && parts[2].ToLower() == "status")
         {
-            // Member chỉ thấy task của mình
-            tasks = allTasks
-                .Where(t => t.AssignedTo == userId)
+            var status = ParseStatusFilter(parts[3]);
+
+            if (status == null)
+                return new CommandResponse("❌ Status không hợp lệ (todo | doing | review | completed | cancelled)");
+
+            tasks = tasks
+                .Where(t => t.Status == status.Value)
                 .ToList();
         }
 
-        var content = TaskFormBuilder.BuildTaskList(tasks, isMentor);
+        // map displayName
+        var mappedTasks = tasks.Select(t => new TaskDto
+        {
+            Id = t.Id,
+            Title = t.Title,
+            AssignedTo = GetDisplayName(t.AssignedTo!, clanId!),
+            CreatedBy = GetDisplayName(t.CreatedBy!, clanId!),
+            Status = t.Status,
+            Priority = t.Priority,
+            DueDate = t.DueDate,
+            CreatedAt = t.CreatedAt,
+            TeamId = t.TeamId
+        }).ToList();
+
+        var projects = await _projectService.GetAllProjectsAsync();
+        var displayName = GetDisplayName(userId, clanId!);
+
+        var content = TaskFormBuilder.BuildTaskList(mappedTasks, displayName, clanId!, teams, projects);
 
         return new CommandResponse(content);
     }
 
-    private async Task<CommandResponse> HandleUpdateAsync(
+    private async Task<CommandResponse> HandleViewAsync(ChannelMessage message, string? userId, CancellationToken ct)
+    {
+        var projects = await _projectService.GetProjectsByMemberAsync(userId!);
+
+        if (projects.Count == 0)
+            return new CommandResponse("❌ Chưa có project");
+
+        return new CommandResponse(
+            TaskFormBuilder.BuildViewSelectProject(projects, message.Id)
+        );
+    }
+     
+    private async Task<CommandResponse> HandleUpdateEntry(
     string[] parts,
-    string? userId,
+    ChannelMessage message,
     CancellationToken ct)
     {
-        if (parts.Length < 3 || !int.TryParse(parts[2], out var taskId))
-            return new CommandResponse("❌ Dùng: `!task update <taskId>`");
+        var userId = message.SenderId;
 
         if (string.IsNullOrWhiteSpace(userId))
-            return new CommandResponse("❌ Không xác định người dùng");
+            return new CommandResponse("❌ Không xác định user");
 
-        var task = await _taskService.GetByIdAsync(taskId, ct);
-        if (task == null)
-            return new CommandResponse("❌ Không tìm thấy task");
+        var mode = parts.Length >= 3 ? parts[2].ToLower() : "";
 
-        // Check quyền
-        var isMentor = task.TeamId.HasValue &&
-                       await _teamService.IsPM(userId, task.TeamId.Value);
-
-        var isAssignee = task.AssignedTo == userId;
-
-        if (!isMentor && !isAssignee)
-            return new CommandResponse("❌ Bạn không có quyền sửa task này");
-
-        // Mentor → full form
-        if (isMentor)
+        if (mode != "pm" && mode != "member")
         {
-            var members = task.TeamId.HasValue
-                ? await _teamService.GetMembers(task.TeamId.Value)
-                : new List<string>();
+            return new CommandResponse("""
+                ❗ Dùng:
+                - !task update pm
+                - !task update member
+                """);
+        }
+
+        var teams = await _teamService.GetTeamsByMemberAsync(userId);
+
+        if (teams.Count == 0)
+            return new CommandResponse("❌ Bạn chưa thuộc team nào");
+
+        if (mode == "pm")
+        {
+            var isPM = false;
+            foreach (var team in teams)
+            {
+                if (await _teamService.IsPM(userId, team.Id))
+                {
+                    isPM = true;
+                    break;
+                }
+            }
+
+            if (!isPM)
+                return new CommandResponse("❌ Bạn không phải PM");
+
+            var projects = await _projectService.GetProjectsByUserAsync(userId);
+
+            if (projects.Count == 0)
+                return new CommandResponse("❌ Bạn chưa có project");
 
             return new CommandResponse(
-                TaskFormBuilder.BuildUpdateFormForMentor(task, members)
+                TaskFormBuilder.BuildUpdateSelectProject(projects, message.Id, userId)
             );
         }
 
-        // Member → chỉ update status
+        // mode == "member"
+        var memberProjects = await _projectService.GetProjectsByMemberAsync(userId);
+
+        if (memberProjects.Count == 0)
+            return new CommandResponse("❌ Bạn chưa có project nào");
+
         return new CommandResponse(
-            TaskFormBuilder.BuildUpdateFormForMember(task)
+            TaskFormBuilder.BuildMemberUpdateSelectProject(memberProjects, message.Id, userId)
         );
     }
 
-    private async Task<CommandResponse> HandleDeletePrompt(string[] parts, string? userId, CancellationToken cancellationToken)
+    private async Task<CommandResponse> HandleDeletePrompt(ChannelMessage message, CancellationToken ct)
     {
-        if (parts.Length < 3 || !int.TryParse(parts[2], out var taskId))
-            return new CommandResponse("❌ Dùng: `!task delete <taskId>`");
-
+        var userId = message.SenderId;
+        
         if (string.IsNullOrWhiteSpace(userId))
-            return new CommandResponse("❌ Không xác định được người dùng");
+            return new CommandResponse("❌ Không xác định user");
 
-        var task = await _taskService.GetByIdAsync(taskId, cancellationToken);
-        if (task == null)
-            return new CommandResponse("❌ Không tìm thấy task");
+        // lấy project của PM
+        var projects = await _projectService.GetProjectsByUserAsync(userId);
 
-        //  CHECK ROLE NGAY TỪ COMMAND
-        var isMentor = task.TeamId.HasValue &&
-                       await _teamService.IsPM(userId, task.TeamId.Value);
-
-        if (!isMentor)
-            return new CommandResponse("❌ Chỉ Mentor mới được dùng lệnh này");
+        if (projects.Count == 0)
+            return new CommandResponse("❌ Bạn chưa có project nào");
 
         return new CommandResponse(
-            TaskFormBuilder.BuildDeleteConfirm(task)
+            TaskFormBuilder.BuildDeleteSelectProject(projects, message.Id, userId)
         );
     }
 
@@ -163,9 +224,12 @@ public class TaskCommandHandler : ICommandHandler
         📝 **Quản lý Task**
         
         `!task create` - Tạo task mới
-        `!task list` - Xem danh sách task
-        `!task update <id>` - Cập nhật task
-        `!task delete <id>` - Xóa task (Mentor)
+        `!task list status <status>` - Xem danh sách task theo trạng thái
+        `!task list` - Xem danh sách task theo user
+        `!task update` - Cập nhật task
+            `!task update pm` - Cập nhật task theo pm
+            `!task update member` - Cập nhật task theo member
+        `!task delete` - Xóa task (Mentor)
         """;
 
     private static string? ParseContent(string? raw)
@@ -186,4 +250,27 @@ public class TaskCommandHandler : ICommandHandler
             return raw;
         }
     }
+
+    private string GetDisplayName(string userId, string clanId)
+    {
+        var user = _client.Clans.Get(clanId)?.Users.Get(userId);
+
+        if (user == null)
+            return $"User-{userId.Substring(0, 4)}";
+
+        return user.DisplayName
+            ?? user.ClanNick
+            ?? user.Username
+            ?? $"User-{userId.Substring(0, 4)}";
+    }
+
+    private static ETaskStatus? ParseStatusFilter(string? value) => value?.ToLower() switch
+    {
+        "todo" => ETaskStatus.ToDo,
+        "doing" => ETaskStatus.Doing,
+        "review" => ETaskStatus.Review,
+        "completed" => ETaskStatus.Completed,
+        "cancelled" => ETaskStatus.Cancelled,
+        _ => null
+    };
 }

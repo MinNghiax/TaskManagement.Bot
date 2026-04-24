@@ -10,7 +10,7 @@ public class Reminder : BaseEntity
 
     public DateTime TriggerAt { get; set; }
 
-    public int TargetUserId { get; set; }
+    public required string TargetUserId { get; set; }
 
     public EReminderStatus Status { get; set; } = EReminderStatus.Pending;
 

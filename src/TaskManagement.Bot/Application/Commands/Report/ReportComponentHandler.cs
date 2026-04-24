@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Mezon.Sdk.Domain;
 using Microsoft.Extensions.Logging;
 using TaskManagement.Bot.Application.Services;
 
@@ -23,8 +24,8 @@ public class ReportComponentHandler : IComponentHandler
     public bool CanHandle(string customId)
     {
         return customId.StartsWith("REPORT_", StringComparison.OrdinalIgnoreCase) ||
-               customId == "selected_project" ||
-               customId == "selected_team";
+               customId == "report_project_select" ||
+               customId == "report_team_select";
     }
 
     public async Task<ComponentResponse> HandleAsync(ComponentContext context, CancellationToken ct)
@@ -34,30 +35,57 @@ public class ReportComponentHandler : IComponentHandler
             var customId = context.CustomId;
 
             _logger.LogInformation(
-                "[REPORT_COMPONENT] CustomId: {CustomId} | User: {UserId} | Clan: {ClanId}",
+                "[REPORT_COMPONENT] CustomId: {CustomId} | User: {UserId} | Clan: {ClanId} | MessageId: {MessageId}",
                 customId,
                 context.CurrentUserId,
-                context.ClanId);
+                context.ClanId,
+                context.MessageId);
 
-            if (customId == "selected_project")
+            if (customId == "report_project_select")
             {
-                return await HandleProjectDropdownAsync(context);
+                return await HandleProjectSelectAsync(context);
             }
 
-            if (customId == "selected_team")
+            if (customId == "report_team_select")
             {
-                return await HandleTeamDropdownAsync(context);
+                return await HandleTeamSelectAsync(context);
             }
 
             var parts = customId.Split('|');
             var action = parts[0];
+            
+            _logger.LogInformation(
+                "[REPORT_COMPONENT] Button action: {Action} | Parts: {Parts}",
+                action,
+                string.Join(", ", parts));
+
+            if (action == "REPORT_VIEW" || action == "REPORT_CANCEL")
+            {
+                var userId = context.CurrentUserId ?? "";
+                var state = _stateService.GetState(userId);
+
+                if (state == null || !state.OwnerUserId.Equals(userId))
+                {
+                    _logger.LogWarning(
+                        "[REPORT_COMPONENT] User {UserId} tried to interact with unauthorized form. State exists: {StateExists}, Owner: {OwnerId}",
+                        userId,
+                        state != null,
+                        state?.OwnerUserId ?? "N/A");
+
+                    return ComponentResponse.FromText(
+                        context.ClanId ?? "",
+                        context.ChannelId ?? "",
+                        "❌ Bạn không có quyền thao tác với form này",
+                        context.Mode,
+                        context.IsPublic,
+                        context.MessageId ?? "");
+                }
+            }
 
             return action switch
             {
-                "REPORT_SELECT_PROJECT" => await HandleSelectProjectAsync(context, parts),
-                "REPORT_SELECT_TEAM" => await HandleSelectTeamAsync(context, parts),
-                "REPORT_BACK_PROJECT" => await HandleBackToProjectAsync(context, parts),
-                "REPORT_CANCEL" => HandleCancel(context),
+                "REPORT_VIEW" => await HandleViewReportAsync(context, parts),
+                "REPORT_CANCEL" => HandleCancel(context, parts),
                 _ => ComponentResponse.FromText(
                     context.ClanId ?? "",
                     context.ChannelId ?? "",
@@ -80,248 +108,263 @@ public class ReportComponentHandler : IComponentHandler
         }
     }
 
-    private async Task<ComponentResponse> HandleProjectDropdownAsync(ComponentContext context)
+    private async Task<ComponentResponse> HandleProjectSelectAsync(ComponentContext context)
     {
         var selectedValue = ExtractDropdownValue(context.Payload);
+        var userId = context.CurrentUserId ?? "";
         
         _logger.LogInformation(
-            "[REPORT_COMPONENT] Project dropdown selected: {Value} by user {UserId}",
+            "[REPORT_COMPONENT] Project selected: {Value} by user {UserId}",
             selectedValue,
-            context.CurrentUserId);
+            userId);
 
-        if (!string.IsNullOrEmpty(selectedValue) && int.TryParse(selectedValue, out var projectId))
+        var state = _stateService.GetState(userId);
+        if (state == null)
         {
-            var projects = await _reportService.GetPMProjectsAsync(context.CurrentUserId ?? "");
-            var project = projects.Projects.FirstOrDefault(p => p.ProjectId == projectId);
+            _logger.LogWarning("[REPORT_COMPONENT] No state found for user {UserId}", userId);
+            return new ComponentResponse();
+        }
 
-            if (project != null)
+        if (!state.OwnerUserId.Equals(userId))
+        {
+            _logger.LogWarning(
+                "[REPORT_COMPONENT] User {UserId} tried to select project in form owned by {OwnerId}",
+                userId,
+                state.OwnerUserId);
+            return new ComponentResponse();
+        }
+
+        if (string.IsNullOrEmpty(selectedValue) || !int.TryParse(selectedValue, out var projectId))
+        {
+            return new ComponentResponse();
+        }
+
+        var clanId = context.ClanId ?? "";
+        var channelId = context.ChannelId ?? "";
+        var formMessageId = context.MessageId ?? "";
+
+        var originalMessageId = state.OriginalMessageId ?? "";
+        var originalMessage = state.OriginalMessage;
+        
+        _stateService.SetFormMessageId(userId, formMessageId);
+
+        var projects = await _reportService.GetPMProjectsAsync(userId);
+        var project = projects.Projects.FirstOrDefault(p => p.ProjectId == projectId);
+
+        if (project == null)
+        {
+            return new ComponentResponse();
+        }
+
+        var projectChanged = state?.ProjectId != projectId;
+        
+        _stateService.SetSelectedProject(userId, projectId, project.ProjectName, originalMessageId, originalMessage);
+        
+        if (projectChanged)
+        {
+            var currentState = _stateService.GetState(userId);
+            if (currentState != null)
             {
-                _stateService.SetSelectedProject(context.CurrentUserId ?? "", projectId, project.ProjectName);
-                
-                _logger.LogInformation(
-                    "[REPORT_COMPONENT] Saved project selection: ProjectId={ProjectId}, ProjectName={ProjectName}",
-                    projectId,
-                    project.ProjectName);
+                currentState.TeamId = null;
             }
         }
 
-        return new ComponentResponse();
+        var teams = await _reportService.GetTeamsByProjectAsync(projectId);
+        var form = ReportFormBuilder.BuildReportFilterForm(projects, clanId, projectId, teams);
+
+        var response = new ComponentResponse();
+        response.UpdateMessage(
+            clanId,
+            channelId,
+            formMessageId,
+            form,
+            context.Mode,
+            context.IsPublic);
+
+        _logger.LogInformation(
+            "[REPORT_COMPONENT] ✅ Queued update for form message {MessageId} with team options",
+            formMessageId);
+
+        return response;
     }
 
-    private Task<ComponentResponse> HandleTeamDropdownAsync(ComponentContext context)
+    private Task<ComponentResponse> HandleTeamSelectAsync(ComponentContext context)
     {
         var selectedValue = ExtractDropdownValue(context.Payload);
+        var userId = context.CurrentUserId ?? "";
         
         _logger.LogInformation(
-            "[REPORT_COMPONENT] Team dropdown selected: {Value} by user {UserId}",
+            "[REPORT_COMPONENT] Team selected: {Value} by user {UserId}",
             selectedValue,
-            context.CurrentUserId);
+            userId);
+
+        // ⭐ VALIDATE OWNERSHIP
+        var state = _stateService.GetState(userId);
+        if (state == null)
+        {
+            _logger.LogWarning("[REPORT_COMPONENT] No state found for user {UserId}", userId);
+            return Task.FromResult(new ComponentResponse());
+        }
+
+        if (!state.OwnerUserId.Equals(userId))
+        {
+            _logger.LogWarning(
+                "[REPORT_COMPONENT] User {UserId} tried to select team in form owned by {OwnerId}",
+                userId,
+                state.OwnerUserId);
+            return Task.FromResult(new ComponentResponse());
+        }
 
         if (!string.IsNullOrEmpty(selectedValue) && int.TryParse(selectedValue, out var teamId))
         {
-            var state = _stateService.GetState(context.CurrentUserId ?? "");
-            if (state != null)
-            {
-                state.TeamId = teamId;
-                
-                _logger.LogInformation(
-                    "[REPORT_COMPONENT] Updated state with TeamId={TeamId}",
-                    teamId);
-            }
+            state.TeamId = teamId;
+            
+            var formMessageId = context.MessageId ?? "";
+            _stateService.SetFormMessageId(userId, formMessageId);
+            
+            _logger.LogInformation(
+                "[REPORT_COMPONENT] Saved team selection: TeamId={TeamId}, FormMessageId={FormMessageId}",
+                teamId,
+                formMessageId);
         }
 
         return Task.FromResult(new ComponentResponse());
     }
 
-    private async Task<ComponentResponse> HandleSelectProjectAsync(ComponentContext context, string[] parts)
+    private async Task<ComponentResponse> HandleViewReportAsync(ComponentContext context, string[] parts)
     {
-        var clanId = parts.Length > 1 ? parts[1] : context.ClanId ?? "";
         var userId = context.CurrentUserId ?? "";
-
         var state = _stateService.GetState(userId);
         
+        var clanId = (!string.IsNullOrEmpty(context.ClanId) && context.ClanId != "0") 
+            ? context.ClanId 
+            : (parts.Length > 1 ? parts[1] : "");
+        
         _logger.LogInformation(
-            "[REPORT_COMPONENT] Button 'Tiếp tục' clicked by user {UserId}. State: {HasState}",
+            "[REPORT_COMPONENT] View report clicked by user {UserId}. ProjectId: {ProjectId}, TeamId: {TeamId}, FormMessageId: {FormMessageId}, ClanId: {ClanId}",
             userId,
-            state != null);
+            state?.ProjectId,
+            state?.TeamId,
+            state?.FormMessageId,
+            clanId);
 
         if (state == null || state.ProjectId == 0)
         {
-            _logger.LogWarning(
-                "[REPORT_COMPONENT] No project selected in state for user {UserId}",
-                userId);
-            
+            _logger.LogWarning("[REPORT_COMPONENT] State is null or ProjectId is 0");
             return ComponentResponse.FromText(
-                context.ClanId ?? "",
+                clanId,
                 context.ChannelId ?? "",
-                "❌ Vui lòng chọn Project từ dropdown trước khi nhấn 'Tiếp tục'",
+                "❌ Vui lòng chọn Project trước",
                 context.Mode,
                 context.IsPublic,
                 context.MessageId ?? "");
         }
 
-        var projectId = state.ProjectId;
-        var projectName = state.ProjectName;
-
-        _logger.LogInformation(
-            "[REPORT_COMPONENT] Selected project from state: ProjectId={ProjectId}, ProjectName={ProjectName}",
-            projectId,
-            projectName);
-
-        var teams = await _reportService.GetTeamsByProjectAsync(projectId);
-        var form = ReportFormBuilder.BuildTeamSelectionForm(projectId, projectName, teams, clanId);
-
-        var response = new ComponentResponse();
-
-        if (!string.IsNullOrEmpty(context.MessageId))
+        if (!state.TeamId.HasValue || state.TeamId.Value == 0)
         {
-            response.DeleteMessage(
-                context.ClanId ?? "",
+            _logger.LogWarning("[REPORT_COMPONENT] TeamId is null or 0");
+            return ComponentResponse.FromText(
+                clanId,
                 context.ChannelId ?? "",
-                context.MessageId,
+                "❌ Vui lòng chọn Team trước",
                 context.Mode,
                 context.IsPublic,
-                context.MessageId,
-                null);
+                context.MessageId ?? "");
         }
 
-        response.Messages.Add(new ComponentMessage
-        {
-            ClanId = context.ClanId ?? "",
-            ChannelId = context.ChannelId ?? "",
-            Content = form,
-            Mode = context.Mode,
-            IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
-
-        return response;
-    }
-
-    private async Task<ComponentResponse> HandleSelectTeamAsync(ComponentContext context, string[] parts)
-    {
-        var userId = context.CurrentUserId ?? "";
-
-        var state = _stateService.GetState(userId);
+        var formMessageId = !string.IsNullOrEmpty(state.FormMessageId) 
+            ? state.FormMessageId 
+            : context.MessageId ?? "";
         
-        _logger.LogInformation(
-            "[REPORT_COMPONENT] Button 'Xem báo cáo' clicked by user {UserId}. State: {HasState}, TeamId: {TeamId}",
-            userId,
-            state != null,
-            state?.TeamId);
-
-        if (state == null || !state.TeamId.HasValue || state.TeamId.Value == 0)
+        if (string.IsNullOrEmpty(formMessageId))
         {
-            _logger.LogWarning(
-                "[REPORT_COMPONENT] No team selected in state for user {UserId}",
-                userId);
-            
+            _logger.LogError("[REPORT_COMPONENT] FormMessageId is empty!");
             return ComponentResponse.FromText(
-                context.ClanId ?? "",
+                clanId,
                 context.ChannelId ?? "",
-                "❌ Vui lòng chọn Team từ dropdown trước khi nhấn 'Xem báo cáo'",
+                "❌ Lỗi: Không tìm thấy form message",
                 context.Mode,
                 context.IsPublic,
                 context.MessageId ?? "");
         }
 
         var teamId = state.TeamId.Value;
-
+        
         _logger.LogInformation(
-            "[REPORT_COMPONENT] Selected team from state: TeamId={TeamId}",
-            teamId);
-
+            "[REPORT_COMPONENT] Fetching report for team {TeamId}, will update message {MessageId}",
+            teamId,
+            formMessageId);
         var report = await _reportService.GetTeamDetailReportAsync(teamId);
+        
         var form = ReportFormBuilder.BuildTeamDetailReportForm(report);
 
-        _stateService.ClearState(userId);
-
         var response = new ComponentResponse();
+        response.UpdateMessage(
+            clanId,  // ⭐ Use fixed clanId
+            context.ChannelId ?? "",
+            formMessageId,
+            form,
+            context.Mode,
+            context.IsPublic,
+            onSuccess: () =>
+            {
+                // ⭐ Clear state SAU KHI update thành công
+                _stateService.ClearState(userId);
+                _logger.LogInformation(
+                    "[REPORT_COMPONENT] ✅ Cleared state for user {UserId} after successful report display",
+                    userId);
+            });
 
-        if (!string.IsNullOrEmpty(context.MessageId))
-        {
-            response.DeleteMessage(
-                context.ClanId ?? "",
-                context.ChannelId ?? "",
-                context.MessageId,
-                context.Mode,
-                context.IsPublic,
-                context.MessageId,
-                null);
-        }
-
-        response.Messages.Add(new ComponentMessage
-        {
-            ClanId = context.ClanId ?? "",
-            ChannelId = context.ChannelId ?? "",
-            Content = form,
-            Mode = context.Mode,
-            IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
+        _logger.LogInformation(
+            "[REPORT_COMPONENT] ✅ Queued update for form message {MessageId} with report result",
+            formMessageId);
 
         return response;
     }
 
-    private async Task<ComponentResponse> HandleBackToProjectAsync(ComponentContext context, string[] parts)
+    private ComponentResponse HandleCancel(ComponentContext context, string[] parts)
     {
-        var clanId = parts.Length > 1 ? parts[1] : context.ClanId ?? "";
+        var userId = context.CurrentUserId ?? "";
+        var state = _stateService.GetState(userId);
 
-        var report = await _reportService.GetPMProjectsAsync(context.CurrentUserId ?? "");
-        var form = ReportFormBuilder.BuildPMProjectSelectionForm(report, clanId);
+        var clanId = (!string.IsNullOrEmpty(context.ClanId) && context.ClanId != "0") 
+            ? context.ClanId 
+            : (parts.Length > 1 ? parts[1] : "");
+
+        var formMessageId = !string.IsNullOrEmpty(state?.FormMessageId) 
+            ? state.FormMessageId 
+            : context.MessageId ?? "";
+
+        _logger.LogInformation(
+            "[REPORT_COMPONENT] Cancel clicked by user {UserId}. ClanId: {ClanId}, FormMessageId: {FormMessageId}",
+            userId,
+            clanId,
+            formMessageId);
+
+        var content = new ChannelMessageContent
+        {
+            Text = "✅ Đã hủy báo cáo"
+        };
 
         var response = new ComponentResponse();
 
-        if (!string.IsNullOrEmpty(context.MessageId))
+        if (!string.IsNullOrEmpty(formMessageId))
         {
-            response.DeleteMessage(
-                context.ClanId ?? "",
+            response.UpdateMessage(
+                clanId,
                 context.ChannelId ?? "",
-                context.MessageId,
+                formMessageId,
+                content,
                 context.Mode,
                 context.IsPublic,
-                context.MessageId,
-                null);
+                onSuccess: () =>
+                {
+                    _stateService.ClearState(userId);
+                    _logger.LogInformation(
+                        "[REPORT_COMPONENT] ✅ Cleared state for user {UserId} after cancel",
+                        userId);
+                });
         }
-
-        response.Messages.Add(new ComponentMessage
-        {
-            ClanId = context.ClanId ?? "",
-            ChannelId = context.ChannelId ?? "",
-            Content = form,
-            Mode = context.Mode,
-            IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
-
-        return response;
-    }
-
-    private ComponentResponse HandleCancel(ComponentContext context)
-    {
-        var response = new ComponentResponse();
-
-        if (!string.IsNullOrEmpty(context.MessageId))
-        {
-            response.DeleteMessage(
-                context.ClanId ?? "",
-                context.ChannelId ?? "",
-                context.MessageId,
-                context.Mode,
-                context.IsPublic,
-                context.MessageId,
-                null);
-        }
-
-        response.Messages.Add(new ComponentMessage
-        {
-            ClanId = context.ClanId ?? "",
-            ChannelId = context.ChannelId ?? "",
-            Text = "✅ Đã hủy báo cáo",
-            Mode = context.Mode,
-            IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
-        });
 
         return response;
     }
@@ -381,51 +424,6 @@ public class ReportComponentHandler : IComponentHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "[REPORT_COMPONENT] Error extracting dropdown value");
-        }
-
-        return null;
-    }
-    
-    private string? ExtractFormValue(JsonElement payload, string fieldId)
-    {
-        try
-        {
-            if (payload.TryGetProperty("message", out var message) &&
-                message.TryGetProperty("content", out var content) &&
-                content.TryGetProperty("embed", out var embed) &&
-                embed.ValueKind == JsonValueKind.Array)
-            {
-                var embedArray = embed.EnumerateArray().ToList();
-                if (embedArray.Count > 0 &&
-                    embedArray[0].TryGetProperty("fields", out var fields) &&
-                    fields.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var field in fields.EnumerateArray())
-                    {
-                        if (field.TryGetProperty("inputs", out var inputs) &&
-                            inputs.TryGetProperty("id", out var id) &&
-                            id.GetString() == fieldId &&
-                            inputs.TryGetProperty("value", out var value))
-                        {
-                            return value.GetString();
-                        }
-                    }
-                }
-            }
-
-            if (payload.TryGetProperty("values", out var values) &&
-                values.ValueKind == JsonValueKind.Array)
-            {
-                var valuesArray = values.EnumerateArray().ToList();
-                if (valuesArray.Count > 0)
-                {
-                    return valuesArray[0].GetString();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[REPORT_COMPONENT] Failed to extract form value for {FieldId}", fieldId);
         }
 
         return null;

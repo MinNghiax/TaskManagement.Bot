@@ -1,10 +1,17 @@
-﻿using Mezon.Sdk.Domain;
+﻿using Mezon.Sdk;
+using Mezon.Sdk.Domain;
 using TaskManagement.Bot.Application.Commands.TeamCommands;
 
 namespace TaskManagement.Bot.Application.Commands;
 
 public class TeamCommandHandler : ICommandHandler
 {
+    private readonly MezonClient _client;
+
+    public TeamCommandHandler(MezonClient client)
+    {
+        _client = client;
+    }
     public bool CanHandle(string command) =>
         command.StartsWith("!team", StringComparison.OrdinalIgnoreCase);
 
@@ -20,7 +27,8 @@ public class TeamCommandHandler : ICommandHandler
 
         return parts[1].ToLowerInvariant() switch
         {
-            "init" => Task.FromResult(new CommandResponse(TeamFormBuilder.BuildTeamForm(1))),
+            "init" => Task.FromResult(new CommandResponse(
+                TeamFormBuilder.BuildTeamForm(2, message.Id, message.SenderId))),
             _ => Task.FromResult(new CommandResponse(GetHelpText()))
         };
     }

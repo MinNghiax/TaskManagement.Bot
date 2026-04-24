@@ -35,16 +35,94 @@ public class TeamComponentHandler : IComponentHandler
         customId.StartsWith("ACCEPT", StringComparison.OrdinalIgnoreCase) ||
         customId.StartsWith("REJECT", StringComparison.OrdinalIgnoreCase);
 
+    private ChannelMessage BuildOriginalMessage(ComponentContext context, string messageId, string? senderId)
+    {
+        var userIdToLookup = senderId ?? context.CurrentUserId;
+        
+        var user = _client.Clans.Get(context.ClanId!)?.Users.Get(userIdToLookup!);
+        
+        if (user != null)
+        {
+            _logger.LogInformation(
+                "[BuildOriginalMessage] Found user in cache: {Username} ({UserId})",
+                user.Username,
+                userIdToLookup);
+            
+            return new ChannelMessage
+            {
+                Id = messageId,
+                ChannelId = context.ChannelId!,
+                ChannelLabel = "",
+                SenderId = userIdToLookup,
+                Username = user.Username,
+                DisplayName = user.DisplayName,
+                ClanNick = user.ClanNick,
+                ClanAvatar = user.ClanAvatar,
+                Content = new ChannelMessageContent { Text = "!team init" }, 
+                ClanId = context.ClanId
+            };
+        }
+        
+        _logger.LogWarning(
+            "[BuildOriginalMessage] User {UserId} not found in cache, using minimal message info",
+            userIdToLookup);
+        
+        return new ChannelMessage
+        {
+            Id = messageId,
+            ChannelId = context.ChannelId!,
+            ChannelLabel = "",
+            SenderId = userIdToLookup ?? "",
+            Username = "",
+            DisplayName = "",
+            ClanNick = "",
+            ClanAvatar = "",
+            Content = new ChannelMessageContent { Text = "!team init" }, 
+            ClanId = context.ClanId
+        };
+    }
+
     public async Task<ComponentResponse> HandleAsync(ComponentContext context, CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "[TEAM_COMPONENT] CustomId={CustomId} ClanId={ClanId} ChannelId={ChannelId} UserId={UserId} MessageId={MessageId}",
+            context.CustomId,
+            context.ClanId,
+            context.ChannelId,
+            context.CurrentUserId,
+            context.MessageId);
+
         if (string.IsNullOrWhiteSpace(context.ClanId) || string.IsNullOrWhiteSpace(context.ChannelId))
+        {
+            _logger.LogWarning("[TEAM_COMPONENT] Missing ClanId or ChannelId");
             return new ComponentResponse();
+        }
 
         var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
         if (parts.Length == 0)
             return new ComponentResponse();
 
-        return parts[0].ToUpperInvariant() switch
+        var action = parts[0].ToUpperInvariant();
+        
+        if (action != "ACCEPT" && action != "REJECT")
+        {
+            var formOwnerId = ExtractFormOwnerId(parts, action);
+            if (!string.IsNullOrWhiteSpace(formOwnerId) && formOwnerId != context.CurrentUserId)
+            {
+                // Hiển thị message nhưng không reply
+                return ComponentResponse.FromText(
+                    context.ClanId!,
+                    context.ChannelId!,
+                    "❌ Bạn không có quyền thao tác form này",
+                    context.Mode,
+                    context.IsPublic,
+                    null, // Không reply
+                    null  // Không có original message
+                );
+            }
+        }
+        
+        return action switch
         {
             "CREATE_TEAM" => await HandleCreateTeamAsync(context, cancellationToken),
             "CANCEL_TEAM" => HandleCancel(context, "❌ Đã hủy tạo team."),
@@ -55,13 +133,23 @@ public class TeamComponentHandler : IComponentHandler
         };
     }
 
+    private string? ExtractFormOwnerId(string[] parts, string action)
+    {
+        return action switch
+        {
+            "CREATE_TEAM" when parts.Length >= 3 => parts[2],
+            "CANCEL_TEAM" when parts.Length >= 3 => parts[2],
+            "ADD_MEMBER" when parts.Length >= 4 => parts[3],
+            _ => null
+        };
+    }
+
     private async Task<ComponentResponse> HandleCreateTeamAsync(ComponentContext context, CancellationToken ct)
-    
+
     {
         var projectName = ReadValue(context.Payload, "project_name");
         var teamName = ReadValue(context.Payload, "team_name");
 
-        // Collect members
         var formValues = new Dictionary<string, string>();
         for (var i = 1; i <= 6; i++)
         {
@@ -78,14 +166,12 @@ public class TeamComponentHandler : IComponentHandler
                 TeamFormBuilder.BuildTeamFormWithError(message));
         }
 
-        // Check duplicates
         if (await _projectService.ExistsByNameAsync(projectName, ct))
             return BuildTextResponse(context, $"❌ Project `{projectName}` đã tồn tại");
 
         if (await _teamService.ExistsByNameAsync(teamName, ct))
             return BuildTextResponse(context, $"❌ Team `{teamName}` đã tồn tại");
 
-        // Validate members exist
         var resolvedMembers = await ResolveMembersAsync(context.ClanId!, members, ct);
         if (resolvedMembers.InvalidTokens.Count > 0)
             return BuildTextResponse(context, $"❌ Không tìm thấy user: {string.Join(", ", resolvedMembers.InvalidTokens)}");
@@ -93,7 +179,6 @@ public class TeamComponentHandler : IComponentHandler
         if (string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Không xác định được người tạo");
 
-        // Create request
         var result = await _workflowService.CreateRequestAsync(new CreateTeamRequestInput
         {
             ProjectName = projectName,
@@ -105,7 +190,10 @@ public class TeamComponentHandler : IComponentHandler
         if (!result.Success || string.IsNullOrWhiteSpace(result.RequestId))
             return BuildTextResponse(context, result.Message);
 
-        // Send confirmations to members
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        string? originalMessageId = parts.Length >= 2 ? parts[^1] : null;
+        string? originalSenderId = context.CurrentUserId; // Người tạo team 
+
         foreach (var member in result.Members)
         {
             try
@@ -116,7 +204,7 @@ public class TeamComponentHandler : IComponentHandler
                     channelId: context.ChannelId!,
                     mode: context.Mode,
                     isPublic: context.IsPublic,
-                    content: TeamFormBuilder.BuildConfirmForm(result.RequestId, teamName, projectName, member.UserId),
+                    content: TeamFormBuilder.BuildConfirmForm(result.RequestId, teamName, projectName, member.UserId, originalMessageId, originalSenderId),
                     cancellationToken: ct);
             }
             catch (Exception ex)
@@ -156,25 +244,41 @@ public class TeamComponentHandler : IComponentHandler
         return response;
     }
 
-    private static ComponentResponse ReplaceForm(ComponentContext context, ChannelMessageContent content)
+    private ComponentResponse ReplaceForm(ComponentContext context, ChannelMessageContent content)
     {
+        var formMessageId = context.MessageId ?? "";
+        
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        
+        string? originalMessageId = null;
+        
+        if (parts.Length >= 2)
+        {
+            originalMessageId = parts[^1]; 
+        }
+        
+        if (string.IsNullOrWhiteSpace(originalMessageId))
+        {
+            originalMessageId = formMessageId;
+        }
+
         var response = new ComponentResponse();
 
         //  Xóa form cũ
-        if (!string.IsNullOrWhiteSpace(context.MessageId))
+        if (!string.IsNullOrWhiteSpace(formMessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
             {
                 ClanId = context.ClanId!,
                 ChannelId = context.ChannelId!,
-                MessageId = context.MessageId,
+                MessageId = formMessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = null
             });
         }
 
-        //  Gửi form mới (có error)
+        //  Gửi form mới - reply to original message
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
@@ -182,7 +286,8 @@ public class TeamComponentHandler : IComponentHandler
             Content = content,
             Mode = context.Mode,
             IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
+            ReplyToMessageId = originalMessageId,
+            OriginalMessage = BuildOriginalMessage(context, originalMessageId!, context.CurrentUserId)
         });
 
         return response;
@@ -195,9 +300,11 @@ public class TeamComponentHandler : IComponentHandler
         if (currentCount >= 6)
             return BuildTextResponse(context, "❌ Đã đạt giới hạn 6 thành viên");
 
+        string? originalMessageId = parts.Length >= 3 ? parts[2] : null;
+        string? senderId = parts.Length >= 4 ? parts[3] : null;
+
         var response = new ComponentResponse();
 
-        // Delete old form
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -207,19 +314,19 @@ public class TeamComponentHandler : IComponentHandler
                 MessageId = context.MessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = null
             });
         }
 
-        // Send new form with +1 member
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
             ChannelId = context.ChannelId!,
-            Content = TeamFormBuilder.BuildTeamForm(currentCount + 1),
+            Content = TeamFormBuilder.BuildTeamForm(currentCount + 1, originalMessageId, senderId),
             Mode = context.Mode,
             IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
+            ReplyToMessageId = originalMessageId ?? context.MessageId,
+            OriginalMessage = BuildOriginalMessage(context, originalMessageId ?? context.MessageId!, senderId)
         });
 
         return response;
@@ -227,26 +334,95 @@ public class TeamComponentHandler : IComponentHandler
 
     private async Task<ComponentResponse> HandleAcceptAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(context.CurrentUserId))
+        if (parts.Length < 1 || string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Yêu cầu không hợp lệ");
 
-        var result = await _workflowService.AcceptAsync(parts[1], parts[2], context.CurrentUserId, ct);
-        return BuildTextResponse(context, result.Message);
+        var result = await _workflowService.AcceptAsync(parts[1], parts[2], context.CurrentUserId, context.ClanId!, ct);
+        return HandleCancel(context, result.Message);
     }
 
     private async Task<ComponentResponse> HandleRejectAsync(ComponentContext context, string[] parts, CancellationToken ct)
     {
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(context.CurrentUserId))
+        if (parts.Length < 1 || string.IsNullOrWhiteSpace(context.CurrentUserId))
             return BuildTextResponse(context, "❌ Yêu cầu không hợp lệ");
 
-        var result = await _workflowService.RejectAsync(parts[1], parts[2], context.CurrentUserId, ct);
-        return BuildTextResponse(context, result.Message);
+        var result = await _workflowService.RejectAsync(parts[1], parts[2], context.CurrentUserId, context.ClanId!, ct);
+        return HandleCancel(context, result.Message);
     }
 
-    private static ComponentResponse HandleCancel(ComponentContext context, string message)
+    private ComponentResponse HandleCancel(ComponentContext context, string? message = null)
     {
         var response = new ComponentResponse();
 
+        string? originalMessageId = null;
+        string? originalSenderId = null;
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        
+        if (parts.Length >= 5 && (parts[0] == "ACCEPT" || parts[0] == "REJECT"))
+        {
+            originalMessageId = parts[3]; 
+            originalSenderId = parts[4];  
+        }
+        else if (parts.Length >= 2)
+        {
+            originalMessageId = parts[^1]; 
+            originalSenderId = context.CurrentUserId; 
+        }
+
+        // lấy đúng message chứa form
+        var formMessageId = context.MessageId;
+
+        if (!string.IsNullOrWhiteSpace(formMessageId))
+        {
+            response.DeleteMessages.Add(new ComponentDeleteMessage
+            {
+                ClanId = context.ClanId!,
+                ChannelId = context.ChannelId!,
+                MessageId = formMessageId,
+                Mode = context.Mode,
+                IsPublic = context.IsPublic,
+                ReplyToMessageId = null
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            response.Messages.Add(new ComponentMessage
+            {
+                ClanId = context.ClanId!,
+                ChannelId = context.ChannelId!,
+                Text = message,
+                Mode = context.Mode,
+                IsPublic = context.IsPublic,
+                ReplyToMessageId = originalMessageId,
+                OriginalMessage = !string.IsNullOrWhiteSpace(originalMessageId) 
+                    ? BuildOriginalMessage(context, originalMessageId, originalSenderId)
+                    : null
+            });
+        }
+
+        return response;
+    }
+
+    private ComponentResponse BuildTextResponse(ComponentContext context, string text)
+    {
+        //  LẤY originalMessageId từ customId
+        var parts = context.CustomId?.Split('|', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        
+        string? originalMessageId = null;
+        
+        if (parts.Length >= 2)
+        {
+            originalMessageId = parts[^1]; 
+        }
+        
+        if (string.IsNullOrWhiteSpace(originalMessageId))
+        {
+            originalMessageId = context.MessageId;
+        }
+
+        var response = new ComponentResponse();
+        
         if (!string.IsNullOrWhiteSpace(context.MessageId))
         {
             response.DeleteMessages.Add(new ComponentDeleteMessage
@@ -256,25 +432,23 @@ public class TeamComponentHandler : IComponentHandler
                 MessageId = context.MessageId,
                 Mode = context.Mode,
                 IsPublic = context.IsPublic,
-                ReplyToMessageId = context.MessageId
+                ReplyToMessageId = null
             });
         }
-
+        
         response.Messages.Add(new ComponentMessage
         {
             ClanId = context.ClanId!,
             ChannelId = context.ChannelId!,
-            Text = message,
+            Text = text,
             Mode = context.Mode,
             IsPublic = context.IsPublic,
-            ReplyToMessageId = context.MessageId
+            ReplyToMessageId = originalMessageId,
+            OriginalMessage = BuildOriginalMessage(context, originalMessageId ?? context.MessageId!, context.CurrentUserId)
         });
 
         return response;
     }
-
-    private static ComponentResponse BuildTextResponse(ComponentContext context, string text) =>
-        ComponentResponse.FromText(context.ClanId!, context.ChannelId!, text, context.Mode, context.IsPublic, context.MessageId!, null);
 
     private async Task<ResolvedMembers> ResolveMembersAsync(string clanId, List<string> memberTokens, CancellationToken ct)
     {

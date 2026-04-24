@@ -21,13 +21,14 @@ public sealed record ComponentContext
     public string? CurrentUserId { get; init; }
     public string? MessageId { get; init; }
     public int Mode { get; init; } = 2;
-    public bool IsPublic { get; init; } = true;
+    public bool IsPublic { get; init; } = true;  
 }
 
 public sealed class ComponentResponse
 {
     public List<ComponentMessage> Messages { get; } = [];
     public List<ComponentDeleteMessage> DeleteMessages { get; } = [];
+    public List<ComponentUpdateMessage> UpdateMessages { get; } = [];
 
     public static ComponentResponse FromText(string clanId, string channelId, string text, int mode, bool isPublic, string replyToMessageId, ChannelMessage? originalMessage = null)
     {
@@ -76,6 +77,40 @@ public sealed class ComponentResponse
 
         return this;
     }
+    
+    public ComponentResponse UpdateMessage(
+        string clanId, 
+        string channelId, 
+        string messageId, 
+        ChannelMessageContent content, 
+        int mode, 
+        bool isPublic,
+        Action? onSuccess = null)
+    {
+        UpdateMessages.Add(new ComponentUpdateMessage
+        {
+            ClanId = clanId,
+            ChannelId = channelId,
+            MessageId = messageId,
+            Content = content,
+            Mode = mode,
+            IsPublic = isPublic,
+            OnSuccess = onSuccess
+        });
+
+        return this;
+    }
+}
+
+public sealed record ComponentUpdateMessage
+{
+    public required string ClanId { get; init; }
+    public required string ChannelId { get; init; }
+    public required string MessageId { get; init; }
+    public required ChannelMessageContent Content { get; init; }
+    public int Mode { get; init; } = 2;
+    public bool IsPublic { get; init; } = true;
+    public Action? OnSuccess { get; init; }
 }
 
 public sealed record ComponentMessage

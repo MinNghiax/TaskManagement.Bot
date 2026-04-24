@@ -1,22 +1,26 @@
-﻿using System;
+﻿using Mezon.Sdk;
+using Mezon.Sdk.Managers;
+using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
+using TaskManagement.Bot.Application.Services;
 using TaskManagement.Bot.Infrastructure.Data;
 using TaskManagement.Bot.Infrastructure.Entities;
-using TaskManagement.Bot.Application.Services;
 
 namespace TaskManagement.Bot.Application.Services;
 
 public class TeamService : ITeamService
 {
     private readonly TaskManagementDbContext _context;
+    private readonly MezonClient _client;
 
-    public TeamService(TaskManagementDbContext context)
+    public TeamService(TaskManagementDbContext context, MezonClient client)
     {
         _context = context;
+        _client = client;
     }
 
     public async Task<Team?> CreateTeamAsync(
@@ -79,7 +83,7 @@ public class TeamService : ITeamService
     public async Task<bool> IsPM(string username, int teamId)
     {
         return await _context.TeamMembers
-            .AnyAsync(x => x.TeamId == teamId && x.Username == username && x.Role == "PM");
+            .AnyAsync(x => x.TeamId == teamId && x.Username == username && x.Role == "PM" && x.Status == "Accepted");
     }
 
     public async Task<List<string>> GetMembers(int teamId)
@@ -88,6 +92,31 @@ public class TeamService : ITeamService
             .Where(x => x.TeamId == teamId)
             .Select(x => x.Username)
             .ToListAsync();
+    }
+
+    public async Task<List<(string Id, string Name)>> GetMembersWithDisplay(int teamId, string clanId)
+    {
+        var members = await GetMembers(teamId);
+
+        var result = new List<(string Id, string Name)>();
+
+        foreach (var userId in members)
+        {
+            var user = _client.Clans.Get(clanId)?.Users.Get(userId);
+
+            var displayName = user?.DisplayName
+                         ?? user?.ClanNick
+                         ?? user?.Username;
+
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = $"User-{userId.Substring(0, 4)}"; // fallback
+            }
+
+            result.Add((userId, displayName)); //  FIX luôn lỗi tuple
+        }
+
+        return result;
     }
 
     public async Task AddMemberAsync(int teamId, string username, string role = "Member")

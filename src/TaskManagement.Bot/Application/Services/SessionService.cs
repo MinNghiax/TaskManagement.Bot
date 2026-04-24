@@ -6,7 +6,7 @@ namespace TaskManagement.Bot.Application.Services
 {
     public class SessionService
     {
-        // 🔥 dùng SenderId thay vì Username
+        //  dùng SenderId thay vì Username
         private static Dictionary<long, UserSession> _sessions = new();
 
         public UserSession? Get(long userId)
