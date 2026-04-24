@@ -449,7 +449,6 @@ public class ReminderService : IReminderProcessor
             _ => reminder.NextTriggerAt
         };
 
-        // chỉ update khi khác (tránh loop vô hạn)
         if (newTrigger.HasValue && NormalizeUtc(newTrigger.Value) != NormalizeUtc(reminder.NextTriggerAt ?? default))
         {
             reminder.NextTriggerAt = newTrigger;
