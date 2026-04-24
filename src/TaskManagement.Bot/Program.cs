@@ -56,7 +56,7 @@ services.AddScoped<ITeamWorkflowService, TeamWorkflowService>();
 services.AddScoped<IPendingTeamRequestService, PendingTeamRequestService>();
 services.AddScoped<IReminderRepository, ReminderRepository>();
 services.AddScoped<ReminderService>();
-services.AddScoped<IReminderProcessor>(sp => sp.GetRequiredService<ReminderService>());
+services.AddScoped<IReminderProcessor, ReminderProcessor>();
 services.AddSingleton<IReminderNotificationSender, MezonReminderNotificationSender>();
 services.AddScoped<IComplainRepository, ComplainRepository>();
 services.AddScoped<IComplainService, ComplainService>();
