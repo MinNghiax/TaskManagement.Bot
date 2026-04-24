@@ -39,16 +39,26 @@ public class ComplainComponentHandler : IComponentHandler
 
     public async Task<ComponentResponse> HandleAsync(ComponentContext context, CancellationToken cancellationToken)
     {
-        //var customId = context.CustomId;
         var (customId, ownerId) = ParseCustomId(context.CustomId);
 
         // Chỉ người tạo form mới được thao tác
         if (!string.IsNullOrEmpty(ownerId) && ownerId != context.CurrentUserId)
         {
+            // Lấy display name của người thao tác
+            var unauthorizedUserName = await _userService.GetDisplayNameAsync(
+                context.CurrentUserId!,
+                context.ClanId!,
+                cancellationToken);
+
+            // Chỉ gửi message thông báo, không update message gốc
             return ComponentResponse.FromText(
-                context.ClanId!, context.ChannelId!,
-                "⛔ You are not authorized to interact with this form.",
-                context.Mode, context.IsPublic, context.MessageId!, null);
+                context.ClanId!,
+                context.ChannelId!,
+                $"⛔ {unauthorizedUserName} is not authorized to interact with this form.",
+                context.Mode,
+                context.IsPublic,
+                context.MessageId!,
+                null);
         }
         var clanId = context.ClanId!;
         var channelId = context.ChannelId!;
@@ -61,16 +71,16 @@ public class ComplainComponentHandler : IComponentHandler
 
         if (customId == "complain_cancel")
         {
-            return ComponentResponse
-                .FromText(clanId, channelId, $"❌ Complaint cancelled by {userName}.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+            var cancelContent = new ChannelMessageContent { Text = $"❌ Complaint cancelled by {userName}." };
+            return new ComponentResponse()
+                .UpdateMessage(clanId, channelId, messageId, cancelContent, mode, isPublic);
         }
 
         if (customId == "approve_cancel")
         {
-            return ComponentResponse
-                .FromText(clanId, channelId, $"❌ Review cancelled by {userName}.", mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+            var cancelContent = new ChannelMessageContent { Text = $"❌ Review cancelled by {userName}." };
+            return new ComponentResponse()
+                .UpdateMessage(clanId, channelId, messageId, cancelContent, mode, isPublic);
         }
 
         if (customId == "complain_submit")
@@ -157,7 +167,6 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, "❌ Cannot complain about a task that is in Review status. Please wait for the review to complete.", mode, isPublic, messageId, null);
         }
 
-
         if (complainType == "RequestExtend")
         {
             // Validate duration
@@ -199,9 +208,10 @@ public class ComplainComponentHandler : IComponentHandler
                     .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
             }
 
-            return ComponentResponse
-                .FromContent(clanId, channelId, BuildExtendSuccessMessage(result!, task, userName, reason, newDue, hours), mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+            // CHỈ UPDATE MESSAGE, KHÔNG GỬI MESSAGE MỚI
+            var successContent = BuildExtendSuccessMessage(result!, task, userName, reason, newDue, hours);
+            return new ComponentResponse()
+                .UpdateMessage(clanId, channelId, messageId, successContent, mode, isPublic);
         }
         else // RequestCancel
         {
@@ -233,9 +243,10 @@ public class ComplainComponentHandler : IComponentHandler
                     .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
             }
 
-            return ComponentResponse
-                .FromContent(clanId, channelId, BuildCancelSuccessMessage(result!, task, userName, reason), mode, isPublic, messageId, null)
-                .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+            // CHỈ UPDATE MESSAGE, KHÔNG GỬI MESSAGE MỚI
+            var successContent = BuildCancelSuccessMessage(result!, task, userName, reason);
+            return new ComponentResponse()
+                .UpdateMessage(clanId, channelId, messageId, successContent, mode, isPublic);
         }
     }
 
@@ -288,9 +299,10 @@ public class ComplainComponentHandler : IComponentHandler
 
         var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
 
-        return ComponentResponse
-            .FromContent(clanId, channelId, BuildApproveSuccessMessage(complain, updatedTask, complainantName, userName), mode, isPublic, messageId, null)
-            .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+        // CHỈ UPDATE MESSAGE, KHÔNG GỬI MESSAGE MỚI
+        var successContent = BuildApproveSuccessMessage(complain, updatedTask, complainantName, userName);
+        return new ComponentResponse()
+            .UpdateMessage(clanId, channelId, messageId, successContent, mode, isPublic);
     }
 
     private async Task<ComponentResponse> HandleRejectSubmitFromForm(ComponentContext context, string userName, CancellationToken ct)
@@ -350,9 +362,11 @@ public class ComplainComponentHandler : IComponentHandler
         }
 
         var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
-        return ComponentResponse
-            .FromContent(clanId, channelId, BuildRejectSuccessMessage(complain, updatedTask, complainantName, userName, rejectReason), mode, isPublic, messageId, null)
-            .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+
+        // CHỈ UPDATE MESSAGE, KHÔNG GỬI MESSAGE MỚI
+        var successContent = BuildRejectSuccessMessage(complain, updatedTask, complainantName, userName, rejectReason);
+        return new ComponentResponse()
+            .UpdateMessage(clanId, channelId, messageId, successContent, mode, isPublic);
     }
 
     private async Task<ComponentResponse> HandleApproveSubmit(int complainId, ComponentContext context, string userName, CancellationToken ct)
@@ -387,9 +401,11 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
         var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
-        return ComponentResponse
-            .FromContent(clanId, channelId, BuildApproveSuccessMessage(complain, updatedTask, complainantName, userName), mode, isPublic, messageId, null)
-            .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+
+        // CHỈ UPDATE MESSAGE, KHÔNG GỬI MESSAGE MỚI
+        var successContent = BuildApproveSuccessMessage(complain, updatedTask, complainantName, userName);
+        return new ComponentResponse()
+            .UpdateMessage(clanId, channelId, messageId, successContent, mode, isPublic);
     }
 
     private async Task<ComponentResponse> HandleRejectSubmit(int complainId, string? rejectReason, ComponentContext context, string userName, CancellationToken ct)
@@ -431,9 +447,11 @@ public class ComplainComponentHandler : IComponentHandler
                 .FromText(clanId, channelId, $"❌ {error}", mode, isPublic, messageId, null);
         }
         var updatedTask = await _taskService.GetByIdAsync(complain.TaskItemId, ct);
-        return ComponentResponse
-            .FromContent(clanId, channelId, BuildRejectSuccessMessage(complain, updatedTask, complainantName, userName, rejectReason), mode, isPublic, messageId, null)
-            .DeleteMessage(clanId, channelId, messageId, mode, isPublic, messageId, null);
+
+        // CHỈ UPDATE MESSAGE, KHÔNG GỬI MESSAGE MỚI
+        var successContent = BuildRejectSuccessMessage(complain, updatedTask, complainantName, userName, rejectReason);
+        return new ComponentResponse()
+            .UpdateMessage(clanId, channelId, messageId, successContent, mode, isPublic);
     }
 
     private static string? ParseExtraData(string? extraData, string fieldId)
@@ -482,21 +500,21 @@ public class ComplainComponentHandler : IComponentHandler
             color = "#00D26A",
             fields = new object[]
             {
-            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-            new { name = "🏷️ Type", value = "RequestExtend", inline = true },
-            new { name = "📌 Task", value = task.Title, inline = true },
+                new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+                new { name = "🏷️ Type", value = "RequestExtend", inline = true },
+                new { name = "📌 Task", value = task.Title, inline = true },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
+                new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "⏰ Old deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
-            new { name = "⏰ New deadline", value = FormatDateWithVietnamTime(newDue), inline = true },
-            new { name = "📈 Added", value = $"+{hours} hours", inline = true },
+                new { name = "⏰ Old deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
+                new { name = "⏰ New deadline", value = FormatDateWithVietnamTime(newDue), inline = true },
+                new { name = "📈 Added", value = $"+{hours} hours", inline = true },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
+                new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "👤 Submitted by", value = userName, inline = true },
-            new { name = "💬 Reason", value = reason, inline = true },
-            new { name = "🕐 Submitted at", value = createdAt, inline = true }
+                new { name = "👤 Submitted by", value = userName, inline = true },
+                new { name = "💬 Reason", value = reason, inline = true },
+                new { name = "🕐 Submitted at", value = createdAt, inline = true }
             }
         };
 
@@ -513,21 +531,20 @@ public class ComplainComponentHandler : IComponentHandler
             color = "#FF8C00",
             fields = new object[]
             {
-            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-            new { name = "🏷️ Type", value = "RequestCancel", inline = true },
-            new { name = "📌 Task", value = task.Title, inline = true },
+                new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+                new { name = "🏷️ Type", value = "RequestCancel", inline = true },
+                new { name = "📌 Task", value = task.Title, inline = true },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
+                new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "📊 Status", value = GetStatusText(task.Status), inline = true },
-            new { name = "⏰ Deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
-            new { name = "🕐 Submitted at", value = createdAt, inline = true },
+                new { name = "📊 Status", value = GetStatusText(task.Status), inline = true },
+                new { name = "⏰ Deadline", value = FormatDateWithVietnamTime(task.DueDate), inline = true },
+                new { name = "🕐 Submitted at", value = createdAt, inline = true },
 
+                new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
-
-            new { name = "👤 Submitted by", value = userName, inline = true },
-            new { name = "💬 Reason", value = reason, inline = true },
+                new { name = "👤 Submitted by", value = userName, inline = true },
+                new { name = "💬 Reason", value = reason, inline = true },
             }
         };
 
@@ -543,15 +560,15 @@ public class ComplainComponentHandler : IComponentHandler
         var createdAt = FormatDateWithVietnamTime(complain.CreatedAt);
 
         var fields = new List<object>
-    {
-        new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-        new { name = "🏷️ Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
-        new { name = "📌 Task", value = task?.Title ?? "N/A", inline = true },
+        {
+            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+            new { name = "🏷️ Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
+            new { name = "📌 Task", value = task?.Title ?? "N/A", inline = true },
 
-        new { name = "\u200B", value = "\u200B", inline = false },
+            new { name = "\u200B", value = "\u200B", inline = false },
 
-        new { name = "🔄 New status", value = GetStatusText(task?.Status), inline = true }
-    };
+            new { name = "🔄 New status", value = GetStatusText(task?.Status), inline = true }
+        };
 
         if (isExtend && complain.NewDueDate.HasValue)
         {
@@ -565,15 +582,15 @@ public class ComplainComponentHandler : IComponentHandler
 
         fields.AddRange(new object[]
         {
-        new { name = "\u200B", value = "\u200B", inline = false },
+            new { name = "\u200B", value = "\u200B", inline = false },
 
-        new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
-        new { name = "👤 Approved by", value = approverName, inline = true },
+            new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
+            new { name = "👤 Approved by", value = approverName, inline = true },
 
-        new { name = "\u200B", value = "\u200B", inline = false },
+            new { name = "\u200B", value = "\u200B", inline = false },
 
-        new { name = "🕐 Created at", value = createdAt, inline = true },
-        new { name = "🕐 Approved at", value = approvedTime, inline = true },
+            new { name = "🕐 Created at", value = createdAt, inline = true },
+            new { name = "🕐 Approved at", value = approvedTime, inline = true },
         });
 
         var embed = new
@@ -600,21 +617,21 @@ public class ComplainComponentHandler : IComponentHandler
             color = "#FF3B30",
             fields = new object[]
             {
-            new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
-            new { name = "🏷️ Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
-            new { name = "📌 Task", value = task?.Title ?? "N/A", inline = true },
+                new { name = "📋 Complaint ID", value = $"#{complain.Id}", inline = true },
+                new { name = "🏷️ Type", value = isExtend ? "RequestExtend" : "RequestCancel", inline = true },
+                new { name = "📌 Task", value = task?.Title ?? "N/A", inline = true },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
+                new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "💬 Original reason", value = complain.Reason, inline = true },
-            new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
-            new { name = "👤 Rejected by", value = rejectorName, inline = true },
+                new { name = "💬 Original reason", value = complain.Reason, inline = true },
+                new { name = "👤 Complainant", value = complainantName ?? "Unknown", inline = true },
+                new { name = "👤 Rejected by", value = rejectorName, inline = true },
 
-            new { name = "\u200B", value = "\u200B", inline = false },
+                new { name = "\u200B", value = "\u200B", inline = false },
 
-            new { name = "🕐 Created at", value = createdAt, inline = true },
-            new { name = "🕐 Rejected at", value = rejectedTime, inline = true },
-            new { name = "💬 Rejection reason", value = rejectReason, inline = true }
+                new { name = "🕐 Created at", value = createdAt, inline = true },
+                new { name = "🕐 Rejected at", value = rejectedTime, inline = true },
+                new { name = "💬 Rejection reason", value = rejectReason, inline = true }
             }
         };
 
