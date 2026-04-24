@@ -502,7 +502,7 @@ public static class TaskFormBuilder
                 new
                 {
                     title = "✏️ Cập nhật Task (Member)",
-                    description = $"📁 Project: {projectName}\nChọn Team:",
+                    description = $"📁 Project: {projectName}",
                     color = "#5865F2",
                     fields = new object[]
                     {

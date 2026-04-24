@@ -60,10 +60,7 @@ public class ComplainCommandHandler : ICommandHandler
         }
 
         var options = validTasks
-            .Select(t => (object)new { 
-                label = $"#{t.Id} - {t.Title} | {GetStatusText(t.Status)} | {GetPriorityText(t.Priority)} | 📅 {(t.DueDate.HasValue ? t.DueDate.Value.AddHours(7).ToString("dd/MM HH:mm") : "N/A")}", 
-                value = t.Id.ToString() 
-            })
+            .Select(t => (object)new { label = $"#{t.Id} {t.Title} [{t.Status}]", value = t.Id.ToString() })
             .ToArray();
 
         var formContent = ComplainFormBuilder.BuildComplainForm(options, userId);
